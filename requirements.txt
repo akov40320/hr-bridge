@@ -3,3 +3,4 @@ uvicorn[standard]
 httpx
 pydantic-settings
 python-multipart
+gunicorn
