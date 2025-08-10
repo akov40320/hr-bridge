@@ -5,6 +5,8 @@ from app.amo_client import AmoClient
 from app.store import save_link, enqueue_pending, find_link, replay_pending
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
 from app.adapters import hh as hh_adapt, avito as avito_adapt
+from urllib.parse import urlencode
+from fastapi.responses import RedirectResponse
 
 router = APIRouter()
 
