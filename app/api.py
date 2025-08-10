@@ -8,6 +8,76 @@ from app.adapters import hh as hh_adapt, avito as avito_adapt
 
 router = APIRouter()
 
+# --- HH OAuth ---
+@router.get("/oauth/hh/start")
+def hh_start():
+    params = {
+        "response_type": "code",
+        "client_id": settings.HH_CLIENT_ID,
+        "redirect_uri": settings.HH_REDIRECT_URI,
+        "state": "hh1",
+    }
+    return RedirectResponse("https://hh.ru/oauth/authorize?" + urlencode(params))
+
+@router.get("/oauth/hh/callback")
+async def hh_callback(code: str | None = None, state: str | None = None):
+    if not code:
+        return {"ok": False, "error": "no code"}
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": settings.HH_CLIENT_ID,
+        "client_secret": settings.HH_CLIENT_SECRET,
+        "redirect_uri": settings.HH_REDIRECT_URI,
+    }
+    async with httpx.AsyncClient(timeout=30) as x:
+        r = await x.post("https://api.hh.ru/token", data=data)
+    r.raise_for_status()
+    d = r.json()
+    expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
+    FileTokenStore("secrets/hh_token.json").save(TokenData(
+        access_token=d["access_token"],
+        refresh_token=d.get("refresh_token", ""),
+        expires_at=expires_at
+    ))
+    return {"ok": True}
+
+
+@router.get("/oauth/avito/start")
+def avito_start():
+    if not settings.AVITO_AUTHORIZE_URL:
+        return {"ok": False, "error": "AVITO_AUTHORIZE_URL not set"}
+    params = {
+        "response_type": "code",
+        "client_id": settings.AVITO_CLIENT_ID,
+        "redirect_uri": settings.AVITO_REDIRECT_URI,
+        "state": "av1",
+    }
+    return RedirectResponse(settings.AVITO_AUTHORIZE_URL + "?" + urlencode(params))
+
+
+@router.get("/oauth/avito/callback")
+async def avito_callback(code: str | None = None, state: str | None = None):
+    if not code:
+        return {"ok": False, "error": "no code"}
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": settings.AVITO_CLIENT_ID,
+        "client_secret": settings.AVITO_CLIENT_SECRET,
+        "redirect_uri": settings.AVITO_REDIRECT_URI,
+    }
+    async with httpx.AsyncClient(timeout=30) as x:
+        r = await x.post("https://api.avito.ru/token", data=data)
+    r.raise_for_status()
+    d = r.json()
+    expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
+    FileTokenStore("secrets/avito_token.json").save(TokenData(
+        access_token=d["access_token"],
+        refresh_token=d.get("refresh_token", ""),
+        expires_at=expires_at
+    ))
+    return {"ok": True}
 
 def _events_from_form(form) -> list[tuple[int, int]]:
     """Парсит ключи вида leads[status][0][id] / [status_id] из form-данных."""
