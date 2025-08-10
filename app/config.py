@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     ROUTING_KEYWORD_MASTER: str = "мастер"
     ROUTING_KEYWORD_OPERATOR: str = "оператор"
 
+    HH_CLIENT_ID: str = ""
+    HH_CLIENT_SECRET: str = ""
+    HH_REDIRECT_URI: str = "https://hr-bridge.onrender.com/oauth/hh/callback"
+
+
+    AVITO_CLIENT_ID: str = ""
+    AVITO_CLIENT_SECRET: str = ""
+    AVITO_REDIRECT_URI: str = "https://hr-bridge.onrender.com/oauth/avito/callback"
+    AVITO_AUTHORIZE_URL: str = ""
+
     # прод-поведение с «заглушками»
     HH_SYNC_ENABLED: bool = False
     AVITO_SYNC_ENABLED: bool = False
