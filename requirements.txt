@@ -4,3 +4,6 @@ httpx
 pydantic-settings
 python-multipart
 gunicorn
+sqlalchemy[asyncio]
+asyncpg
+alembic

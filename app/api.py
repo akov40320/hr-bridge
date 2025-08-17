@@ -7,11 +7,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from app.config import settings
-from app.amo_client import AmoClient
+from app.amo_client import AmoClient, ReauthRequired
 from app.store import save_link, enqueue_pending, find_link, replay_pending
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
 from app.adapters import hh as hh_adapt, avito as avito_adapt
-from app.token_store import FileTokenStore, TokenData
+from app.token_store import TokenData, DbTokenStore
 
 router = APIRouter()
 
@@ -52,7 +52,7 @@ async def hh_callback(code: str | None = None, state: str | None = None):
     try:
         os.makedirs("secrets", exist_ok=True)
         expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
-        FileTokenStore("secrets/hh_token.json").save(TokenData(
+        await DbTokenStore("hh").save(TokenData(
             access_token=d["access_token"],
             refresh_token=d.get("refresh_token", ""),
             expires_at=expires_at
@@ -115,11 +115,12 @@ async def avito_callback(code: str | None = None, state: str | None = None):
     try:
         os.makedirs("secrets", exist_ok=True)
         expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
-        FileTokenStore("secrets/avito_token.json").save(TokenData(
+        await DbTokenStore("avito").save(TokenData(
             access_token=tok.get("access_token", ""),
             refresh_token=tok.get("refresh_token", ""),
             expires_at=expires_at
         ))
+
     except Exception as e:
         return {"ok": False, "provider": "avito", "step": "save-token", "error": str(e)}
 
@@ -143,26 +144,16 @@ def _events_from_form(form) -> list[tuple[int, int]]:
     return events
 
 
+
 @router.get("/health")
 async def health():
-    # Amo статус
-    amo_status = "unknown"
-    expires_in = None
+    info = {"ok": True}
     try:
-        data = FileTokenStore().load()
-        expires_in = int(data["expires_at"]) - int(time.time())
-        amo_status = "ok" if expires_in > 0 else "reauth_required"
-    except Exception:
-        amo_status = "reauth_required"
-        expires_in = -1
-
-    return {
-        "ok": True,
-        "amo": { "status": amo_status, "expires_in": expires_in },
-        "hh":  { "enabled": settings.HH_SYNC_ENABLED },
-        "avito": { "enabled": settings.AVITO_SYNC_ENABLED }
-    }
-
+        amo = await DbTokenStore("amo").load()
+        info["amo"] = {"status": "ok", "expires_in": max(0, amo["expires_at"] - int(time.time()))}
+    except Exception as e:
+        info["amo"] = {"status": "missing", "error": str(e)}
+    return info
 
 @router.get("/oauth/amo/callback")
 async def oauth_callback(code: str | None = None, state: str | None = None):
@@ -194,7 +185,7 @@ async def webhook_avito(payload: dict):
 async def _process_incoming(payload: dict):
     title = payload.get("vacancy_title") or ""
     kind = route_type_by_text(title)
-    amo = AmoClient()
+    amo = await AmoClient.create()
 
     if kind == "master":
         pipeline_id = settings.AMO_PIPELINE_ID_MASTER

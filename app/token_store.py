@@ -1,6 +1,8 @@
-from __future__ import annotations
-import json, time, os
+import time
 from typing import TypedDict
+from sqlalchemy import select, insert, update
+from app.db import get_session
+from app.models import Token
 
 
 class TokenData(TypedDict):
@@ -9,34 +11,42 @@ class TokenData(TypedDict):
     expires_at: int
 
 
-class FileTokenStore:
-    def __init__(self, path: str = "secrets/amo_token.json"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+class DbTokenStore:
+    def __init__(self, service: str):
+        self.service = service
 
-    def load(self) -> TokenData:
-        # 1) Пытаемся из файла
-        if os.path.exists(self.path):
-            with open(self.path, "r", encoding="utf-8-sig") as f:
-                return json.load(f)
-        # 2) Фоллбек на ENV (для Render/первого запуска)
-        at = os.getenv("AMO_ACCESS_TOKEN")
-        rt = os.getenv("AMO_REFRESH_TOKEN")
-        ea = os.getenv("AMO_EXPIRES_AT")
-        if at and rt and ea:
-            return TokenData(access_token=at, refresh_token=rt, expires_at=int(ea))
-        # 3) Совсем нет токена
-        raise RuntimeError("Token file not found and env vars missing")
+    async def load(self) -> TokenData:
+        async with get_session() as s:
+            row = (await s.execute(select(Token).where(Token.service == self.service))).scalar_one_or_none()
+            if not row:
+                raise RuntimeError(f"Token for {self.service} not found")
+            return {"access_token": row.access_token, "refresh_token": row.refresh_token, "expires_at": row.expires_at}
 
-    def save(self, data: TokenData) -> None:
-        tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, self.path)
+    async def save(self, data: TokenData) -> None:
+        async with get_session() as s:
+            row = (await s.execute(select(Token).where(Token.service == self.service))).scalar_one_or_none()
+            if row:
+                await s.execute(
+                    update(Token).where(Token.service == self.service).values(
+                        access_token=data["access_token"],
+                        refresh_token=data["refresh_token"],
+                        expires_at=data["expires_at"],
+                    )
+                )
+            else:
+                await s.execute(
+                    insert(Token).values(
+                        service=self.service,
+                        access_token=data["access_token"],
+                        refresh_token=data["refresh_token"],
+                        expires_at=data["expires_at"],
+                    )
+                )
+            await s.commit()
 
-    def will_expire_soon(self, margin_sec: int = 120) -> bool:
+    async def will_expire_soon(self, margin_sec: int = 120) -> bool:
         try:
-            data = self.load()
+            data = await self.load()
             return time.time() > data["expires_at"] - margin_sec
         except Exception:
             return True

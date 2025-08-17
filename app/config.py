@@ -1,6 +1,10 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
+    # DB
+    DATABASE_URL: str = "postgresql+asyncpg://hr:hr@localhost:5432/hr"
+
     # AmoCRM
     AMO_BASE_URL: str
     AMO_CLIENT_ID: str
@@ -15,28 +19,28 @@ class Settings(BaseSettings):
     AMO_TAG_WENT_TO_BOT: str = "Перешел в бота"
     AMO_TAG_SURVEY_DONE: str = "Опрос пройден"
 
-    # Роутинг по тексту вакансии
     ROUTING_KEYWORD_MASTER: str = "мастер"
     ROUTING_KEYWORD_OPERATOR: str = "оператор"
 
-    # HeadHunter OAuth
+    # HH OAuth
     HH_CLIENT_ID: str = ""
     HH_CLIENT_SECRET: str = ""
-    HH_REDIRECT_URI: str = ""  # из env, без жёсткого дефолта
+    HH_REDIRECT_URI: str = ""
 
     # Avito OAuth
     AVITO_CLIENT_ID: str = ""
     AVITO_CLIENT_SECRET: str = ""
-    AVITO_REDIRECT_URI: str = ""  # из env
+    AVITO_REDIRECT_URI: str = ""
     AVITO_AUTHORIZE_URL: str = "https://avito.ru/oauth"
-    AVITO_TOKEN_URL: str = "https://api.avito.ru/token"  # <— этого поля не хватало
+    AVITO_TOKEN_URL: str = "https://api.avito.ru/token"
     AVITO_SCOPE: str = ""
 
-    # Флаги синхры/поведения
+    # поведение
     HH_SYNC_ENABLED: bool = False
     AVITO_SYNC_ENABLED: bool = False
     AVITO_MARK_READ_ON_STAGE_CHANGE: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 settings = Settings()

@@ -1,18 +1,25 @@
 import time, httpx
 from app.config import settings
-from app.token_store import FileTokenStore, TokenData
+from app.token_store import TokenData, DbTokenStore
+
 
 class ReauthRequired(Exception):
-    """Нужен повторный OAuth в Amo (invalid_grant / битый refresh)."""
+    pass
+
 
 class AmoClient:
-    def __init__(self, store: FileTokenStore | None = None):
+    def __init__(self, tokens: TokenData, store: DbTokenStore):
         self.base = settings.AMO_BASE_URL.rstrip("/")
-        self.store = store or FileTokenStore()
-        data = self.store.load()
-        self._access = data["access_token"]
-        self._refresh = data["refresh_token"]
-        self._expires_at = data["expires_at"]
+        self.store = store
+        self._access = tokens["access_token"]
+        self._refresh = tokens["refresh_token"]
+        self._expires_at = tokens["expires_at"]
+
+    @classmethod
+    async def create(cls):
+        store = DbTokenStore("amo")
+        tokens = await store.load()
+        return cls(tokens, store)
 
     @property
     def headers(self):
@@ -29,24 +36,18 @@ class AmoClient:
         }
         async with httpx.AsyncClient(timeout=30) as x:
             r = await x.post(url, json=payload)
-
-        # ловим invalid_grant
-        if r.status_code in (400, 401):
-            txt = (r.text or "").lower()
-            if "invalid_grant" in txt:
-                raise ReauthRequired("Amo refresh_token invalid_grant")
+        if r.status_code in (400, 401) and "invalid_grant" in (r.text or "").lower():
+            raise ReauthRequired("Amo refresh_token invalid_grant")
         r.raise_for_status()
 
         data = r.json()
         server_time = int(data.get("server_time", time.time()))
         expires_in = int(data.get("expires_in", 3600))
-        expires_at = server_time + expires_in - 120
-
         self._access = data["access_token"]
         self._refresh = data["refresh_token"]
-        self._expires_at = expires_at
+        self._expires_at = server_time + expires_in - 120
 
-        self.store.save(TokenData(
+        await self.store.save(TokenData(
             access_token=self._access,
             refresh_token=self._refresh,
             expires_at=self._expires_at
@@ -61,8 +62,7 @@ class AmoClient:
         async with httpx.AsyncClient(timeout=30) as x:
             r = await x.request(method, url, headers=self.headers, **kw)
         if r.status_code == 401:
-            # попробуем рефреш
-            await self._refresh_token()  # может кинуть ReauthRequired
+            await self._refresh_token()
             async with httpx.AsyncClient(timeout=30) as x:
                 r = await x.request(method, url, headers=self.headers, **kw)
         if r.is_error:
