@@ -15,18 +15,18 @@ class FileTokenStore:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
 
     def load(self) -> TokenData:
-
+        # 1) Пытаемся из файла
         if os.path.exists(self.path):
             with open(self.path, "r", encoding="utf-8-sig") as f:
                 return json.load(f)
-    
+        # 2) Фоллбек на ENV (для Render/первого запуска)
         at = os.getenv("AMO_ACCESS_TOKEN")
         rt = os.getenv("AMO_REFRESH_TOKEN")
         ea = os.getenv("AMO_EXPIRES_AT")
-        if at and rt and ea and ea.isdigit():
-            return {"access_token": at, "refresh_token": rt, "expires_at": int(ea)}
-    
-        raise RuntimeError("No amo token: neither file nor ENV present")
+        if at and rt and ea:
+            return TokenData(access_token=at, refresh_token=rt, expires_at=int(ea))
+        # 3) Совсем нет токена
+        raise RuntimeError("Token file not found and env vars missing")
 
     def save(self, data: TokenData) -> None:
         tmp = self.path + ".tmp"
