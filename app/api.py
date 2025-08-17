@@ -83,6 +83,9 @@ def avito_start():
         "redirect_uri": settings.AVITO_REDIRECT_URI,
         "state": "av1",  # позже подпишем
     }
+    if getattr(settings, "AVITO_SCOPE", ""):
+        params["scope"] = settings.AVITO_SCOPE
+        
     return RedirectResponse(f"{settings.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
 
