@@ -189,7 +189,17 @@ async def _process_incoming(payload: dict):
 
     lead_name = f'{title} — {payload.get("applicant", {}).get("name", "кандидат")}'.strip(" —")
     body = [{"name": lead_name, "pipeline_id": pipeline_id, "status_id": stage_id}]
-    created = await amo.create_leads(body)
+    try:
+        created = await amo.create_leads(body)
+    except ReauthRequired:
+        # кладём задачу на «досоздание» после реавторизации Amo
+        enqueue_pending({
+            "platform": payload.get("platform", "unknown"),
+            "action": "amo_create_lead",
+            "lead_body": body,
+            "ts": int(time.time())
+        })
+        return {"ok": True, "queued": True, "reason": "reauth_required"}
     lead_id = created["_embedded"]["leads"][0]["id"]
 
     save_link(
