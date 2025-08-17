@@ -25,6 +25,8 @@ def hh_start():
 async def hh_callback(code: str | None = None, state: str | None = None):
     if not code:
         return {"ok": False, "error": "no code"}
+
+    # 1) обмен кода на токен
     data = {
         "grant_type": "authorization_code",
         "code": code,
@@ -32,16 +34,27 @@ async def hh_callback(code: str | None = None, state: str | None = None):
         "client_secret": settings.HH_CLIENT_SECRET,
         "redirect_uri": settings.HH_REDIRECT_URI,
     }
-    async with httpx.AsyncClient(timeout=30) as x:
-        r = await x.post("https://api.hh.ru/token", data=data)
-    r.raise_for_status()
-    d = r.json()
-    expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
-    FileTokenStore("secrets/hh_token.json").save(TokenData(
-        access_token=d["access_token"],
-        refresh_token=d.get("refresh_token", ""),
-        expires_at=expires_at
-    ))
+    try:
+        async with httpx.AsyncClient(timeout=30) as x:
+            r = await x.post("https://api.hh.ru/token", data=data, headers={"Accept": "application/json"})
+        if r.status_code >= 400:
+            return {"ok": False, "step": "token", "status": r.status_code, "body": r.text}
+        d = r.json()
+    except Exception as e:
+        return {"ok": False, "step": "token-exchange-exception", "error": str(e)}
+
+
+    try:
+        os.makedirs("secrets", exist_ok=True)
+        expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
+        FileTokenStore("secrets/hh_token.json").save(TokenData(
+            access_token=d["access_token"],
+            refresh_token=d.get("refresh_token", ""),
+            expires_at=expires_at
+        ))
+    except Exception as e:
+        return {"ok": False, "step": "save-token", "error": str(e)}
+
     return {"ok": True}
 
 
