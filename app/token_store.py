@@ -15,18 +15,18 @@ class FileTokenStore:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
 
     def load(self) -> TokenData:
-   
-    if os.path.exists(self.path):
-        with open(self.path, "r", encoding="utf-8-sig") as f:
-            return json.load(f)
+
+        if os.path.exists(self.path):
+            with open(self.path, "r", encoding="utf-8-sig") as f:
+                return json.load(f)
     
-    at = os.getenv("AMO_ACCESS_TOKEN")
-    rt = os.getenv("AMO_REFRESH_TOKEN")
-    ea = os.getenv("AMO_EXPIRES_AT")
-    if at and rt and ea and ea.isdigit():
-        return {"access_token": at, "refresh_token": rt, "expires_at": int(ea)}
-   
-    raise RuntimeError("No amo token: neither file nor ENV present")
+        at = os.getenv("AMO_ACCESS_TOKEN")
+        rt = os.getenv("AMO_REFRESH_TOKEN")
+        ea = os.getenv("AMO_EXPIRES_AT")
+        if at and rt and ea and ea.isdigit():
+            return {"access_token": at, "refresh_token": rt, "expires_at": int(ea)}
+    
+        raise RuntimeError("No amo token: neither file nor ENV present")
 
     def save(self, data: TokenData) -> None:
         tmp = self.path + ".tmp"
