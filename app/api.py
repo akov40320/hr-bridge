@@ -1,34 +1,38 @@
 import re
+import time, os
+from urllib.parse import urlencode
+
+import httpx
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
+
 from app.config import settings
 from app.amo_client import AmoClient
 from app.store import save_link, enqueue_pending, find_link, replay_pending
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
 from app.adapters import hh as hh_adapt, avito as avito_adapt
-from urllib.parse import urlencode
-from fastapi.responses import RedirectResponse
-import time, os, httpx
 from app.token_store import FileTokenStore, TokenData
 
 router = APIRouter()
 
-# --- HH OAuth ---
+
+# ---------- HH OAuth ----------
 @router.get("/oauth/hh/start")
 def hh_start():
     params = {
         "response_type": "code",
         "client_id": settings.HH_CLIENT_ID,
         "redirect_uri": settings.HH_REDIRECT_URI,
-        "state": "hh1",
+        "state": "hh1",  # можно оставить фикс, позже сделаем подпись
     }
     return RedirectResponse("https://hh.ru/oauth/authorize?" + urlencode(params))
+
 
 @router.get("/oauth/hh/callback")
 async def hh_callback(code: str | None = None, state: str | None = None):
     if not code:
         return {"ok": False, "error": "no code"}
 
-    # 1) обмен кода на токен
     data = {
         "grant_type": "authorization_code",
         "code": code,
@@ -40,11 +44,10 @@ async def hh_callback(code: str | None = None, state: str | None = None):
         async with httpx.AsyncClient(timeout=30) as x:
             r = await x.post("https://api.hh.ru/token", data=data, headers={"Accept": "application/json"})
         if r.status_code >= 400:
-            return {"ok": False, "step": "token", "status": r.status_code, "body": r.text}
+            return {"ok": False, "provider": "hh", "step": "token", "status": r.status_code, "body": r.text}
         d = r.json()
     except Exception as e:
-        return {"ok": False, "step": "token-exchange-exception", "error": str(e)}
-
+        return {"ok": False, "provider": "hh", "step": "token-exchange-exception", "error": str(e)}
 
     try:
         os.makedirs("secrets", exist_ok=True)
@@ -55,49 +58,73 @@ async def hh_callback(code: str | None = None, state: str | None = None):
             expires_at=expires_at
         ))
     except Exception as e:
-        return {"ok": False, "step": "save-token", "error": str(e)}
+        return {"ok": False, "provider": "hh", "step": "save-token", "error": str(e)}
 
     return {"ok": True}
 
 
+# ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
 def avito_start():
-    if not settings.AVITO_AUTHORIZE_URL:
-        return {"ok": False, "error": "AVITO_AUTHORIZE_URL not set"}
+    if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
+        return {
+            "ok": False,
+            "error": "avito env not set",
+            "need": {
+                "AVITO_CLIENT_ID": bool(settings.AVITO_CLIENT_ID),
+                "AVITO_REDIRECT_URI": bool(settings.AVITO_REDIRECT_URI),
+                "AVITO_AUTHORIZE_URL": bool(settings.AVITO_AUTHORIZE_URL),
+                "AVITO_TOKEN_URL": bool(settings.AVITO_TOKEN_URL),
+            },
+        }
     params = {
         "response_type": "code",
         "client_id": settings.AVITO_CLIENT_ID,
         "redirect_uri": settings.AVITO_REDIRECT_URI,
-        "state": "av1",
+        "state": "av1",  # позже подпишем
     }
-    return RedirectResponse(settings.AVITO_AUTHORIZE_URL + "?" + urlencode(params))
+    return RedirectResponse(f"{settings.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
 
 @router.get("/oauth/avito/callback")
 async def avito_callback(code: str | None = None, state: str | None = None):
     if not code:
         return {"ok": False, "error": "no code"}
+
+    if not (settings.AVITO_TOKEN_URL and settings.AVITO_CLIENT_ID and settings.AVITO_CLIENT_SECRET):
+        return {"ok": False, "error": "avito token env not set"}
+
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "client_id": settings.AVITO_CLIENT_ID,
-        "client_secret": settings.AVITO_CLIENT_SECRET,
         "redirect_uri": settings.AVITO_REDIRECT_URI,
     }
-    async with httpx.AsyncClient(timeout=30) as x:
-        r = await x.post("https://api.avito.ru/token", data=data)
-    r.raise_for_status()
-    d = r.json()
-    expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
-    FileTokenStore("secrets/avito_token.json").save(TokenData(
-        access_token=d["access_token"],
-        refresh_token=d.get("refresh_token", ""),
-        expires_at=expires_at
-    ))
+    try:
+        auth = httpx.BasicAuth(settings.AVITO_CLIENT_ID, settings.AVITO_CLIENT_SECRET)
+        async with httpx.AsyncClient(timeout=30) as x:
+            r = await x.post(settings.AVITO_TOKEN_URL, data=data, auth=auth)
+        if r.status_code >= 400:
+            return {"ok": False, "provider": "avito", "step": "token", "status": r.status_code, "body": r.text}
+        tok = r.json()
+    except Exception as e:
+        return {"ok": False, "provider": "avito", "step": "token-exchange-exception", "error": str(e)}
+
+    try:
+        os.makedirs("secrets", exist_ok=True)
+        expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
+        FileTokenStore("secrets/avito_token.json").save(TokenData(
+            access_token=tok.get("access_token", ""),
+            refresh_token=tok.get("refresh_token", ""),
+            expires_at=expires_at
+        ))
+    except Exception as e:
+        return {"ok": False, "provider": "avito", "step": "save-token", "error": str(e)}
+
     return {"ok": True}
 
+
+# ---------- вспомогалки ----------
 def _events_from_form(form) -> list[tuple[int, int]]:
-    """Парсит ключи вида leads[status][0][id] / [status_id] из form-данных."""
     keys = list(form.keys())
     idxs = set()
     for k in keys:
@@ -132,6 +159,7 @@ def route_type_by_text(text: str) -> str:
     return "operator"
 
 
+# ---------- входящие вебхуки от источников ----------
 @router.post("/webhooks/hh")
 async def webhook_hh(payload: dict):
     payload["platform"] = "hh"
@@ -161,7 +189,6 @@ async def _process_incoming(payload: dict):
     created = await amo.create_leads(body)
     lead_id = created["_embedded"]["leads"][0]["id"]
 
-    # сохраним связь (external_id пока можем не знать — пусть будет None)
     save_link(
         lead_id=lead_id,
         platform=payload.get("platform", "unknown"),
@@ -169,7 +196,6 @@ async def _process_incoming(payload: dict):
         external_id=str(payload.get("applicant", {}).get("id") or "") or None
     )
 
-    # теги отдельным PATCH (как раньше)
     await amo.add_tags(lead_id, [
         settings.AMO_TAG_WENT_TO_BOT,
         f'source:{payload.get("platform", "") or "unknown"}',
@@ -179,13 +205,13 @@ async def _process_incoming(payload: dict):
     return {"ok": True, "lead_id": lead_id}
 
 
-# ------------- Вебхук Amo: складываем задачи синхры -------------
+# ---------- вебхук из Amo: складываем задачи на синхронизацию ----------
 @router.post("/webhooks/amo")
 async def amo_webhook(request: Request):
-    hh_map_load()  # карта Amo→hh в память
+    hh_map_load()
     events: list[tuple[int, int]] = []
 
-    # 1) Пытаемся как JSON (будущие форматы)
+    # 1) Пытаемся JSON
     try:
         data = await request.json()
         if isinstance(data, dict) and data.get("leads", {}).get("status"):
@@ -194,14 +220,14 @@ async def amo_webhook(request: Request):
                 status_id = int(it.get("new_status_id") or it.get("status_id"))
                 events.append((lead_id, status_id))
     except Exception:
-        pass  # это нормально для x-www-form-urlencoded
+        pass
 
-    # 2) Если JSON не подошёл — читаем form (нужен python-multipart)
+    # 2) x-www-form-urlencoded
     if not events:
-        form = await request.form()  # ← работает благодаря python-multipart
+        form = await request.form()
         events = _events_from_form(form)
 
-    # 3) Складываем задачи синхронизации
+    # 3) Кладём в очередь на синхронизацию
     for lead_id, status_id in events:
         link = find_link(lead_id)
         if not link:
@@ -233,7 +259,7 @@ async def amo_webhook(request: Request):
     return {"ok": True, "handled": len(events)}
 
 
-# ------------- Админ-роуты -------------
+# ---------- админ ----------
 @router.get("/admin/hh-mapping")
 async def get_hh_mapping():
     return hh_map_load()
@@ -241,7 +267,6 @@ async def get_hh_mapping():
 
 @router.put("/admin/hh-mapping")
 async def put_hh_mapping(payload: dict):
-    # payload: { "78909402":"phone_interview", ... }
     return {"ok": True, "mapping": hh_map_set(payload)}
 
 
