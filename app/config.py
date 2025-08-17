@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     AVITO_REDIRECT_URI: str = ""  # из env
     AVITO_AUTHORIZE_URL: str = "https://avito.ru/oauth"
     AVITO_TOKEN_URL: str = "https://api.avito.ru/token"  # <— этого поля не хватало
+    AVITO_SCOPE: str = ""
 
     # Флаги синхры/поведения
     HH_SYNC_ENABLED: bool = False
