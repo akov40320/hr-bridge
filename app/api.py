@@ -8,6 +8,7 @@ from app.adapters import hh as hh_adapt, avito as avito_adapt
 from urllib.parse import urlencode
 from fastapi.responses import RedirectResponse
 import time, os, httpx
+from app.token_store import FileTokenStore, TokenData
 
 router = APIRouter()
 
