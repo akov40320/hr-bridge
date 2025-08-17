@@ -145,7 +145,23 @@ def _events_from_form(form) -> list[tuple[int, int]]:
 
 @router.get("/health")
 async def health():
-    return {"ok": True}
+    # Amo статус
+    amo_status = "unknown"
+    expires_in = None
+    try:
+        data = FileTokenStore().load()
+        expires_in = int(data["expires_at"]) - int(time.time())
+        amo_status = "ok" if expires_in > 0 else "reauth_required"
+    except Exception:
+        amo_status = "reauth_required"
+        expires_in = -1
+
+    return {
+        "ok": True,
+        "amo": { "status": amo_status, "expires_in": expires_in },
+        "hh":  { "enabled": settings.HH_SYNC_ENABLED },
+        "avito": { "enabled": settings.AVITO_SYNC_ENABLED }
+    }
 
 
 @router.get("/oauth/amo/callback")
