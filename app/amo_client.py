@@ -1,8 +1,9 @@
-import time
-import httpx
+import time, httpx
 from app.config import settings
 from app.token_store import FileTokenStore, TokenData
 
+class ReauthRequired(Exception):
+    """Нужен повторный OAuth в Amo (invalid_grant / битый refresh)."""
 
 class AmoClient:
     def __init__(self, store: FileTokenStore | None = None):
@@ -28,12 +29,18 @@ class AmoClient:
         }
         async with httpx.AsyncClient(timeout=30) as x:
             r = await x.post(url, json=payload)
+
+        # ловим invalid_grant
+        if r.status_code in (400, 401):
+            txt = (r.text or "").lower()
+            if "invalid_grant" in txt:
+                raise ReauthRequired("Amo refresh_token invalid_grant")
         r.raise_for_status()
+
         data = r.json()
-        # Если Amo вернул server_time — используем его; иначе текущее время
-        server_time = data.get("server_time", int(time.time()))
+        server_time = int(data.get("server_time", time.time()))
         expires_in = int(data.get("expires_in", 3600))
-        expires_at = server_time + expires_in - 120  # запас 2 минуты
+        expires_at = server_time + expires_in - 120
 
         self._access = data["access_token"]
         self._refresh = data["refresh_token"]
@@ -54,10 +61,13 @@ class AmoClient:
         async with httpx.AsyncClient(timeout=30) as x:
             r = await x.request(method, url, headers=self.headers, **kw)
         if r.status_code == 401:
-            await self._refresh_token()
+            # попробуем рефреш
+            await self._refresh_token()  # может кинуть ReauthRequired
             async with httpx.AsyncClient(timeout=30) as x:
                 r = await x.request(method, url, headers=self.headers, **kw)
-        r.raise_for_status()
+        if r.is_error:
+            print("AMO ERROR:", r.status_code, r.text)
+            r.raise_for_status()
         return r.json() if r.content else None
 
     async def create_leads(self, leads: list[dict]):
