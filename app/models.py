@@ -59,6 +59,7 @@ class TgSurvey(Base):
         TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+
 class EventDedup(Base):
     __tablename__ = "events_dedup"
     key: Mapped[str] = mapped_column(Text, primary_key=True)

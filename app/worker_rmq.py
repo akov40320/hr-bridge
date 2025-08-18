@@ -1,13 +1,14 @@
 from __future__ import annotations
 import asyncio, os
+import logging
 from httpx import HTTPStatusError, TimeoutException, ConnectError
-
 from app.queue import consume, publish_retry, publish_dlq
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.amo_client import AmoClient, ReauthRequired
 from app.logging_setup import setup_logging
 
 setup_logging("INFO")
+logger = logging.getLogger(__name__)
 
 WORKER_MAX_ATTEMPTS = int(os.getenv("WORKER_MAX_ATTEMPTS", "6"))
 
@@ -25,7 +26,8 @@ async def handle(payload: dict, attempts: int):
         plat = payload.get("platform"); act = payload.get("action")
 
         if plat == "debug" and act == "echo":
-            print("RMQ ECHO:", payload.get("msg")); return
+            logger.info("RMQ ECHO: %s", payload.get("msg"))
+            return
 
         if plat == "avito" and act == "send_message":
             await avito_adapt.send_message(payload["external_id"], payload["text"]); return
@@ -43,13 +45,14 @@ async def handle(payload: dict, attempts: int):
         raise RuntimeError(f"unknown task: {payload}")
 
     except ReauthRequired as e:
-        # терминальная для нас — нужна ручная переавторизация
+        logger.warning("ReauthRequired: %s", e)
         await publish_dlq(payload, attempts + 1, f"ReauthRequired: {e}")
 
     except Exception as e:
         if _is_transient(e) and attempts + 1 < WORKER_MAX_ATTEMPTS:
             await publish_retry(payload, attempts + 1)  # вернётся из retry в main
         else:
+            logger.exception("Task failed terminally")
             await publish_dlq(payload, attempts + 1, str(e))
 
 

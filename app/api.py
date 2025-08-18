@@ -1,3 +1,4 @@
+import logging
 import re
 import time, os
 from urllib.parse import urlencode
@@ -8,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.amo_client import AmoClient, ReauthRequired
-from app.dedup import calc_key, check_and_store
+from app.dedup import calc_key, check_and_store, cleanup_older_than
 from app.queue import publish_task
 from app.store import save_link, find_link
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
@@ -16,6 +17,8 @@ from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
 from app.guards import require_admin
 
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 admin = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
@@ -352,3 +355,10 @@ async def _handle_task(p: dict):
         await amo.create_leads(p["lead_body"])
         return
     raise RuntimeError(f"Unknown task: {p}")
+
+
+@admin.post("/dedup-clean")
+async def dedup_clean(hours: int = 72):
+    deleted = await cleanup_older_than(hours * 3600)
+    logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
+    return {"ok": True, "removed": deleted, "hours": hours}

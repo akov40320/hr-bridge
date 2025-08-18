@@ -1,7 +1,7 @@
 from __future__ import annotations
-import hashlib, time
+import hashlib
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import delete
+from sqlalchemy import text
 from app.db import get_session
 from app.models import EventDedup
 
@@ -11,10 +11,6 @@ def calc_key(source: str, payload: bytes) -> str:
 
 
 async def check_and_store(key: str) -> bool:
-    """
-    True — первое появление (можно обрабатывать).
-    False — уже видели (дубликат).
-    """
     async with get_session() as s:
         stmt = insert(EventDedup).values(key=key).on_conflict_do_nothing(index_elements=[EventDedup.key])
         res = await s.execute(stmt)
@@ -22,16 +18,10 @@ async def check_and_store(key: str) -> bool:
         return res.rowcount == 1
 
 
-async def cleanup_older_than(seconds: int = 3 * 24 * 3600) -> int:
-    """
-    Удаляет старые ключи. Вернёт число удалённых.
-    """
-    cutoff = time.time() - seconds
+async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
     async with get_session() as s:
-        q = delete(EventDedup).where(EventDedup.created_at < EventDedup.created_at.op("AT TIME ZONE")("UTC"))
-        # простой способ: Postgres now() сравнивать сложно без tz; можно оставить кроном через SQL.
-        # Либо делай raw-SQL с NOW()-interval. Проще — выполнять чистку SQL-скриптом по расписанию.
-        # Здесь оставим заглушку (ничего не удалит). Используй отдельный SQL в cron.
-        res = 0
+        q = text(
+            "DELETE FROM events_dedup WHERE created_at < (NOW() AT TIME ZONE 'utc') - (:sec || ' seconds')::interval")
+        res = await s.execute(q, {"sec": seconds})
         await s.commit()
-        return res
+        return res.rowcount or 0

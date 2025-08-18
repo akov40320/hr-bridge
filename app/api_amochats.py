@@ -1,8 +1,11 @@
+import logging
 from fastapi import APIRouter, Request, Response
+from app.dedup import calc_key, check_and_store
 from app.store_chat import get_by_lead, get_by_conversation
 from aiogram import Bot
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 # Боты для ответной пересылки в TG (если хочешь форвардить в обе группы ботов)
@@ -12,16 +15,22 @@ tg_operator = Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) if settings.TELEGRAM_OPE
 
 @router_amo_chats.post("/webhooks/amo-chats/in")
 async def amochats_in(request: Request):
-    # подпись, если включена
     if settings.AMOCHATS_INCOMING_SECRET:
         if request.headers.get("X-AmoChats-Signature") != settings.AMOCHATS_INCOMING_SECRET:
             return Response(status_code=401)
 
-    data = await request.json()
-    if not isinstance(data, dict):
+    raw = await request.body()
+    key = calc_key("amo_chats", raw)
+    if not await check_and_store(key):
+        logger.info("amo-chats duplicate webhook skipped")
+        return {"ok": True, "duplicate": True}
+
+    try:
+        data = await request.json()
+    except Exception:
+        logger.warning("amo-chats bad json")
         return {"ok": False, "error": "bad json"}
 
-    # фильтруем только новые сообщения клиента
     if data.get("event_type") != "new_message":
         return {"ok": True}
 
@@ -29,19 +38,18 @@ async def amochats_in(request: Request):
     msg = (payload.get("message") or {})
     text = msg.get("text") or ""
     if not text:
-        return {"ok": True}  # нечего форвардить
+        return {"ok": True}
 
     conv = (payload.get("conversation") or {})
     conv_uuid = conv.get("uuid")
     client_id = conv.get("client_id")
 
-    # пробуем lead_id из client_id
     lead_id = None
     try:
         if client_id:
             lead_id = int(client_id)
     except Exception:
-        lead_id = None
+        pass
 
     links = []
     if lead_id:
@@ -49,17 +57,13 @@ async def amochats_in(request: Request):
     elif conv_uuid:
         links = await get_by_conversation(conv_uuid)
 
-    # отправляем всем связанным TG-пользователям (master/operator)
     for ln in links or []:
-        if ln.bot_kind == "master" and tg_master:
-            try:
+        try:
+            if ln.bot_kind == "master" and tg_master:
                 await tg_master.send_message(chat_id=ln.user_id, text=f"[Amo] {text}")
-            except Exception as e:
-                print("TG send (master) err:", e)
-        if ln.bot_kind == "operator" and tg_operator:
-            try:
+            if ln.bot_kind == "operator" and tg_operator:
                 await tg_operator.send_message(chat_id=ln.user_id, text=f"[Amo] {text}")
-            except Exception as e:
-                print("TG send (operator) err:", e)
+        except Exception:
+            logger.exception("TG send failed")
 
     return {"ok": True}
