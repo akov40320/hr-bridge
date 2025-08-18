@@ -1,7 +1,5 @@
-import asyncio, contextlib
+import contextlib
 
-from app.config import settings
-from app.worker_rmq import run_forever as rmq_run
 import uvicorn
 from fastapi import FastAPI
 from app.api import router
@@ -16,8 +14,6 @@ app.include_router(router)
 async def on_startup():
     await init_db()
     await ensure_tokens()
-    if settings.RMQ_ENABLE_CONSUMER:
-        app.state.rmq_task = asyncio.create_task(rmq_run())
 
 
 @app.on_event("shutdown")

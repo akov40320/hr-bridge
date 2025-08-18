@@ -26,7 +26,6 @@ async def _ensure():
         arguments={"x-dead-letter-exchange": settings.RMQ_EXCHANGE,
                    "x-dead-letter-routing-key": "tasks"}  # DLX не обязателен здесь, но пусть будет
     )
-    await _chan.default_exchange.bind(settings.RMQ_TASK_QUEUE, routing_key=settings.RMQ_TASK_QUEUE)  # на всякий
 
     # retry queue с TTL -> dead-letter в main
     await _chan.declare_queue(
