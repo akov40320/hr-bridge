@@ -3,8 +3,12 @@ from dataclasses import dataclass
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
+
+from app.bootstrap import ensure_tokens
 from app.config import settings
 from app.amo_client import AmoClient
+from app.db import init_db
+
 
 # Простая сессия опроса в памяти (MVP). Можно потом вынести в таблицу.
 @dataclass
@@ -15,8 +19,10 @@ class SurveyState:
     experience: str | None = None
     time_pref: str | None = None
 
+
 # user_id -> SurveyState
 SURVEYS: dict[int, SurveyState] = {}
+
 
 async def tag_and_note(lead_id: int, tags: list[str], note: str):
     amo = await AmoClient.create()
@@ -24,6 +30,7 @@ async def tag_and_note(lead_id: int, tags: list[str], note: str):
         await amo.add_tags(lead_id, tags)
     if note:
         await amo.add_note(lead_id, note)
+
 
 def parse_start_arg(text: str) -> int | None:
     # /start 123456
@@ -35,6 +42,7 @@ def parse_start_arg(text: str) -> int | None:
             return None
     return None
 
+
 def survey_prompt(state: SurveyState) -> str:
     if state.step == 0:
         return "В каком вы городе?"
@@ -43,6 +51,7 @@ def survey_prompt(state: SurveyState) -> str:
     if state.step == 2:
         return "Когда вам удобно на связи? (например, завтра после 14:00)"
     return "Спасибо, опрос завершён!"
+
 
 def survey_store_answer(state: SurveyState, text: str):
     if state.step == 0:
@@ -53,6 +62,7 @@ def survey_store_answer(state: SurveyState, text: str):
         state.time_pref = text
     state.step += 1
 
+
 def survey_summary(state: SurveyState) -> str:
     return (
         "Итоги опроса:\n"
@@ -60,6 +70,7 @@ def survey_summary(state: SurveyState) -> str:
         f"• Опыт: {state.experience or '-'}\n"
         f"• Связь: {state.time_pref or '-'}"
     )
+
 
 def make_router(bot_kind: str):
     dp = Dispatcher()
@@ -74,7 +85,8 @@ def make_router(bot_kind: str):
         SURVEYS[m.from_user.id] = SurveyState(lead_id=lead_id, step=0)
 
         # тег + заметка
-        await tag_and_note(lead_id, [settings.AMO_TAG_WENT_TO_BOT], f"[{bot_kind}] Кандидат перешёл в бота (TG @{m.from_user.username or m.from_user.id}).")
+        await tag_and_note(lead_id, [settings.AMO_TAG_WENT_TO_BOT],
+                           f"[{bot_kind}] Кандидат перешёл в бота (TG @{m.from_user.username or m.from_user.id}).")
 
         await m.answer(
             "Здравствуйте! Нужны пару уточнений по заявке. "
@@ -114,7 +126,10 @@ def make_router(bot_kind: str):
 
     return dp
 
+
 async def main():
+    await init_db()
+    await ensure_tokens()
     # два бота параллельно
     master_bot = Bot(settings.TELEGRAM_MASTER_BOT_TOKEN)
     operator_bot = Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN)
@@ -126,6 +141,7 @@ async def main():
         master_dp.start_polling(master_bot),
         operator_dp.start_polling(operator_bot),
     )
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,43 +1,35 @@
-version: "3.9"
-
 services:
   worker:
     build: .
     command: python -m app.worker_rmq
     environment:
-      # RMQ (CloudAMQP)
-      RABBITMQ_URL: "amqps://nuuwacek:P9yLc_PP01dtEPQ_QEOdq0CQOm5uRCY7@seal.lmq.cloudamqp.com/nuuwacek"
-      RMQ_EXCHANGE: "bridge"
-      RMQ_TASK_QUEUE: "bridge.tasks"
-      RMQ_RETRY_QUEUE: "bridge.tasks.retry"
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RMQ_EXCHANGE: bridge
+      RMQ_TASK_QUEUE: bridge.tasks
+      RMQ_RETRY_QUEUE: bridge.tasks.retry
       RMQ_RETRY_TTL_MS: 5000
 
-      # DB (Render Postgres)
-      DATABASE_URL: "postgresql+asyncpg://<user>:<pass>@<host>/<db>?sslmode=require"
+      DATABASE_URL: ${DATABASE_URL}
 
-      # Amo — конфиг, не секретные токены
-      AMO_BASE_URL: "https://dimitrieidifesk10.amocrm.ru"
-      AMO_CLIENT_ID: "<id>"
-      AMO_CLIENT_SECRET: "<secret>"
-      AMO_REDIRECT_URI: "https://hr-bridge.onrender.com/oauth/amo/callback"
+      AMO_BASE_URL: ${AMO_BASE_URL}
+      AMO_CLIENT_ID: ${AMO_CLIENT_ID}
+      AMO_CLIENT_SECRET: ${AMO_CLIENT_SECRET}
+      AMO_REDIRECT_URI: ${AMO_REDIRECT_URI}
     restart: unless-stopped
 
   tg_bots:
     build: .
-    command: python -m app.tg_bots_runner
+    command: python -m app.tg_bots
     environment:
-      # Ботам RMQ не нужен
-      DATABASE_URL: "postgresql+asyncpg://<user>:<pass>@<host>/<db>?sslmode=require"
+      DATABASE_URL: ${DATABASE_URL}
 
-      # Amo (только конфиг). Токены возьмём из БД.
-      AMO_BASE_URL: "https://dimitrieidifesk10.amocrm.ru"
-      AMO_CLIENT_ID: "<id>"
-      AMO_CLIENT_SECRET: "<secret>"
-      AMO_REDIRECT_URI: "https://hr-bridge.onrender.com/oauth/amo/callback"
+      AMO_BASE_URL: ${AMO_BASE_URL}
+      AMO_CLIENT_ID: ${AMO_CLIENT_ID}
+      AMO_CLIENT_SECRET: ${AMO_CLIENT_SECRET}
+      AMO_REDIRECT_URI: ${AMO_REDIRECT_URI}
 
-      # Telegram боты
-      TELEGRAM_MASTER_BOT_TOKEN: "<token>"
-      TELEGRAM_MASTER_BOT_USERNAME: "MasterHRBot_bot"   # без @
-      TELEGRAM_OPERATOR_BOT_TOKEN: "<token>"
-      TELEGRAM_OPERATOR_BOT_USERNAME: "OperatorHRBot_bot" # без @
+      TELEGRAM_MASTER_BOT_TOKEN: ${TELEGRAM_MASTER_BOT_TOKEN}
+      TELEGRAM_MASTER_BOT_USERNAME: ${TELEGRAM_MASTER_BOT_USERNAME}
+      TELEGRAM_OPERATOR_BOT_TOKEN: ${TELEGRAM_OPERATOR_BOT_TOKEN}
+      TELEGRAM_OPERATOR_BOT_USERNAME: ${TELEGRAM_OPERATOR_BOT_USERNAME}
     restart: unless-stopped
