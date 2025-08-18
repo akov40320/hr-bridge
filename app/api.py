@@ -3,18 +3,21 @@ import time, os
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.amo_client import AmoClient, ReauthRequired
+from app.dedup import calc_key, check_and_store
 from app.queue import publish_task
 from app.store import save_link, find_link
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
+from app.guards import require_admin
 
 router = APIRouter()
+admin = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 
 # ---------- HH OAuth ----------
@@ -173,13 +176,29 @@ def route_type_by_text(text: str) -> str:
 
 # ---------- входящие вебхуки от источников ----------
 @router.post("/webhooks/hh")
-async def webhook_hh(payload: dict):
+async def webhook_hh(request: Request):
+    raw = await request.body()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    key = calc_key("hh", raw)
+    if not await check_and_store(key):
+        return {"ok": True, "duplicate": True}
     payload["platform"] = "hh"
     return await _process_incoming(payload)
 
 
 @router.post("/webhooks/avito")
-async def webhook_avito(payload: dict):
+async def webhook_avito(request: Request):
+    raw = await request.body()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    key = calc_key("avito", raw)
+    if not await check_and_store(key):
+        return {"ok": True, "duplicate": True}
     payload["platform"] = "avito"
     return await _process_incoming(payload)
 
@@ -247,6 +266,11 @@ async def _process_incoming(payload: dict):
 # ---------- вебхук из Amo: складываем задачи на синхронизацию ----------
 @router.post("/webhooks/amo")
 async def amo_webhook(request: Request):
+    raw = await request.body()
+    key = calc_key("amo", raw)
+    if not await check_and_store(key):
+        return {"ok": True, "duplicate": True}
+
     hh_map_load()
     events: list[tuple[int, int]] = []
 
@@ -299,32 +323,32 @@ async def amo_webhook(request: Request):
 
 
 # ------------- Админ-роуты -------------
-@router.get("/admin/hh-mapping")
+@admin.get("/hh-mapping")
 async def get_hh_mapping():
     return hh_map_load()
 
 
-@router.put("/admin/hh-mapping")
+@admin.put("/admin/hh-mapping")
 async def put_hh_mapping(payload: dict):
     return {"ok": True, "mapping": hh_map_set(payload)}
 
 
+@admin.post("/admin/rmq-test")
+async def rmq_test(payload: dict = None):
+    msg = (payload or {}).get("msg", "hi")
+    await publish_task({"platform": "debug", "action": "echo", "msg": msg})
+    return {"ok": True}
+
+
 async def _handle_task(p: dict):
     if p["platform"] == "hh" and p["action"] == "set_state":
-        hh_adapt.set_employer_state(p["external_id"], p["target_state"])
+        await hh_adapt.set_employer_state(p["external_id"], p["target_state"])
         return
     if p["platform"] == "avito" and p["action"] == "mark_read":
-        avito_adapt.mark_read(p["external_id"])
+        await avito_adapt.mark_read(p["external_id"])
         return
     if p["platform"] == "amo" and p["action"] == "amo_create_lead":
         amo = await AmoClient.create()
         await amo.create_leads(p["lead_body"])
         return
     raise RuntimeError(f"Unknown task: {p}")
-
-
-@router.post("/admin/rmq-test")
-async def rmq_test(payload: dict = None):
-    msg = (payload or {}).get("msg", "hi")
-    await publish_task({"platform": "debug", "action": "echo", "msg": msg})
-    return {"ok": True}

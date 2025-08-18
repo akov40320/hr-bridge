@@ -9,3 +9,5 @@ asyncpg
 alembic
 aio-pika
 aiogram
+psycopg[binary]
+python-dotenv

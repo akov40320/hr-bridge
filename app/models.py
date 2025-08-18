@@ -28,15 +28,40 @@ class LeadLink(Base):
     )
 
 
-class Task(Base):
-    __tablename__ = "tasks"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    platform: Mapped[str] = mapped_column(Text, nullable=False)
-    action: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    error: Mapped[str | None] = mapped_column(Text)
+class TgLink(Base):
+    __tablename__ = "tg_links"
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    bot_kind: Mapped[str] = mapped_column(Text, primary_key=True)  # "master" | "operator"
+    lead_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(Text)  # для AmoChats, появится позже
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TgSurvey(Base):
+    __tablename__ = "tg_surveys"
+    # одна активная сессия на (user_id, bot_kind)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    bot_kind: Mapped[str] = mapped_column(Text, primary_key=True)  # "master" | "operator"
+    lead_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+
+    step: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0..2
+    city: Mapped[str | None] = mapped_column(Text)
+    experience: Mapped[str | None] = mapped_column(Text)
+    time_pref: Mapped[str | None] = mapped_column(Text)
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+class EventDedup(Base):
+    __tablename__ = "events_dedup"
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), index=True
     )

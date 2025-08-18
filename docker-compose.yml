@@ -1,8 +1,9 @@
 services:
   worker:
     build: .
-    command: python -m app.worker_rmq
+    command: python -u -m app.worker_rmq
     environment:
+      PYTHONUNBUFFERED: "1"
       RABBITMQ_URL: ${RABBITMQ_URL}
       RMQ_EXCHANGE: bridge
       RMQ_TASK_QUEUE: bridge.tasks
@@ -19,8 +20,9 @@ services:
 
   tg_bots:
     build: .
-    command: python -m app.tg_bots
+    command: python  -u -m app.tg_bots
     environment:
+      PYTHONUNBUFFERED: "1"
       DATABASE_URL: ${DATABASE_URL}
 
       AMO_BASE_URL: ${AMO_BASE_URL}
