@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db import get_session
-from app.models import LeadLink, Task
+from app.models import LeadLink
 
 
 # --- Привязка сделки к внешнему объекту (HH/Avito) -------------------------
@@ -62,76 +62,3 @@ async def find_link(lead_id: int) -> Optional[dict[str, Any]]:
             "vacancy_id": row.vacancy_id,
             "external_id": row.external_id,
         }
-
-
-# --- Очередь задач синхронизации ------------------------------------------
-
-async def enqueue_pending(task: dict[str, Any]) -> int | None:
-    """
-    Кладёт задачу в очередь (status=queued).
-    task: произвольный payload, но обычно содержит platform/action/...
-    Возвращает ID задачи (если нужно), иначе None.
-    """
-    async with get_session() as s:
-        stmt = insert(Task).values(
-            platform=task.get("platform", "unknown"),
-            action=task.get("action", "unknown"),
-            payload=task,
-        ).returning(Task.id)
-        res = await s.execute(stmt)
-        await s.commit()
-        row = res.first()
-        return row[0] if row else None
-
-
-async def fetch_and_lock(limit: int = 50) -> list[Task]:
-    """
-    Забирает пачку queued-задач с блокировкой (SKIP LOCKED),
-    помечает их status=running и увеличивает attempts.
-    """
-    async with get_session() as s:
-        q = (
-            select(Task)
-            .where(Task.status == "queued")
-            .order_by(Task.id)
-            .with_for_update(skip_locked=True)
-            .limit(limit)
-        )
-        rows = (await s.execute(q)).scalars().all()
-        if not rows:
-            return []
-
-        ids = [r.id for r in rows]
-        await s.execute(
-            update(Task)
-            .where(Task.id.in_(ids))
-            .values(status="running", attempts=Task.attempts + 1)
-        )
-        await s.commit()
-        return rows
-
-
-async def mark_task_done(task_id: int) -> None:
-    """
-    Помечает задачу как выполненную.
-    """
-    async with get_session() as s:
-        await s.execute(
-            update(Task)
-            .where(Task.id == task_id)
-            .values(status="done", error=None)
-        )
-        await s.commit()
-
-
-async def mark_task_failed(task_id: int, err: str) -> None:
-    """
-    Помечает задачу как неуспешную с текстом ошибки.
-    """
-    async with get_session() as s:
-        await s.execute(
-            update(Task)
-            .where(Task.id == task_id)
-            .values(status="failed", error=err)
-        )
-        await s.commit()

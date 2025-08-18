@@ -8,11 +8,11 @@ from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.amo_client import AmoClient, ReauthRequired
-from app.store import save_link, enqueue_pending, find_link
+from app.queue import publish_task
+from app.store import save_link, find_link
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
-from app.store import fetch_and_lock, mark_task_done, mark_task_failed
 
 router = APIRouter()
 
@@ -202,7 +202,7 @@ async def _process_incoming(payload: dict):
         created = await amo.create_leads(body)
     except ReauthRequired:
         # кладём задачу на «досоздание» после реавторизации Amo
-        await enqueue_pending({
+        await publish_task({
             "platform": payload.get("platform", "unknown"),
             "action": "amo_create_lead",
             "lead_body": body,
@@ -262,7 +262,7 @@ async def amo_webhook(request: Request):
         if platform == "hh":
             state = hh_map_get(status_id)
             if state and ext_id:
-                await enqueue_pending({
+                await publish_task({
                     "platform": "hh",
                     "action": "set_state",
                     "external_id": ext_id,
@@ -271,7 +271,7 @@ async def amo_webhook(request: Request):
                 })
         elif platform == "avito":
             if settings.AVITO_MARK_READ_ON_STAGE_CHANGE and ext_id:
-                await enqueue_pending({
+                await publish_task({
                     "platform": "avito",
                     "action": "mark_read",
                     "external_id": ext_id,

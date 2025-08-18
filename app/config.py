@@ -2,6 +2,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    
+    RABBITMQ_URL: str = "amqp://guest:guest@localhost/"
+    RMQ_EXCHANGE: str = "bridge"
+    RMQ_TASK_QUEUE: str = "bridge.tasks"
+    RMQ_RETRY_QUEUE: str = "bridge.tasks.retry"
+    RMQ_RETRY_TTL_MS: int = 5000
+    RMQ_ENABLE_CONSUMER: bool = True
     # DB
     DATABASE_URL: str = "postgresql+asyncpg://hr:hr@localhost:5432/hr"
 

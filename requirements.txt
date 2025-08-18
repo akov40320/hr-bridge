@@ -7,3 +7,4 @@ gunicorn
 sqlalchemy[asyncio]
 asyncpg
 alembic
+aio-pika

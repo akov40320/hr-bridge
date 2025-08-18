@@ -26,7 +26,6 @@ async def find_link(lead_id: int) -> dict | None:
 
 
 async def enqueue_pending(task: dict):
-    # task: {"platform": "...", "action": "...", ...payload...}
     async with get_session() as s:
         await s.execute(insert(Task).values(
             platform=task["platform"],
@@ -36,7 +35,6 @@ async def enqueue_pending(task: dict):
         await s.commit()
 
 
-# для вашей /admin/sync/replay
 async def list_queued(platforms: list[str] | None = None):
     async with get_session() as s:
         q = select(Task).where(Task.status == "queued")
