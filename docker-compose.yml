@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  worker:
+    build: .
+    command: python -m app.worker_rmq
+    environment:
+      # RMQ (CloudAMQP)
+      RABBITMQ_URL: "amqps://nuuwacek:P9yLc_PP01dtEPQ_QEOdq0CQOm5uRCY7@seal.lmq.cloudamqp.com/nuuwacek"
+      RMQ_EXCHANGE: "bridge"
+      RMQ_TASK_QUEUE: "bridge.tasks"
+      RMQ_RETRY_QUEUE: "bridge.tasks.retry"
+      RMQ_RETRY_TTL_MS: 5000
+
+      # DB (Render Postgres)
+      DATABASE_URL: "postgresql+asyncpg://<user>:<pass>@<host>/<db>?sslmode=require"
+
+      # Amo — конфиг, не секретные токены
+      AMO_BASE_URL: "https://dimitrieidifesk10.amocrm.ru"
+      AMO_CLIENT_ID: "<id>"
+      AMO_CLIENT_SECRET: "<secret>"
+      AMO_REDIRECT_URI: "https://hr-bridge.onrender.com/oauth/amo/callback"
+    restart: unless-stopped
+
+  tg_bots:
+    build: .
+    command: python -m app.tg_bots_runner
+    environment:
+      # Ботам RMQ не нужен
+      DATABASE_URL: "postgresql+asyncpg://<user>:<pass>@<host>/<db>?sslmode=require"
+
+      # Amo (только конфиг). Токены возьмём из БД.
+      AMO_BASE_URL: "https://dimitrieidifesk10.amocrm.ru"
+      AMO_CLIENT_ID: "<id>"
+      AMO_CLIENT_SECRET: "<secret>"
+      AMO_REDIRECT_URI: "https://hr-bridge.onrender.com/oauth/amo/callback"
+
+      # Telegram боты
+      TELEGRAM_MASTER_BOT_TOKEN: "<token>"
+      TELEGRAM_MASTER_BOT_USERNAME: "MasterHRBot_bot"   # без @
+      TELEGRAM_OPERATOR_BOT_TOKEN: "<token>"
+      TELEGRAM_OPERATOR_BOT_USERNAME: "OperatorHRBot_bot" # без @
+    restart: unless-stopped

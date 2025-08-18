@@ -218,6 +218,23 @@ async def _process_incoming(payload: dict):
         external_id=str(payload.get("applicant", {}).get("id") or "") or None
     )
 
+    if kind == "master":
+        bot_username = settings.TELEGRAM_MASTER_BOT_USERNAME
+    else:
+        bot_username = settings.TELEGRAM_OPERATOR_BOT_USERNAME
+
+    deep_link = f"https://t.me/{bot_username}?start={lead_id}"
+    text = f"Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос: {deep_link}"
+
+    if payload.get("platform") == "avito" and payload.get("applicant", {}).get("id"):
+        # negotiation_id в external_id мы уже сохранили — публикуем задачу воркеру Avito
+        await publish_task({
+            "platform": "avito",
+            "action": "send_message",
+            "external_id": payload["applicant"]["id"],
+            "text": text
+        })
+
     await amo.add_tags(lead_id, [
         settings.AMO_TAG_WENT_TO_BOT,
         f'source:{payload.get("platform", "") or "unknown"}',

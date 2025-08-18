@@ -27,6 +27,10 @@ async def handle(payload: dict, attempts: int):
             print("RMQ ECHO:", payload.get("msg"))
             return
 
+        if plat == "avito" and act == "send_message":
+            avito_adapt.send_message(payload["external_id"], payload["text"])
+            return
+
         if plat == "hh" and act == "set_state":
             hh_adapt.set_employer_state(payload["external_id"], payload["target_state"])
             return

@@ -78,3 +78,13 @@ class AmoClient:
         url = f"{self.base}/api/v4/leads"
         body = [{"id": lead_id, "_embedded": {"tags": [{"name": t} for t in tags]}}]
         return await self._request("PATCH", url, json=body)
+
+    async def add_note(self, lead_id: int, text: str):
+        # Заметка в таймлайн сделки (общая заметка)
+        url = f"{self.base}/api/v4/leads/notes"
+        body = [{
+            "entity_id": lead_id,
+            "note_type": "common",
+            "params": {"text": text}
+        }]
+        return await self._request("POST", url, json=body)

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    
+
     RABBITMQ_URL: str = "amqp://guest:guest@localhost/"
     RMQ_EXCHANGE: str = "bridge"
     RMQ_TASK_QUEUE: str = "bridge.tasks"
@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     HH_SYNC_ENABLED: bool = False
     AVITO_SYNC_ENABLED: bool = False
     AVITO_MARK_READ_ON_STAGE_CHANGE: bool = True
+
+    TELEGRAM_MASTER_BOT_TOKEN: str = ""
+    TELEGRAM_MASTER_BOT_USERNAME: str = ""
+    TELEGRAM_OPERATOR_BOT_TOKEN: str = ""
+    TELEGRAM_OPERATOR_BOT_USERNAME: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
