@@ -1,6 +1,7 @@
 import os
 from app.token_store import DbTokenStore, TokenData
 
+
 async def ensure_tokens():
     # пара (service, ENV-префикс)
     pairs = [("amo", "AMO"), ("hh", "HH"), ("avito", "AVITO")]

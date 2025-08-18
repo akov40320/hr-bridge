@@ -1,84 +1,137 @@
-import json, os, time, datetime as dt
-from typing import Optional
+from __future__ import annotations
 
-DATA_DIR = "data"
-LEADS_MAP = os.path.join(DATA_DIR, "leads_map.jsonl")
-PENDING = os.path.join(DATA_DIR, "pending_sync.jsonl")
+from typing import Any, Optional
 
-os.makedirs(DATA_DIR, exist_ok=True)
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
 
-
-def save_link(lead_id: int, platform: str, vacancy_id: str, external_id: Optional[str]):
-    """Сохраняем связь lead ↔ внешний отклик (response_id/negotiation_id)."""
-    with open(LEADS_MAP, "a", encoding="utf-8") as f:
-        f.write(json.dumps({
-            "lead_id": lead_id,
-            "platform": platform,
-            "vacancy_id": vacancy_id,
-            "external_id": external_id
-        }, ensure_ascii=False) + "\n")
+from app.db import get_session
+from app.models import LeadLink, Task
 
 
-def find_link(lead_id: int) -> Optional[dict]:
-    if not os.path.exists(LEADS_MAP):
-        return None
-    with open(LEADS_MAP, "r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if row.get("lead_id") == lead_id:
-                return row
-    return None
+# --- Привязка сделки к внешнему объекту (HH/Avito) -------------------------
+
+async def save_link(
+    lead_id: int,
+    platform: str,
+    vacancy_id: str,
+    external_id: Optional[str],
+) -> None:
+    """
+    Upsert связи lead ↔ внешний отклик (response_id/negotiation_id).
+    """
+    async with get_session() as s:
+        stmt = (
+            insert(LeadLink)
+            .values(
+                lead_id=lead_id,
+                platform=platform,
+                vacancy_id=vacancy_id,
+                external_id=external_id,
+            )
+            .on_conflict_do_update(
+                index_elements=[LeadLink.lead_id],
+                set_={
+                    "platform": platform,
+                    "vacancy_id": vacancy_id,
+                    "external_id": external_id,
+                },
+            )
+        )
+        await s.execute(stmt)
+        await s.commit()
 
 
-def enqueue_pending(task: dict):
-    """Кладём отложенную задачу синхры (hh/avito)."""
-    task = dict(task)
-    task.setdefault("created_at", dt.datetime.now(dt.timezone.utc).isoformat())
-    with open(PENDING, "a", encoding="utf-8") as f:
-        f.write(json.dumps(task, ensure_ascii=False) + "\n")
+async def find_link(lead_id: int) -> Optional[dict[str, Any]]:
+    """
+    Достаёт связь по lead_id. Возвращает словарь или None.
+    """
+    async with get_session() as s:
+        row = (
+            await s.execute(
+                select(LeadLink).where(LeadLink.lead_id == lead_id)
+            )
+        ).scalar_one_or_none()
+
+        if not row:
+            return None
+
+        return {
+            "lead_id": row.lead_id,
+            "platform": row.platform,
+            "vacancy_id": row.vacancy_id,
+            "external_id": row.external_id,
+        }
 
 
-def replay_pending(hh_enabled: bool, avito_enabled: bool, handler_hh, handler_avito) -> dict:
-    """Пытаемся выполнить накопленные задачи. Невыполненные оставляем в файле."""
-    if not os.path.exists(PENDING):
-        return {"total": 0, "done": 0, "left": 0}
+# --- Очередь задач синхронизации ------------------------------------------
 
-    left: list[str] = []
-    total = 0
-    done = 0
+async def enqueue_pending(task: dict[str, Any]) -> int | None:
+    """
+    Кладёт задачу в очередь (status=queued).
+    task: произвольный payload, но обычно содержит platform/action/...
+    Возвращает ID задачи (если нужно), иначе None.
+    """
+    async with get_session() as s:
+        stmt = insert(Task).values(
+            platform=task.get("platform", "unknown"),
+            action=task.get("action", "unknown"),
+            payload=task,
+        ).returning(Task.id)
+        res = await s.execute(stmt)
+        await s.commit()
+        row = res.first()
+        return row[0] if row else None
 
-    with open(PENDING, "r", encoding="utf-8") as f:
-        lines = [ln for ln in f if ln.strip()]
 
-    for ln in lines:
-        total += 1
-        task = json.loads(ln)
-        platform = task.get("platform")
-        try:
-            if platform == "hh":
-                if not hh_enabled:
-                    left.append(ln)  # оставляем до включения ключей
-                    continue
-                handler_hh(task)  # вызываем обработчик hh
-                done += 1
-            elif platform == "avito":
-                if not avito_enabled:
-                    left.append(ln)
-                    continue
-                handler_avito(task)  # обработчик avito
-                done += 1
-            else:
-                # неизвестная платформа — пропустим
-                done += 1
-        except Exception:
-            # при ошибке — оставим задачу
-            left.append(ln)
+async def fetch_and_lock(limit: int = 50) -> list[Task]:
+    """
+    Забирает пачку queued-задач с блокировкой (SKIP LOCKED),
+    помечает их status=running и увеличивает attempts.
+    """
+    async with get_session() as s:
+        q = (
+            select(Task)
+            .where(Task.status == "queued")
+            .order_by(Task.id)
+            .with_for_update(skip_locked=True)
+            .limit(limit)
+        )
+        rows = (await s.execute(q)).scalars().all()
+        if not rows:
+            return []
 
-    # перезаписываем очередь оставшимися
-    with open(PENDING, "w", encoding="utf-8") as f:
-        for ln in left:
-            f.write(ln.rstrip() + "\n")
+        ids = [r.id for r in rows]
+        await s.execute(
+            update(Task)
+            .where(Task.id.in_(ids))
+            .values(status="running", attempts=Task.attempts + 1)
+        )
+        await s.commit()
+        return rows
 
-    return {"total": total, "done": done, "left": len(left)}
+
+async def mark_task_done(task_id: int) -> None:
+    """
+    Помечает задачу как выполненную.
+    """
+    async with get_session() as s:
+        await s.execute(
+            update(Task)
+            .where(Task.id == task_id)
+            .values(status="done", error=None)
+        )
+        await s.commit()
+
+
+async def mark_task_failed(task_id: int, err: str) -> None:
+    """
+    Помечает задачу как неуспешную с текстом ошибки.
+    """
+    async with get_session() as s:
+        await s.execute(
+            update(Task)
+            .where(Task.id == task_id)
+            .values(status="failed", error=err)
+        )
+        await s.commit()

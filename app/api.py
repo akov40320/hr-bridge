@@ -8,10 +8,11 @@ from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.amo_client import AmoClient, ReauthRequired
-from app.store import save_link, enqueue_pending, find_link, replay_pending
+from app.store import save_link, enqueue_pending, find_link
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
+from app.store import fetch_and_lock, mark_task_done, mark_task_failed
 
 router = APIRouter()
 
@@ -66,7 +67,8 @@ async def hh_callback(code: str | None = None, state: str | None = None):
 # ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
 def avito_start():
-    if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
+    if not (
+            settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
         return {
             "ok": False,
             "error": "avito env not set",
@@ -85,7 +87,7 @@ def avito_start():
     }
     if getattr(settings, "AVITO_SCOPE", ""):
         params["scope"] = settings.AVITO_SCOPE
-        
+
     return RedirectResponse(f"{settings.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
 
@@ -144,7 +146,6 @@ def _events_from_form(form) -> list[tuple[int, int]]:
     return events
 
 
-
 @router.get("/health")
 async def health():
     info = {"ok": True}
@@ -154,6 +155,7 @@ async def health():
     except Exception as e:
         info["amo"] = {"status": "missing", "error": str(e)}
     return info
+
 
 @router.get("/oauth/amo/callback")
 async def oauth_callback(code: str | None = None, state: str | None = None):
@@ -200,7 +202,7 @@ async def _process_incoming(payload: dict):
         created = await amo.create_leads(body)
     except ReauthRequired:
         # кладём задачу на «досоздание» после реавторизации Amo
-        enqueue_pending({
+        await enqueue_pending({
             "platform": payload.get("platform", "unknown"),
             "action": "amo_create_lead",
             "lead_body": body,
@@ -209,7 +211,7 @@ async def _process_incoming(payload: dict):
         return {"ok": True, "queued": True, "reason": "reauth_required"}
     lead_id = created["_embedded"]["leads"][0]["id"]
 
-    save_link(
+    await save_link(
         lead_id=lead_id,
         platform=payload.get("platform", "unknown"),
         vacancy_id=str(payload.get("vacancy_id", "")),
@@ -249,7 +251,7 @@ async def amo_webhook(request: Request):
 
     # 3) Кладём в очередь на синхронизацию
     for lead_id, status_id in events:
-        link = find_link(lead_id)
+        link = await find_link(lead_id)
         if not link:
             print("NO LINK FOR LEAD", lead_id)
             continue
@@ -260,7 +262,7 @@ async def amo_webhook(request: Request):
         if platform == "hh":
             state = hh_map_get(status_id)
             if state and ext_id:
-                enqueue_pending({
+                await enqueue_pending({
                     "platform": "hh",
                     "action": "set_state",
                     "external_id": ext_id,
@@ -269,7 +271,7 @@ async def amo_webhook(request: Request):
                 })
         elif platform == "avito":
             if settings.AVITO_MARK_READ_ON_STAGE_CHANGE and ext_id:
-                enqueue_pending({
+                await enqueue_pending({
                     "platform": "avito",
                     "action": "mark_read",
                     "external_id": ext_id,
@@ -279,7 +281,7 @@ async def amo_webhook(request: Request):
     return {"ok": True, "handled": len(events)}
 
 
-# ---------- админ ----------
+# ------------- Админ-роуты -------------
 @router.get("/admin/hh-mapping")
 async def get_hh_mapping():
     return hh_map_load()
@@ -290,18 +292,30 @@ async def put_hh_mapping(payload: dict):
     return {"ok": True, "mapping": hh_map_set(payload)}
 
 
-@router.post("/admin/sync/replay")
-async def admin_replay():
-    def _hh_handler(task: dict):
-        hh_adapt.set_employer_state(task["external_id"], task["target_state"])
+@router.post("/admin/sync/tick")
+async def admin_tick(limit: int = 50):
+    processed, failed = 0, 0
+    tasks = await fetch_and_lock(limit=limit)
+    for t in tasks:
+        try:
+            await _handle_task(t.payload)
+            await mark_task_done(t.id)
+            processed += 1
+        except Exception as e:
+            await mark_task_failed(t.id, str(e))
+            failed += 1
+    return {"ok": True, "processed": processed, "failed": failed}
 
-    def _avito_handler(task: dict):
-        avito_adapt.mark_read(task["external_id"])
 
-    res = replay_pending(
-        hh_enabled=settings.HH_SYNC_ENABLED,
-        avito_enabled=settings.AVITO_SYNC_ENABLED,
-        handler_hh=_hh_handler,
-        handler_avito=_avito_handler
-    )
-    return {"ok": True, **res}
+async def _handle_task(p: dict):
+    if p["platform"] == "hh" and p["action"] == "set_state":
+        hh_adapt.set_employer_state(p["external_id"], p["target_state"])
+        return
+    if p["platform"] == "avito" and p["action"] == "mark_read":
+        avito_adapt.mark_read(p["external_id"])
+        return
+    if p["platform"] == "amo" and p["action"] == "amo_create_lead":
+        amo = await AmoClient.create()
+        await amo.create_leads(p["lead_body"])
+        return
+    raise RuntimeError(f"Unknown task: {p}")
