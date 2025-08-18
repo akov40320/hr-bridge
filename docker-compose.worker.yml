@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  worker:
+    build: .
+    command: python -m app.worker_rmq
+    environment:
+      # RMQ (CloudAMQP)
+      RABBITMQ_URL: "amqps://nuuwacek:P9yLc_PP01dtEPQ_QEOdq0CQOm5uRCY7@seal.lmq.cloudamqp.com/nuuwacek"
+      RMQ_EXCHANGE: "bridge"
+      RMQ_TASK_QUEUE: "bridge.tasks"
+      RMQ_RETRY_QUEUE: "bridge.tasks.retry"
+      RMQ_RETRY_TTL_MS: 5000
+      # DB (Render Postgres) — добавь sslmode=require
+      DATABASE_URL: "postgresql+asyncpg://<user>:<pass>@<host>/<db>?sslmode=require"
+      # Amo/HH/Avito — только то, что реально нужно воркеру
+      AMO_BASE_URL: "https://dimitrieidifesk10.amocrm.ru"
+      AMO_CLIENT_ID: "<id>"
+      AMO_CLIENT_SECRET: "<secret>"
+      AMO_REDIRECT_URI: "https://hr-bridge.onrender.com/oauth/amo/callback"
+      # и т.д., если воркеру это понадобится
+    restart: unless-stopped

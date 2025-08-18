@@ -23,6 +23,10 @@ async def handle(payload: dict, attempts: int):
         plat = payload.get("platform")
         act = payload.get("action")
 
+        if plat == "debug" and act == "echo":
+            print("RMQ ECHO:", payload.get("msg"))
+            return
+
         if plat == "hh" and act == "set_state":
             hh_adapt.set_employer_state(payload["external_id"], payload["target_state"])
             return

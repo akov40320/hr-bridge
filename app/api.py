@@ -292,21 +292,6 @@ async def put_hh_mapping(payload: dict):
     return {"ok": True, "mapping": hh_map_set(payload)}
 
 
-@router.post("/admin/sync/tick")
-async def admin_tick(limit: int = 50):
-    processed, failed = 0, 0
-    tasks = await fetch_and_lock(limit=limit)
-    for t in tasks:
-        try:
-            await _handle_task(t.payload)
-            await mark_task_done(t.id)
-            processed += 1
-        except Exception as e:
-            await mark_task_failed(t.id, str(e))
-            failed += 1
-    return {"ok": True, "processed": processed, "failed": failed}
-
-
 async def _handle_task(p: dict):
     if p["platform"] == "hh" and p["action"] == "set_state":
         hh_adapt.set_employer_state(p["external_id"], p["target_state"])
@@ -319,3 +304,10 @@ async def _handle_task(p: dict):
         await amo.create_leads(p["lead_body"])
         return
     raise RuntimeError(f"Unknown task: {p}")
+
+
+@router.post("/admin/rmq-test")
+async def rmq_test(payload: dict = None):
+    msg = (payload or {}).get("msg", "hi")
+    await publish_task({"platform": "debug", "action": "echo", "msg": msg})
+    return {"ok": True}
