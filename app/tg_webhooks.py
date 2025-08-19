@@ -71,29 +71,28 @@ admin_tg = APIRouter(prefix="/admin/tg", dependencies=[Depends(require_admin)])
 async def set_webhooks():
     base = (settings.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
     if not base:
-        logger.error("set-webhooks: TELEGRAM_WEBHOOK_BASE is empty")
         return {"ok": False, "error": "TELEGRAM_WEBHOOK_BASE is empty"}
-
     secret = settings.TELEGRAM_WEBHOOK_SECRET or None
-    allowed = ["message"]  # добавишь "callback_query" при необходимости
+    allowed = ["message"]
     out = {}
 
-    if master_bot:
-        out["master"] = await master_bot.set_webhook(
-            url=f"{base}/tg/webhook/master",
-            secret_token=secret,
-            allowed_updates=allowed,
-            drop_pending_updates=True,
-        )
-        logger.info("set_webhook master -> %s", out["master"])
-    if operator_bot:
-        out["operator"] = await operator_bot.set_webhook(
-            url=f"{base}/tg/webhook/operator",
-            secret_token=secret,
-            allowed_updates=allowed,
-            drop_pending_updates=True,
-        )
-        logger.info("set_webhook operator -> %s", out["operator"])
+    if settings.TELEGRAM_MASTER_BOT_TOKEN:
+        async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
+            out["master"] = await bot.set_webhook(
+                url=f"{base}/tg/webhook/master",
+                secret_token=secret,
+                allowed_updates=allowed,
+                drop_pending_updates=True,
+            )
+
+    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
+        async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
+            out["operator"] = await bot.set_webhook(
+                url=f"{base}/tg/webhook/operator",
+                secret_token=secret,
+                allowed_updates=allowed,
+                drop_pending_updates=True,
+            )
 
     return {"ok": True, "set": out}
 
@@ -101,21 +100,22 @@ async def set_webhooks():
 @admin_tg.post("/delete-webhooks")
 async def delete_webhooks():
     results = {}
-    if master_bot:
-        results["master"] = await master_bot.delete_webhook()
-        logger.info("delete_webhook master -> %s", results["master"])
-    if operator_bot:
-        results["operator"] = await operator_bot.delete_webhook()
-        logger.info("delete_webhook operator -> %s", results["operator"])
+    if settings.TELEGRAM_MASTER_BOT_TOKEN:
+        async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
+            results["master"] = await bot.delete_webhook(drop_pending_updates=True)
+    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
+        async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
+            results["operator"] = await bot.delete_webhook(drop_pending_updates=True)
     return {"ok": True, "results": results}
 
 
 @admin_tg.get("/webhook-info")
 async def webhook_info():
     res = {}
-    if master_bot:
-        res["master"] = await master_bot.get_webhook_info()
-    if operator_bot:
-        res["operator"] = await operator_bot.get_webhook_info()
-    logger.info("webhook-info -> keys=%s", list(res.keys()))
+    if settings.TELEGRAM_MASTER_BOT_TOKEN:
+        async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
+            res["master"] = await bot.get_webhook_info()
+    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
+        async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
+            res["operator"] = await bot.get_webhook_info()
     return {"ok": True, "info": res}
