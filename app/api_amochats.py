@@ -22,36 +22,35 @@ def _valid_hook_signature(secret: str, raw_body: bytes, got_sig: str) -> bool:
 async def amochats_in(request: Request):
     raw = await request.body()
 
-    # Подпись HMAC тела (секрет = секрет канала)
     if settings.AMOCHATS_INCOMING_SECRET:
         got = request.headers.get("X-Signature", "")
-        if not _valid_hook_signature(settings.AMOCHATS_INCOMING_SECRET, raw, got):
+        calc = hmac.new(settings.AMOCHATS_INCOMING_SECRET.encode(), raw, hashlib.sha1).hexdigest()
+        if got.lower() != calc.lower():
+            logger.warning("amo-chats invalid signature")
             return Response(status_code=401)
 
-    # Дедуп по хэшу тела
     key = calc_key("amo_chats", raw)
     if not await check_and_store(key):
         logger.info("amo-chats duplicate webhook skipped")
         return {"ok": True, "duplicate": True}
 
-    # Разбор v2
+    # --- пробуем распарсить в любом случае и логируем фрагмент, если не вышло ---
     try:
         data = await request.json()
     except Exception:
-        logger.warning("amo-chats bad json")
+        txt = raw[:500].decode("utf-8", "ignore")
+        logger.warning("amo-chats bad json; headers=%s; body=%r", dict(request.headers), txt)
         return {"ok": False, "error": "bad json"}
 
-    if (data.get("event_type") or "").lower() != "new_message":
-        return {"ok": True}  # игнорим не-сообщения
-
-    msg_root = data.get("message") or {}
-    msg_obj = msg_root.get("message") or {}
-    text = (msg_obj.get("text") or "").strip()
+    # v2 присылает { "message": {...} } (иногда { "payload": {...} })
+    root = data.get("message") or data.get("payload") or {}
+    msg = root.get("message") or {}
+    text = (msg.get("text") or "").strip()
     if not text:
         return {"ok": True}
 
-    conv = msg_root.get("conversation") or {}
-    conv_ref_id = conv.get("id") or conv.get("uuid")  # v2=id, на всякий берём uuid
+    conv = root.get("conversation") or {}
+    conv_ref_id = conv.get("id") or conv.get("uuid")
     client_id = conv.get("client_id") or ""
 
     lead_id = None
@@ -59,31 +58,23 @@ async def amochats_in(request: Request):
         try:
             lead_id = int(client_id.split(":", 1)[1])
         except Exception:
-            lead_id = None
+            pass
 
     links = []
-    if lead_id:
-        links = await get_by_lead(lead_id)
-    elif conv_ref_id:
+    if conv_ref_id:
         links = await get_by_conversation(conv_ref_id)
-
-    # Если получили реальный conv_id от amo, а в линке он пуст — сохраним
-    if conv_ref_id and links:
-        for ln in links:
-            if not ln.conversation_id:
-                try:
+    if not links and lead_id:
+        links = await get_by_lead(lead_id)
+        if links and conv_ref_id:
+            for ln in links:
+                if not ln.conversation_id:
                     await set_conversation(ln.user_id, ln.bot_kind, conv_ref_id)
-                except Exception:
-                    logger.exception("set_conversation failed")
 
-    # Отправка в TG — создаём бота по месту, чтобы не течь сессиями
     for ln in links or []:
         try:
-            if ln.bot_kind == "master" and settings.TELEGRAM_MASTER_BOT_TOKEN:
-                async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
-                    await bot.send_message(chat_id=ln.user_id, text=text)
-            if ln.bot_kind == "operator" and settings.TELEGRAM_OPERATOR_BOT_TOKEN:
-                async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
+            token = settings.TELEGRAM_MASTER_BOT_TOKEN if ln.bot_kind == "master" else settings.TELEGRAM_OPERATOR_BOT_TOKEN
+            if token:
+                async with Bot(token) as bot:
                     await bot.send_message(chat_id=ln.user_id, text=text)
         except Exception:
             logger.exception("TG send failed")
