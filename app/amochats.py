@@ -64,9 +64,9 @@ async def send_text_from_client(
         conversation_id: str | None = None,
 ) -> str | None:
     """
-    Отправка сообщения как ОТ КЛИЕНТА (TG-пользователь) в канал AmoChats.
-    Если conversation_id неизвестен — используем conversation_ref_id='lead:{lead_id}' и amo само создаст/найдёт диалог.
-    Возвращает uuid/id разговора (сохраните в TgLink.conversation_id).
+    От клиента (TG-пользователя) в AmoChats.
+    Если conversation_id неизвестен — используем conversation_ref_id='lead:{lead_id}'.
+    Без повторной отправки.
     """
     need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET, settings.AMO_CHATS_ACCOUNT_ID]
     if not all(need):
@@ -78,16 +78,17 @@ async def send_text_from_client(
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
 
-    # всегда используем conversation_id:
-    conv_id = conversation_id or f"lead:{lead_id}"
-
     payload = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
-            "timestamp": now_s,  # сек
-            "msec_timestamp": now_ms,  # мс
-            "conversation_id": conv_id,  # внешний ID диалога
+            "timestamp": now_s,          # сек
+            "msec_timestamp": now_ms,    # мс
+            **(
+                {"conversation_id": conversation_id}
+                if conversation_id
+                else {"conversation_ref_id": f"lead:{lead_id}"}
+            ),
             "sender": {
                 "id": f"tg:{tg_user_id}",
                 "name": (tg_user_name or f"tg_{tg_user_id}"),
@@ -102,25 +103,12 @@ async def send_text_from_client(
     async with httpx.AsyncClient(timeout=30) as x:
         r = await x.post(url, content=body, headers=headers)
 
-    if r.status_code == 404 or (r.status_code == 400 and "chat not found" in r.text.lower()):
-        # редкий случай — сервер ещё не "видит" внешний conv_id.
-        # попробуем альтернативно завести через conversation_ref_id:
-        alt = payload.copy()
-        p = alt["payload"]
-        p.pop("conversation_id", None)
-        p["conversation_ref_id"] = f"lead:{lead_id}"
-        body2 = _dump(alt)
-        headers2 = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body2)
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.post(url, content=body2, headers=headers2)
-
     if r.status_code >= 400:
         raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
 
     data = r.json() if r.content else {}
     conv = (data.get("conversation") or {})
     return conv.get("uuid") or conv.get("id")
-
 
 async def send_text_from_manager(
         *, conversation_id: str,  # здесь нужен уже существующий uuid/id чата
