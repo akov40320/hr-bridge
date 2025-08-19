@@ -19,30 +19,31 @@ def _valid_hook_signature(secret: str, raw_body: bytes, got_sig: str) -> bool:
 
 
 @router_amo_chats.post("/webhooks/amo-chats/in")
-async def amochats_in(request: Request):
+@router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}")
+async def amochats_in(request: Request, scope_id: str | None = None):
     raw = await request.body()
 
+    # Проверка подписи HMAC-SHA1(body, channel_secret)
     if settings.AMOCHATS_INCOMING_SECRET:
         got = request.headers.get("X-Signature", "")
         calc = hmac.new(settings.AMOCHATS_INCOMING_SECRET.encode(), raw, hashlib.sha1).hexdigest()
         if got.lower() != calc.lower():
-            logger.warning("amo-chats invalid signature")
+            logger.warning("amo-chats invalid signature (scope_id=%s)", scope_id)
             return Response(status_code=401)
 
     key = calc_key("amo_chats", raw)
     if not await check_and_store(key):
-        logger.info("amo-chats duplicate webhook skipped")
+        logger.info("amo-chats duplicate webhook skipped (scope_id=%s)", scope_id)
         return {"ok": True, "duplicate": True}
 
-    # --- пробуем распарсить в любом случае и логируем фрагмент, если не вышло ---
     try:
         data = await request.json()
     except Exception:
         txt = raw[:500].decode("utf-8", "ignore")
-        logger.warning("amo-chats bad json; headers=%s; body=%r", dict(request.headers), txt)
+        logger.warning("amo-chats bad json (scope_id=%s); body=%r", scope_id, txt)
         return {"ok": False, "error": "bad json"}
 
-    # v2 присылает { "message": {...} } (иногда { "payload": {...} })
+    # v2 формат
     root = data.get("message") or data.get("payload") or {}
     msg = root.get("message") or {}
     text = (msg.get("text") or "").strip()
@@ -72,13 +73,15 @@ async def amochats_in(request: Request):
 
     for ln in links or []:
         try:
-            token = settings.TELEGRAM_MASTER_BOT_TOKEN if ln.bot_kind == "master" else settings.TELEGRAM_OPERATOR_BOT_TOKEN
+            token = (settings.TELEGRAM_MASTER_BOT_TOKEN if ln.bot_kind == "master"
+                     else settings.TELEGRAM_OPERATOR_BOT_TOKEN)
             if token:
                 async with Bot(token) as bot:
                     await bot.send_message(chat_id=ln.user_id, text=text)
         except Exception:
-            logger.exception("TG send failed")
+            logger.exception("TG send failed (scope_id=%s)", scope_id)
 
+    logger.info("amo-chats -> TG ok (scope_id=%s, text_len=%d)", scope_id, len(text))
     return {"ok": True}
 
 
