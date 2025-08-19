@@ -4,7 +4,7 @@ import uvicorn
 from aiogram import Bot
 from fastapi import FastAPI
 from app.api import router, admin
-from app.api_amochats import router_amo_chats
+from app.api_amochats import router_amo_chats, amo_admin
 from app.bootstrap import ensure_tokens
 from app.config import settings
 from app.db import init_db
@@ -19,6 +19,7 @@ app = FastAPI(title="Recruiting Bridge")
 app.include_router(router)
 app.include_router(admin)
 app.include_router(router_amo_chats)
+app.include_router(amo_admin)
 
 if settings.TELEGRAM_WEBHOOK_MODE:
     app.include_router(tg_wh_router)

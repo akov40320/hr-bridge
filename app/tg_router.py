@@ -9,7 +9,7 @@ from app.store_chat import upsert_tg_link, get_by_user, set_conversation
 from app.store_survey import (
     start_or_reset_survey, get_survey, store_answer_and_advance, delete_survey
 )
-from app.amochats import send_text
+from app.amochats import send_text_from_client
 
 logger = logging.getLogger("tg.router")
 
@@ -98,15 +98,15 @@ def make_router(bot_kind: str) -> Dispatcher:
 
             if settings.AMOCHATS_ENABLED:
                 try:
-                    new_conv_id = await send_text(
-                        lead_id,
-                        text,
+                    new_conv_id = await send_text_from_client(
+                        lead_id=s.lead_id,
+                        text=m.text or "",
                         tg_user_id=m.from_user.id,
                         tg_user_name=m.from_user.username,
                         conversation_id=conv_id,
                     )
-                    if new_conv_id and (not conv_id or new_conv_id != conv_id):
-                        await set_conversation(m.from_user.id, bot_kind, new_conv_id)
+                    if new_conv_id and link and new_conv_id != conv_id:
+                        await set_conversation(link.user_id, bot_kind, new_conv_id)
                 except Exception as e:
                     logger.warning("amochats send error: %s", e)
         except Exception as e:
