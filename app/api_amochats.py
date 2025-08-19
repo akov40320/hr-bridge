@@ -11,20 +11,20 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
-def _sig_body(secret: str, raw: bytes) -> str:
+def _hmac_body(secret: str, raw: bytes) -> str:
     return hmac.new(secret.encode(), raw, hashlib.sha1).hexdigest().lower()
-
 
 @router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}")
 async def amochats_in(request: Request, scope_id: str | None = None):
     raw = await request.body()
-
-    # Проверка подписи HMAC-SHA1(body, channel_secret)
     if settings.AMOCHATS_INCOMING_SECRET:
-        got = request.headers.get("X-Signature", "")
-        calc = hmac.new(settings.AMOCHATS_INCOMING_SECRET.encode(), raw, hashlib.sha1).hexdigest()
-        if got.lower() != calc.lower():
-            logger.warning("amo-chats invalid signature (scope_id=%s)", scope_id)
+        got = (request.headers.get("X-Signature") or "").lower()
+        calc = _hmac_body(settings.AMOCHATS_INCOMING_SECRET, raw)
+        if not (got and secrets.compare_digest(got, calc)):
+            logger.warning(
+                "amo-chats invalid signature: got=%s calc=%s sha1(body)=%s len=%d path=%s",
+                got[:12], calc[:12], hashlib.sha1(raw).hexdigest()[:12], len(raw), request.url.path
+            )
             return Response(status_code=401)
 
     key = calc_key("amo_chats", raw)
