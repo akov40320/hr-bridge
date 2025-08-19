@@ -20,7 +20,10 @@ def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
     md5 = hashlib.md5(body).hexdigest().lower()
     to_sign = "\n".join([method.upper(), md5, ctype, date, path])
     sig = hmac.new(secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha1).hexdigest().lower()
-    return {"Date": date, "Content-Type": ctype, "Content-MD5": md5, "X-Signature": sig}
+    h = {"Date": date, "Content-Type": ctype, "Content-MD5": md5, "X-Signature": sig}
+    if getattr(settings, "AMO_CHATS_ACCOUNT_ID", None):
+        h["X-Client-Id"] = settings.AMO_CHATS_ACCOUNT_ID
+    return h
 
 
 async def connect_channel() -> dict:
@@ -74,16 +77,17 @@ async def send_text_from_client(
 
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
-    conv_fields = ({"conversation_id": conversation_id} if conversation_id
-                   else {"conversation_ref_id": f"lead:{lead_id}"})
+
+    # всегда используем conversation_id:
+    conv_id = conversation_id or f"lead:{lead_id}"
 
     payload = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
-            "timestamp": now_s,  # в мс
-            "msec_timestamp": now_ms,  # дубль на всякий
-            **conv_fields,
+            "timestamp": now_s,  # сек
+            "msec_timestamp": now_ms,  # мс
+            "conversation_id": conv_id,  # внешний ID диалога
             "sender": {
                 "id": f"tg:{tg_user_id}",
                 "name": (tg_user_name or f"tg_{tg_user_id}"),
@@ -97,6 +101,19 @@ async def send_text_from_client(
 
     async with httpx.AsyncClient(timeout=30) as x:
         r = await x.post(url, content=body, headers=headers)
+
+    if r.status_code == 404 or (r.status_code == 400 and "chat not found" in r.text.lower()):
+        # редкий случай — сервер ещё не "видит" внешний conv_id.
+        # попробуем альтернативно завести через conversation_ref_id:
+        alt = payload.copy()
+        p = alt["payload"]
+        p.pop("conversation_id", None)
+        p["conversation_ref_id"] = f"lead:{lead_id}"
+        body2 = _dump(alt)
+        headers2 = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body2)
+        async with httpx.AsyncClient(timeout=30) as x:
+            r = await x.post(url, content=body2, headers=headers2)
+
     if r.status_code >= 400:
         raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
 
