@@ -4,7 +4,7 @@ from aiogram import Bot
 from app.amochats import connect_channel
 from app.dedup import calc_key, check_and_store
 from app.guards import require_admin
-from app.store_chat import get_by_lead, get_by_conversation, set_conversation
+from app.store_chat import get_by_lead, get_by_conversation, set_conversation, get_by_user
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ async def amochats_in(request: Request, scope_id: str | None = None):
     conv = root.get("conversation") or {}
     conv_ref_id = conv.get("id") or conv.get("uuid")
     client_id = conv.get("client_id") or ""
+    sender = root.get("sender") or {}
+    receiver = root.get("receiver") or {}
 
     lead_id = None
     if isinstance(client_id, str) and client_id.startswith("lead:"):
@@ -71,6 +73,31 @@ async def amochats_in(request: Request, scope_id: str | None = None):
         "amo-chats hook: conv_id=%s client_id=%s lead_id=%s links=%d",
         conv_ref_id, client_id, lead_id, len(links)
     )
+
+    if not links:
+        ext_id = (sender.get("client_id") or sender.get("id") or
+                  receiver.get("client_id") or receiver.get("id") or "")
+        tg_uid = None
+        if isinstance(ext_id, str) and ext_id.startswith("tg:"):
+            try:
+                tg_uid = int(ext_id.split(":", 1)[1])
+            except:
+                pass
+
+        if tg_uid:
+            # пробуем найти сначала по master, потом по operator (или наоборот — как тебе нужно)
+            cand = []
+            ln1 = await get_by_user(tg_uid, "master")
+            if ln1: cand.append(ln1)
+            ln2 = await get_by_user(tg_uid, "operator")
+            if ln2: cand.append(ln2)
+
+            # если есть conv_ref_id — приоритет тому, у кого пустой conversation_id (мы его и заполним)
+            links = [ln for ln in cand if not ln.conversation_id] or cand
+            if links and conv_ref_id:
+                for ln in links:
+                    if not ln.conversation_id:
+                        await set_conversation(ln.user_id, ln.bot_kind, conv_ref_id)
 
     for ln in links or []:
         try:

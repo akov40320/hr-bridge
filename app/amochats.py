@@ -82,17 +82,14 @@ async def send_text_from_client(
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
-            "timestamp": now_s,          # сек
-            "msec_timestamp": now_ms,    # мс
+            "timestamp": now_s,
+            "msec_timestamp": now_ms,
             **(
                 {"conversation_id": conversation_id}
                 if conversation_id
                 else {"conversation_ref_id": f"lead:{lead_id}"}
             ),
-            "sender": {
-                "id": f"tg:{tg_user_id}",
-                "name": (tg_user_name or f"tg_{tg_user_id}"),
-            },
+            "sender": {"id": f"tg:{tg_user_id}", "name": tg_user_name or f"tg_{tg_user_id}"},
             "message": {"type": "text", "text": text},
         },
     }
