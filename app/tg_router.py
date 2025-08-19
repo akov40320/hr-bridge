@@ -106,6 +106,7 @@ def make_router(bot_kind: str) -> Dispatcher:
                         conversation_id=conv_id,
                     )
                     if new_conv_id and new_conv_id != conv_id:
+                        logger.info("Saving conv_id for %s/%s -> %s", m.from_user.id, bot_kind, new_conv_id)
                         await set_conversation(m.from_user.id, bot_kind, new_conv_id)
                 except Exception as e:
                     logger.warning("amochats send error: %s", e)
