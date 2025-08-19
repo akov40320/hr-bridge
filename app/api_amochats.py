@@ -60,9 +60,9 @@ async def amochats_in(request: Request):
     for ln in links or []:
         try:
             if ln.bot_kind == "master" and tg_master:
-                await tg_master.send_message(chat_id=ln.user_id, text=f"[Amo] {text}")
+                await tg_master.send_message(chat_id=ln.user_id, text=f"{text}")
             if ln.bot_kind == "operator" and tg_operator:
-                await tg_operator.send_message(chat_id=ln.user_id, text=f"[Amo] {text}")
+                await tg_operator.send_message(chat_id=ln.user_id, text=f"{text}")
         except Exception:
             logger.exception("TG send failed")
 
