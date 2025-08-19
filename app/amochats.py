@@ -29,10 +29,11 @@ def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
 
 
 async def send_text(
-        lead_id: int,
-        text: str,
-        *,
-        conversation_ref_id: str | None = None,  # UUID чата amo (из входящего v2-хука)
+    lead_id: int,
+    text: str,
+    *,
+    conversation_id: str | None = None,        # <-- ДОБАВИЛИ
+    conversation_ref_id: str | None = None,    # UUID чата amo (из входящего v2-хука)
 ) -> str | None:
     need = [
         settings.AMO_CHATS_SCOPE_ID,
@@ -52,21 +53,21 @@ async def send_text(
             "msgid": str(uuid.uuid4()),
             "timestamp": int(now),
             "msec_timestamp": int(now * 1000),
-            # либо известный amo UUID чата, либо внешний conversation_id
+            # если знаем UUID amo-чата — передаём его;
+            # иначе используем внешний conversation_id (явно переданный или lead:{lead_id})
             **({"conversation_ref_id": conversation_ref_id} if conversation_ref_id else {}),
-            **({} if conversation_ref_id else {"conversation_id": f"lead:{lead_id}"}),
+            **({"conversation_id": conversation_id} if conversation_id else {"conversation_id": f"lead:{lead_id}"}),
             "sender": {
                 "id": settings.AMO_CHATS_SENDER_USER_AMOJO_ID,
                 "name": getattr(settings, "AMO_CHATS_SENDER_NAME",
                                 getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge")),
             },
             "message": {"type": "text", "text": text},
-            # "silent": False,  # при необходимости
         },
     }
 
     body = _dump(body_obj)
-    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)  # твоя функция подписи по канон. строке
 
     async with httpx.AsyncClient(timeout=30) as x:
         r = await x.post(url, content=body, headers=headers)
