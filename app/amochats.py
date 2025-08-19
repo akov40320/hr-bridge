@@ -29,45 +29,41 @@ def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
 
 
 async def send_text(
-    lead_id: int,
-    text: str,
-    *,
-    conversation_id: str | None = None,        # <-- ДОБАВИЛИ
-    conversation_ref_id: str | None = None,    # UUID чата amo (из входящего v2-хука)
+        lead_id: int,
+        text: str,
+        *,
+        tg_user_id: int,  # <--- добавили
+        tg_user_name: str | None = None,
+        conversation_id: str | None = None,
 ) -> str | None:
-    need = [
-        settings.AMO_CHATS_SCOPE_ID,
-        settings.AMO_CHATS_SECRET,
-        settings.AMO_CHATS_SENDER_USER_AMOJO_ID,
-    ]
-    if not all(need):
-        raise AmoChatsError("AmoChats env not configured (scope/secret/sender_id)")
-
     path = f"/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
     url = f"https://amojo.amocrm.ru{path}"
 
-    now = time.time()
-    body_obj = {
+    # если знаем uuid — шлём в него; если нет — создадим/найдём по референсу
+    conv = {}
+    if conversation_id:
+        conv_field = {"conversation_id": conversation_id}
+    else:
+        conv_field = {"conversation_ref_id": f"lead:{lead_id}"}
+
+    payload = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
-            "timestamp": int(now),
-            "msec_timestamp": int(now * 1000),
-            # если знаем UUID amo-чата — передаём его;
-            # иначе используем внешний conversation_id (явно переданный или lead:{lead_id})
-            **({"conversation_ref_id": conversation_ref_id} if conversation_ref_id else {}),
-            **({"conversation_id": conversation_id} if conversation_id else {"conversation_id": f"lead:{lead_id}"}),
+            "timestamp": int(time.time() * 1000),  # миллисекунды
+            **conv_field,
+            # ВАЖНО: отправитель — внешний пользователь, а не amojo-user
             "sender": {
-                "id": settings.AMO_CHATS_SENDER_USER_AMOJO_ID,
-                "name": getattr(settings, "AMO_CHATS_SENDER_NAME",
-                                getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge")),
+                "id": f"tg:{tg_user_id}",
+                "name": tg_user_name or f"tg_{tg_user_id}",
             },
             "message": {"type": "text", "text": text},
         },
     }
 
-    body = _dump(body_obj)
-    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)  # твоя функция подписи по канон. строке
+    body = _dump(payload)
+    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+    headers["X-Client-Id"] = settings.AMO_CHATS_ACCOUNT_ID  # лучше явно добавить
 
     async with httpx.AsyncClient(timeout=30) as x:
         r = await x.post(url, content=body, headers=headers)

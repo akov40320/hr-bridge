@@ -98,7 +98,13 @@ def make_router(bot_kind: str) -> Dispatcher:
 
             if settings.AMOCHATS_ENABLED:
                 try:
-                    new_conv_id = await send_text(lead_id, text, conversation_id=conv_id)
+                    new_conv_id = await send_text(
+                        lead_id,
+                        text,
+                        tg_user_id=m.from_user.id,
+                        tg_user_name=m.from_user.username,
+                        conversation_id=conv_id,
+                    )
                     if new_conv_id and (not conv_id or new_conv_id != conv_id):
                         await set_conversation(m.from_user.id, bot_kind, new_conv_id)
                 except Exception as e:
