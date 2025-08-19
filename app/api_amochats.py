@@ -42,14 +42,14 @@ async def amochats_in(request: Request):
 
     conv = (payload.get("conversation") or {})
     conv_uuid = conv.get("uuid")
-    client_id = conv.get("client_id")
+    conv_ref = conv.get("ref_id") or conv.get("conversation_ref_id")
 
     lead_id = None
-    try:
-        if client_id:
-            lead_id = int(client_id)
-    except Exception:
-        pass
+    if conv_ref and isinstance(conv_ref, str) and conv_ref.startswith("lead:"):
+        try:
+            lead_id = int(conv_ref.split(":", 1)[1])
+        except Exception:
+            lead_id = None
 
     links = []
     if lead_id:
