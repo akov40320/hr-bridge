@@ -1,7 +1,15 @@
-import json, hashlib, hmac, requests
-SECRET="040afe61cf9128b9fbe36b7543cbdc9aa8769cb9"
-url="https://hr-bridge.onrender.com/webhooks/amo-chats/in/<scope_id>"
-body={"message":{"conversation":{"id":"test","client_id":"lead:123"},"message":{"type":"text","text":"ping"}}, "event_type":"new_message"}
-raw=json.dumps(body, separators=(',', ':'), ensure_ascii=False).encode()
-sig=hmac.new(SECRET.encode(), raw, hashlib.sha1).hexdigest()
-print(requests.post(url, data=raw, headers={"X-Signature":sig,"Content-Type":"application/json"}).status_code)
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
+
+DATABASE_URL = "postgresql+asyncpg://hrdb_z7kv_user:qwuuDJIRwvLiMivJPpu02njox0fw4QdR@dpg-d2h3n0buibrs73etp7e0-a.oregon-postgres.render.com/hrdb_z7kv?ssl=require"
+
+async def main():
+    engine = create_async_engine(DATABASE_URL, echo=False)
+    async with engine.begin() as conn:  # begin => автокоммит
+        res = await conn.execute(
+            text("UPDATE tg_links SET conversation_id = NULL, updated_at = NOW();")
+        )
+        print("rows updated:", res.rowcount)
+
+asyncio.run(main())

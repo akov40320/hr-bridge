@@ -6,6 +6,7 @@ from app.config import settings
 
 class AmoChatsError(Exception): ...
 
+
 def _base() -> str:
     return "https://amojo.amocrm.ru"
 
@@ -63,11 +64,6 @@ async def send_text_from_client(
         tg_user_id: int, tg_user_name: str | None = None,
         conversation_id: str | None = None,
 ) -> str | None:
-    """
-    От клиента (TG-пользователя) в AmoChats.
-    Если conversation_id неизвестен — используем conversation_ref_id='lead:{lead_id}'.
-    Без повторной отправки.
-    """
     need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET, settings.AMO_CHATS_ACCOUNT_ID]
     if not all(need):
         raise AmoChatsError("AmoChats env not configured (SCOPE_ID/SECRET/ACCOUNT_ID)")
@@ -78,27 +74,41 @@ async def send_text_from_client(
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
 
-    payload = {
-        "event_type": "new_message",
-        "payload": {
-            "msgid": str(uuid.uuid4()),
-            "timestamp": now_s,
-            "msec_timestamp": now_ms,
-            **(
-                {"conversation_id": conversation_id}
-                if conversation_id
-                else {"conversation_ref_id": f"lead:{lead_id}"}
-            ),
-            "sender": {"id": f"tg:{tg_user_id}", "name": tg_user_name or f"tg_{tg_user_id}"},
-            "message": {"type": "text", "text": text},
-        },
-    }
+    def _payload(use_ref: bool):
+        base = {
+            "event_type": "new_message",
+            "payload": {
+                "msgid": str(uuid.uuid4()),
+                "timestamp": now_s,
+                "msec_timestamp": now_ms,
+                "sender": {
+                    "id": f"tg:{tg_user_id}",
+                    "name": (tg_user_name or f"tg_{tg_user_id}"),
+                },
+                "message": {"type": "text", "text": text},
+            },
+        }
+        if use_ref:
+            base["payload"]["conversation_ref_id"] = f"lead:{lead_id}"
+        else:
+            base["payload"]["conversation_id"] = conversation_id
+        return base
 
+    # 1) Пытаемся с conversation_id (если есть)
+    use_ref_first = not conversation_id
+    payload = _payload(use_ref_first)
     body = _dump(payload)
     headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
-
     async with httpx.AsyncClient(timeout=30) as x:
         r = await x.post(url, content=body, headers=headers)
+
+    # 2) Если «chat not found» и мы пытались по conversation_id — пробуем ref_id
+    if (not use_ref_first) and r.status_code in (400, 404) and "chat not found" in (r.text or "").lower():
+        payload = _payload(use_ref=True)
+        body = _dump(payload)
+        headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+        async with httpx.AsyncClient(timeout=30) as x:
+            r = await x.post(url, content=body, headers=headers)
 
     if r.status_code >= 400:
         raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
@@ -106,6 +116,7 @@ async def send_text_from_client(
     data = r.json() if r.content else {}
     conv = (data.get("conversation") or {})
     return conv.get("uuid") or conv.get("id")
+
 
 async def send_text_from_manager(
         *, conversation_id: str,  # здесь нужен уже существующий uuid/id чата
