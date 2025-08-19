@@ -40,12 +40,13 @@ def _survey_summary(city: str | None, experience: str | None, time_pref: str | N
     )
 
 
-async def _tag_and_note(lead_id: int, tags: list[str], note: str):
+async def mark_went_to_bot(lead_id: int, bot_kind: str, username_or_id: str):
     amo = await AmoClient.create()
-    if tags:
-        await amo.add_tags(lead_id, tags)
-    if note:
-        await amo.add_note(lead_id, note)
+    note = f"[{bot_kind}] Кандидат перешёл в бота (TG @{username_or_id})."
+    # 1) сначала заметка — как первичный факт
+    await amo.add_note(lead_id, note)
+    # 2) затем тег — как «статусный» признак
+    await amo.add_tags(lead_id, [settings.AMO_TAG_WENT_TO_BOT])
 
 
 def make_router(bot_kind: str) -> Dispatcher:
@@ -61,10 +62,10 @@ def make_router(bot_kind: str) -> Dispatcher:
         await upsert_tg_link(m.from_user.id, bot_kind, lead_id)
         await start_or_reset_survey(m.from_user.id, bot_kind, lead_id)
 
-        await _tag_and_note(
+        await mark_went_to_bot(
             lead_id,
-            [settings.AMO_TAG_WENT_TO_BOT],
-            f"[{bot_kind}] Кандидат перешёл в бота (TG @{m.from_user.username or m.from_user.id}).",
+            bot_kind,
+            str(m.from_user.username or m.from_user.id),
         )
         await m.answer("Здравствуйте! Нужны пару уточнений по заявке.\n\n" + _survey_prompt(0))
         logger.info("[%s] /start user_id=%s lead_id=%s", bot_kind, m.from_user.id, lead_id)

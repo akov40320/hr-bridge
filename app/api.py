@@ -223,7 +223,6 @@ async def _process_incoming(payload: dict):
     try:
         created = await amo.create_leads(body)
     except ReauthRequired:
-        # кладём задачу на «досоздание» после реавторизации Amo
         await publish_task({
             "platform": payload.get("platform", "unknown"),
             "action": "amo_create_lead",
@@ -258,10 +257,14 @@ async def _process_incoming(payload: dict):
         })
 
     await amo.add_tags(lead_id, [
-        settings.AMO_TAG_WENT_TO_BOT,
         f'source:{payload.get("platform", "") or "unknown"}',
         f'type:{"мастер" if kind == "master" else "оператор"}'
     ])
+
+    try:
+        await amo.add_note(lead_id, f"Отправлена ссылка на TG-бота: {deep_link}")
+    except Exception as e:
+        print("add note (link sent) error:", e)
 
     return {"ok": True, "lead_id": lead_id}
 
