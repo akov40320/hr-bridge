@@ -1,4 +1,4 @@
-import logging, hmac, hashlib
+import logging, hmac, hashlib, secrets
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
 from app.amochats import connect_channel
@@ -11,11 +11,36 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
-def _valid_hook_signature(secret: str, raw_body: bytes, got_sig: str) -> bool:
-    if not secret: return True
-    if not got_sig: return False
-    calc = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha1).hexdigest()
-    return got_sig.lower() == calc.lower()
+def _sig_body(secret: str, raw: bytes) -> str:
+    return hmac.new(secret.encode(), raw, hashlib.sha1).hexdigest().lower()
+
+
+def _sig_canonical(secret: str, method: str, path: str, headers: dict, raw: bytes) -> str | None:
+    date = headers.get("Date")
+    ctype = headers.get("Content-Type", "application/json")
+    md5 = headers.get("Content-MD5")
+    if not (date and md5):
+        return None
+    s = "\n".join([method.upper(), md5, ctype, date, path])
+    return hmac.new(secret.encode(), s.encode(), hashlib.sha1).hexdigest().lower()
+
+
+def _valid_hook_signature(secret: str, request: Request, raw: bytes) -> bool:
+    if not secret:
+        return True
+    got = (request.headers.get("X-Signature") or "").lower()
+    if not got:
+        return False
+    body_sig = _sig_body(secret, raw)
+    if secrets.compare_digest(got, body_sig):
+        return True
+    canon_sig = _sig_canonical(secret, request.method, request.url.path, request.headers, raw)
+    if canon_sig and secrets.compare_digest(got, canon_sig):
+        return True
+    # полезный, но безопасный лог (усечённые значения)
+    logger.warning("amo-chats signature mismatch: got=%s body=%s canon=%s path=%s",
+                   got[:8], body_sig[:8], (canon_sig or "-")[:8], request.url.path)
+    return False
 
 
 @router_amo_chats.post("/webhooks/amo-chats/in")
@@ -25,6 +50,8 @@ async def amochats_in(request: Request, scope_id: str | None = None):
 
     # Проверка подписи HMAC-SHA1(body, channel_secret)
     if settings.AMOCHATS_INCOMING_SECRET:
+        if not _valid_hook_signature(settings.AMOCHATS_INCOMING_SECRET, request, raw):
+            return Response(status_code=401)
         got = request.headers.get("X-Signature", "")
         calc = hmac.new(settings.AMOCHATS_INCOMING_SECRET.encode(), raw, hashlib.sha1).hexdigest()
         if got.lower() != calc.lower():
