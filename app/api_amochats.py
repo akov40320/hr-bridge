@@ -43,7 +43,6 @@ def _valid_hook_signature(secret: str, request: Request, raw: bytes) -> bool:
     return False
 
 
-@router_amo_chats.post("/webhooks/amo-chats/in")
 @router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}")
 async def amochats_in(request: Request, scope_id: str | None = None):
     raw = await request.body()
