@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     AMO_CHATS_SENDER_USER_AMOJO_ID: str  # e71231...
     AMOCHATS_ENABLED: bool = True
     AMO_CHATS_SENDER_NAME: str = "tg-bridge"
+    AMO_CHATS_AUTOCONNECT: bool = True
 
     # входящие из AmoChats → наш вебхук. Если Amo даёт подпись — сюда.
     AMOCHATS_INCOMING_SECRET: str = ""

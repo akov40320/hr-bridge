@@ -3,6 +3,8 @@ import logging
 import uvicorn
 from aiogram import Bot
 from fastapi import FastAPI
+
+from app.amochats import ensure_amo_chats_connected
 from app.api import router, admin
 from app.api_amochats import router_amo_chats, amo_admin
 from app.bootstrap import ensure_tokens
@@ -74,6 +76,7 @@ async def on_startup():
     await init_db()
     await ensure_tokens()
     await auto_register_telegram_webhooks()
+    await ensure_amo_chats_connected(log)
 
 
 @app.on_event("shutdown")

@@ -99,14 +99,14 @@ def make_router(bot_kind: str) -> Dispatcher:
             if settings.AMOCHATS_ENABLED:
                 try:
                     new_conv_id = await send_text_from_client(
-                        lead_id=s.lead_id,
-                        text=m.text or "",
+                        lead_id=lead_id,
+                        text=text,
                         tg_user_id=m.from_user.id,
                         tg_user_name=m.from_user.username,
                         conversation_id=conv_id,
                     )
-                    if new_conv_id and link and new_conv_id != conv_id:
-                        await set_conversation(link.user_id, bot_kind, new_conv_id)
+                    if new_conv_id and new_conv_id != conv_id:
+                        await set_conversation(m.from_user.id, bot_kind, new_conv_id)
                 except Exception as e:
                     logger.warning("amochats send error: %s", e)
         except Exception as e:
@@ -124,8 +124,9 @@ def make_router(bot_kind: str) -> Dispatcher:
             else:
                 summary = _survey_summary(survey.city, survey.experience, survey.time_pref)
                 try:
-                    await amo.add_tags(lead_id, [settings.AMO_TAG_SURVEY_DONE])
-                    await amo.add_note(lead_id, f"[{bot_kind}] {summary}")
+                    amo2 = await AmoClient.create()
+                    await amo2.add_tags(lead_id, [settings.AMO_TAG_SURVEY_DONE])
+                    await amo2.add_note(lead_id, f"[{bot_kind}] {summary}")
                 except Exception as e:
                     logger.exception("finish note/tag error: %s", e)
                 await delete_survey(m.from_user.id, bot_kind)
