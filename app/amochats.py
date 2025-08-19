@@ -1,57 +1,72 @@
 import hashlib, hmac, json, time, uuid, httpx
+from email.utils import formatdate
 from app.config import settings
 
 
-class AmoChatsError(Exception): ...
+class AmoChatsError(Exception):
+    ...
 
 
 def _dump(obj: dict) -> bytes:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def _sign(body: bytes) -> str:
-    return hmac.new(settings.AMO_CHATS_SECRET.encode("utf-8"), body, hashlib.sha1).hexdigest()
+def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
+    # Required by Chats API: Date, Content-Type, Content-MD5, X-Signature
+    # Signature = HMAC-SHA1 over "METHOD\nMD5\nContent-Type\nDate\nPATH"
+    date = formatdate(usegmt=True)
+    content_type = "application/json"
+    md5 = hashlib.md5(body).hexdigest().lower()
+    sign_str = "\n".join([method.upper(), md5, content_type, date, path])
+    signature = hmac.new(secret.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha1).hexdigest().lower()
+    return {
+        "Date": date,
+        "Content-Type": content_type,
+        "Content-MD5": md5,
+        "X-Signature": signature,
+        # "X-Client-Id": settings.AMO_CHATS_ACCOUNT_ID,  # не обязателен
+    }
 
 
-async def send_text(lead_id: int, text: str, conversation_id: str | None = None) -> str | None:
-    # sanity
-    need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET,
-            settings.AMO_CHATS_ACCOUNT_ID, settings.AMO_CHATS_SENDER_USER_AMOJO_ID]
+async def send_text(
+        lead_id: int,
+        text: str,
+        *,
+        conversation_ref_id: str | None = None,  # UUID чата amo (из входящего v2-хука)
+) -> str | None:
+    need = [
+        settings.AMO_CHATS_SCOPE_ID,
+        settings.AMO_CHATS_SECRET,
+        settings.AMO_CHATS_SENDER_USER_AMOJO_ID,
+    ]
     if not all(need):
-        raise AmoChatsError("AmoChats env not configured (scope/secret/account_id/sender_id)")
+        raise AmoChatsError("AmoChats env not configured (scope/secret/sender_id)")
 
-    url = f"https://amojo.amocrm.ru/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
+    path = f"/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
+    url = f"https://amojo.amocrm.ru{path}"
 
-    conversation: dict = {}
-    if conversation_id:
-        # уже знаем uuid беседы → адресуемся напрямую
-        conversation["conversation_id"] = conversation_id
-    else:
-        # первый месседж → создаём/ищем по рефу
-        # реф можно выбрать любой стабильный. берём lead:<lead_id>
-        conversation["conversation_ref_id"] = f"lead:{lead_id}"
-
-    payload = {
+    now = time.time()
+    body_obj = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
-            "timestamp": int(time.time() * 1000),
-            "conversation": conversation,
+            "timestamp": int(now),
+            "msec_timestamp": int(now * 1000),
+            # либо известный amo UUID чата, либо внешний conversation_id
+            **({"conversation_ref_id": conversation_ref_id} if conversation_ref_id else {}),
+            **({} if conversation_ref_id else {"conversation_id": f"lead:{lead_id}"}),
             "sender": {
                 "id": settings.AMO_CHATS_SENDER_USER_AMOJO_ID,
                 "name": getattr(settings, "AMO_CHATS_SENDER_NAME",
                                 getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge")),
             },
             "message": {"type": "text", "text": text},
+            # "silent": False,  # при необходимости
         },
     }
 
-    body = _dump(payload)
-    headers = {
-        "Content-Type": "application/json",
-        "X-Signature": _sign(body),  # HMAC-SHA1(body) по SECRET
-        "X-Client-Id": settings.AMO_CHATS_ACCOUNT_ID,  # account_id (UUID) из AmoJo
-    }
+    body = _dump(body_obj)
+    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
 
     async with httpx.AsyncClient(timeout=30) as x:
         r = await x.post(url, content=body, headers=headers)
@@ -60,4 +75,5 @@ async def send_text(lead_id: int, text: str, conversation_id: str | None = None)
         raise AmoChatsError(f"send_text failed {r.status_code}: {r.text}")
 
     data = r.json() if r.content else {}
-    return (data.get("conversation") or {}).get("uuid")
+    conv = data.get("conversation") or {}
+    return conv.get("uuid") or conv.get("id")
