@@ -40,6 +40,7 @@ async def amochats_in(request: Request, scope_id: str | None = None):
         return {"ok": False, "error": "bad json"}
 
     # v2 формат
+    data = await request.json()
     root = data.get("message") or data.get("payload") or {}
     msg = root.get("message") or {}
     text = (msg.get("text") or "").strip()
@@ -49,8 +50,9 @@ async def amochats_in(request: Request, scope_id: str | None = None):
     conv = root.get("conversation") or {}
     conv_ref_id = conv.get("id") or conv.get("uuid")
     client_id = conv.get("client_id") or ""
-    sender = root.get("sender") or {}
-    receiver = root.get("receiver") or {}
+
+    logger.info("amo-chats IN: scope=%s conv_id=%s client_id=%s text_len=%d",
+                scope_id, conv_ref_id, client_id, len(text))
 
     lead_id = None
     if isinstance(client_id, str) and client_id.startswith("lead:"):
@@ -98,6 +100,7 @@ async def amochats_in(request: Request, scope_id: str | None = None):
                 for ln in links:
                     if not ln.conversation_id:
                         await set_conversation(ln.user_id, ln.bot_kind, conv_ref_id)
+    logger.info("amo-chats links found: %d (conv=%s lead=%s)", len(links), conv_ref_id, lead_id)
 
     for ln in links or []:
         try:
