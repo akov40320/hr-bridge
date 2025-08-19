@@ -67,10 +67,16 @@ async def amochats_in(request: Request, scope_id: str | None = None):
                 if not ln.conversation_id:
                     await set_conversation(ln.user_id, ln.bot_kind, conv_ref_id)
 
+    logger.info(
+        "amo-chats hook: conv_id=%s client_id=%s lead_id=%s links=%d",
+        conv_ref_id, client_id, lead_id, len(links)
+    )
+
     for ln in links or []:
         try:
             token = (settings.TELEGRAM_MASTER_BOT_TOKEN if ln.bot_kind == "master"
                      else settings.TELEGRAM_OPERATOR_BOT_TOKEN)
+            logger.info("amo-chats -> TG: bot_kind=%s user_id=%s", ln.bot_kind, ln.user_id)
             if token:
                 async with Bot(token) as bot:
                     await bot.send_message(chat_id=ln.user_id, text=text)
