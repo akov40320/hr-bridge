@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     HH_WEBHOOK_URL: str = ""
     HH_WEBHOOK_EVENTS: str = ""
 
-model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     RMQ_DLQ_QUEUE: str = "bridge.tasks.dlq"
 
