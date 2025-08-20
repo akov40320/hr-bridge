@@ -10,6 +10,7 @@ from app.api_amochats import router_amo_chats, amo_admin
 from app.bootstrap import ensure_tokens
 from app.config import settings
 from app.db import init_db
+from app.hh_webhooks import ensure_hh_webhook
 from app.tg_webhooks import router as tg_wh_router
 from app.logging_setup import setup_logging
 
@@ -75,6 +76,7 @@ async def auto_register_telegram_webhooks() -> None:
 async def on_startup():
     await init_db()
     await ensure_tokens()
+    await ensure_hh_webhook()
     await auto_register_telegram_webhooks()
     await ensure_amo_chats_connected(log)
 
