@@ -200,9 +200,10 @@ def amo_start():
         "redirect_uri": settings.AMO_REDIRECT_URI,
         "response_type": "code",
         "state": state,
+        "mode": "post_message",  \
     }
     # у amo — authorize-эндпоинт на том же поддомене
-    return RedirectResponse(settings.AMO_BASE_URL.rstrip("/") + "/oauth?" + urlencode(params))
+    return RedirectResponse("https://www.amocrm.ru/oauth?" + urlencode(params))
 
 
 @router.get("/oauth/amo/callback")
