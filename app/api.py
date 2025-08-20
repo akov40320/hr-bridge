@@ -18,6 +18,7 @@ from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
 from app.guards import require_admin
+import time as _time
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -200,8 +201,8 @@ def amo_start():
         "redirect_uri": settings.AMO_REDIRECT_URI,
         "response_type": "code",
         "state": state,
-        "mode": "post_message",  \
-    }
+        "mode": "post_message", \
+        }
     # у amo — authorize-эндпоинт на том же поддомене
     return RedirectResponse("https://www.amocrm.ru/oauth?" + urlencode(params))
 
@@ -252,6 +253,13 @@ async def amo_callback(code: str | None = None, state: str | None = None):
             refresh_token=refresh,
             expires_at=expires_at
         ))
+
+        try:
+            await publish_task({"platform": "system", "action": "hh_autofill"})
+            logger.info("Queued hh_autofill after amo oauth")
+        except Exception:
+            logger.exception("Failed to queue hh_autofill after amo oauth")
+
     except Exception as e:
         return {"ok": False, "provider": "amo", "step": "save-token", "error": str(e)}
 
@@ -602,6 +610,17 @@ async def rmq_test(payload: dict = None):
 
 
 async def _handle_task(p: dict):
+    if p.get("platform") == "system" and p.get("action") == "hh_autofill":
+
+        tok = await DbTokenStore("amo").load()
+        if not tok or not tok.get("access_token") or int(tok.get("expires_at", 0)) <= int(_time.time()) + 30:
+            raise RuntimeError("amo token missing/expired")
+
+        # токен валиден — выполняем автозаполнение
+
+        await autofill_hh_mapping()
+        return
+
     if p["platform"] == "hh" and p["action"] == "set_state":
         await hh_adapt.set_employer_state(
             response_id=p["external_id"],
@@ -619,6 +638,7 @@ async def _handle_task(p: dict):
         amo = await AmoClient.create()
         await amo.create_leads(p["lead_body"])
         return
+
     raise RuntimeError(f"Unknown task: {p}")
 
 
@@ -724,5 +744,6 @@ def _norm_reason(s: str | None) -> str:
 
 @admin.post("/hh-autofill")
 async def hh_autofill_admin():
-    mapping = await autofill_hh_mapping()
-    return {"ok": True, "mapping": mapping}
+    await publish_task({"platform": "system", "action": "hh_autofill"})
+    return {"ok": True, "queued": True}
+

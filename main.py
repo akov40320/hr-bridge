@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import logging
 import uvicorn
@@ -5,15 +6,18 @@ from aiogram import Bot
 from fastapi import FastAPI
 
 from app.amochats import ensure_amo_chats_connected
-from app.api import router, admin
+from app.api import router, admin, _handle_task
 from app.api_amochats import router_amo_chats, amo_admin
 from app.bootstrap import ensure_tokens
 from app.config import settings
 from app.db import init_db
-from app.hh_autofill import autofill_hh_mapping
+import time
+from app.hh_mapping import load
 from app.hh_webhooks import ensure_hh_webhook
+from app.queue import publish_task, consume
 from app.tg_webhooks import router as tg_wh_router
 from app.logging_setup import setup_logging
+from app.token_store import DbTokenStore
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +81,25 @@ async def auto_register_telegram_webhooks() -> None:
 async def on_startup():
     await init_db()
     await ensure_tokens()
-    await autofill_hh_mapping()
+    try:
+        from app.token_store import DbTokenStore
+        from app.hh_mapping import load as load_hh_mapping
+
+        amo_tok = await DbTokenStore("amo").load()
+        if amo_tok and amo_tok.get("access_token") and int(amo_tok.get("expires_at", 0)) > int(time.time()) + 30:
+            if not load_hh_mapping():
+                await publish_task({"platform": "system", "action": "hh_autofill"})
+                log.info("Queued hh_autofill on startup")
+    except Exception:
+        log.info("Amo token not ready on startup — hh_autofill will be queued after OAuth")
+
+        # стартуем RMQ consumer
+    try:
+        app.state.rmq_task = asyncio.create_task(consume(_handle_task, max_attempts=10))
+        log.info("RMQ consumer started")
+    except Exception:
+        log.exception("Failed to start RMQ consumer")
+
     await ensure_hh_webhook()
     await auto_register_telegram_webhooks()
     await ensure_amo_chats_connected(log)
@@ -90,6 +112,7 @@ async def on_shutdown():
         t.cancel()
         with contextlib.suppress(Exception):
             await t
+
 
 @app.get("/")
 async def root():

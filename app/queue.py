@@ -6,13 +6,16 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 _conn = _chan = _exch = None
 
+
 def _int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
     except Exception:
         return default
 
+
 RMQ_PREFETCH = _int("RMQ_PREFETCH", 32)
+
 
 async def _ensure():
     global _conn, _chan, _exch
@@ -42,17 +45,20 @@ async def _ensure():
     q_dlq = await _chan.get_queue(settings.RMQ_DLQ_QUEUE)
     await q_dlq.bind(_exch, routing_key="tasks.dlq")
 
+
 async def publish_task(payload: dict, attempts: int = 0):
     await _ensure()
     body = json.dumps({"payload": payload, "attempts": attempts}, ensure_ascii=False).encode()
     msg = aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
     await _exch.publish(msg, routing_key="tasks")
 
+
 async def publish_retry(payload: dict, attempts: int):
     await _ensure()
     body = json.dumps({"payload": payload, "attempts": attempts}, ensure_ascii=False).encode()
     msg = aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
     await _chan.default_exchange.publish(msg, routing_key=settings.RMQ_RETRY_QUEUE)
+
 
 async def publish_dlq(payload: dict, attempts: int, error: str | None = None):
     await _ensure()
@@ -61,17 +67,34 @@ async def publish_dlq(payload: dict, attempts: int, error: str | None = None):
     msg = aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
     await _exch.publish(msg, routing_key="tasks.dlq")
 
-async def consume(handler):
+
+async def consume(handler, max_attempts: int = 10):
     await _ensure()
     q = await _chan.get_queue(settings.RMQ_TASK_QUEUE)
     async with q.iterator() as it:
         async for message in it:
+            obj = None
             try:
                 obj = json.loads(message.body.decode("utf-8"))
                 payload = obj.get("payload") or {}
                 attempts = int(obj.get("attempts") or 0)
+
+                # запустим обработчик
                 await handler(payload, attempts)
+
+                # успех
                 await message.ack()
-            except Exception:
-                logger.exception("consume handler crash; requeue")
-                await message.nack(requeue=True)
+
+            except Exception as e:
+                # не оставляем в очереди — ACK и перекидываем в retry/DLQ
+                await message.ack()
+                try:
+                    cur_attempts = (attempts if obj is not None else 0) + 1
+                    if cur_attempts >= max_attempts:
+                        await publish_dlq(payload or {}, cur_attempts, str(e))
+                        logger.exception("sent to DLQ after attempts=%s", cur_attempts)
+                    else:
+                        await publish_retry(payload or {}, cur_attempts)
+                        logger.exception("requeued to retry, attempt=%s", cur_attempts)
+                except Exception:
+                    logger.exception("failed to republish to retry/DLQ")
