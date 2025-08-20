@@ -1,54 +1,25 @@
 import asyncio
-import asyncpg
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
 
-DBURL = "postgresql://hrdb_z7kv_user:qwuuDJIRwvLiMivJPpu02njox0fw4QdR@dpg-d2h3n0buibrs73etp7e0-a.oregon-postgres.render.com/hrdb_z7kv?sslmode=require"
-
-SQL = """
-ALTER TABLE tokens ADD COLUMN IF NOT EXISTS owner_id TEXT;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name='tokens' AND column_name='id'
-  ) THEN
-    ALTER TABLE tokens ADD COLUMN id BIGSERIAL;
-  END IF;
-END$$;
-
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'tokens'::regclass AND contype='p' AND conname='tokens_pkey'
-  ) THEN
-    ALTER TABLE tokens DROP CONSTRAINT tokens_pkey;
-  END IF;
-END$$;
-
-ALTER TABLE tokens ADD PRIMARY KEY (id);
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'tokens'::regclass AND conname = 'ux_tokens_service_owner'
-  ) THEN
-    ALTER TABLE tokens ADD CONSTRAINT ux_tokens_service_owner UNIQUE (service, owner_id);
-  END IF;
-END$$;
-
-ALTER TABLE lead_links ADD COLUMN IF NOT EXISTS owner_id TEXT;
-CREATE INDEX IF NOT EXISTS ix_lead_links_owner_id ON lead_links(owner_id);
-"""
+DATABASE_URL = "postgresql+asyncpg://hrdb_z7kv_user:qwuuDJIRwvLiMivJPpu02njox0fw4QdR@dpg-d2h3n0buibrs73etp7e0-a.oregon-postgres.render.com/hrdb_z7kv?ssl=require"
 
 async def main():
-    conn = await asyncpg.connect(DBURL)
-    try:
-        await conn.execute(SQL)
-        print("✅ Миграция применена успешно")
-    finally:
-        await conn.close()
+    engine = create_async_engine(DATABASE_URL, echo=False)
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT service, owner_id, access_token, refresh_token, expires_at FROM tokens WHERE service='avito'")
+        )
+        rows = result.fetchall()
+        for row in rows:
+            print("Service:", row.service)
+            print("Owner:", row.owner_id)
+            print("Access token:", row.access_token)
+            print("Refresh token:", row.refresh_token)
+            print("Expires at:", row.expires_at)
+            print("-" * 40)
+
+    await engine.dispose()
 
 if __name__ == "__main__":
     asyncio.run(main())

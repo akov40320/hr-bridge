@@ -103,7 +103,8 @@ def avito_start(account_id: str | None = Query(default=None)):
         "response_type": "code",
         "client_id": settings.AVITO_CLIENT_ID,
         "redirect_uri": settings.AVITO_REDIRECT_URI,
-        "state": state,
+        "state": "av1",
+
     }
     if scope:
         params["scope"] = scope  # важно: запятые, без пробелов
@@ -117,11 +118,6 @@ async def avito_callback(code: str | None = None, state: str | None = None):
         return {"ok": False, "error": "no code"}
     if not (settings.AVITO_TOKEN_URL and settings.AVITO_CLIENT_ID and settings.AVITO_CLIENT_SECRET):
         return {"ok": False, "error": "avito token env not set"}
-
-    # owner_id для Avito берём из state ("acc:<id>"), иначе "default"
-    owner_id = None
-    if state and state.startswith("acc:"):
-        owner_id = state.split("acc:", 1)[-1] or "default"
 
     data = {
         "grant_type": "authorization_code",
@@ -138,17 +134,35 @@ async def avito_callback(code: str | None = None, state: str | None = None):
     except Exception as e:
         return {"ok": False, "provider": "avito", "step": "token-exchange-exception", "error": str(e)}
 
+    access = tok.get("access_token", "")
+    if not access:
+        return {"ok": False, "provider": "avito", "step": "token", "error": "no access_token"}
+
+    # 👉 автоматически узнаём account_id
+    try:
+        async with httpx.AsyncClient(timeout=15) as x:
+            me = await x.get(
+                "https://api.avito.ru/core/v1/accounts/self",
+                headers={"Authorization": f"Bearer {access}", "Accept": "application/json"},
+            )
+            me.raise_for_status()
+            account_id = str(me.json().get("id") or "")
+    except Exception as e:
+        # безопасный фоллбек
+        account_id = "default"
+        logger.warning("Avito callback: fail to get account_id, fallback=default, err=%s", e)
+
     try:
         expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
-        await DbTokenStore("avito", owner_id).save(TokenData(
-            access_token=tok.get("access_token", ""),
+        await DbTokenStore("avito", account_id).save(TokenData(
+            access_token=access,
             refresh_token=tok.get("refresh_token", ""),
             expires_at=expires_at
         ))
     except Exception as e:
         return {"ok": False, "provider": "avito", "step": "save-token", "error": str(e)}
 
-    return {"ok": True, "account_id": owner_id}
+    return {"ok": True, "account_id": account_id}
 
 
 # ---------- вспомогалки ----------
