@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.engine.url import make_url
 from app.config import settings
+import asyncio, asyncpg
+
 
 log = logging.getLogger("dburl")
 
@@ -33,6 +35,17 @@ log.warning("DATABASE_URL REPR: %r len=%d sha256=%s",
             raw, len(raw), hashlib.sha256(raw.encode()).hexdigest())
 log.warning("DATABASE_URL MASK: %s", _mask(raw))
 log.warning("ASYNC_DSN      : %s", _mask(ASYNC_DSN))
+
+async def _probe():
+    dsn = ASYNC_DSN.replace("postgresql+asyncpg", "postgresql")
+    dsn = dsn.replace("ssl=require", "sslmode=require")
+    conn = await asyncpg.connect(dsn)
+    v = await conn.fetchval("select 1")
+    print("PROBE_OK", v)
+    await conn.close()
+
+asyncio.get_event_loop().run_until_complete(_probe())
+
 engine = create_async_engine(
     ASYNC_DSN,
     echo=False,
