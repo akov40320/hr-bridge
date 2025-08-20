@@ -182,13 +182,64 @@ def route_type_by_text(text: str) -> str:
 async def webhook_hh(request: Request):
     raw = await request.body()
     try:
-        payload = await request.json()
+        data = await request.json()
     except Exception:
-        payload = {}
+        data = {}
+
+    # антидедуп
     key = calc_key("hh", raw)
     if not await check_and_store(key):
         return {"ok": True, "duplicate": True}
-    payload["platform"] = "hh"
+
+    # HH шлёт события «переписок/откликов». Форматы могут отличаться.
+    # Достаём максимально безопасно.
+    obj = (
+        data.get("object")
+        or data.get("negotiation")
+        or data.get("response")
+        or data.get("payload")  # на всякий случай
+        or {}
+    )
+
+    vacancy = obj.get("vacancy") or {}
+    applicant = (
+        obj.get("applicant")
+        or obj.get("resume", {}).get("owner", {})
+        or {}
+    )
+
+    vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "")
+    vacancy_title = (
+        vacancy.get("name")
+        or data.get("vacancy_title")
+        or ""
+    )
+
+    applicant_id = str(
+        applicant.get("id")
+        or obj.get("resume", {}).get("id")
+        or data.get("applicant_id")
+        or ""
+    )
+    applicant_name = (
+        applicant.get("name")
+        or applicant.get("first_name")
+        or ""
+    ).strip() or "кандидат"
+
+    # Если совсем ничего не достали — логируем сырые данные для анализа
+    if not (vacancy_id or vacancy_title or applicant_id):
+        logger.warning("HH webhook: unexpected payload: %s", data)
+        # всё равно ответим 200, чтобы не было ретраев
+        return {"ok": True, "skipped": True}
+
+    payload = {
+        "platform": "hh",
+        "vacancy_id": vacancy_id,
+        "vacancy_title": vacancy_title,
+        "applicant": {"id": applicant_id, "name": applicant_name},
+    }
+
     return await _process_incoming(payload)
 
 
@@ -196,14 +247,46 @@ async def webhook_hh(request: Request):
 async def webhook_avito(request: Request):
     raw = await request.body()
     try:
-        payload = await request.json()
+        data = await request.json()
     except Exception:
-        payload = {}
+        data = {}
+
     key = calc_key("avito", raw)
     if not await check_and_store(key):
         return {"ok": True, "duplicate": True}
-    payload["platform"] = "avito"
-    return await _process_incoming(payload)
+
+    # Типичный формат Avito:
+    # { "id": "...", "version": 1, "timestamp": "...",
+    #   "payload": { "type": "message/new", "value": {
+    #       "id": "...", "chat_id": "...", "user_id": "...",
+    #       "author_id": "...", "created": "...",
+    #       "type": "text", "content": {"text": "...."}
+    #   }}}
+    payload_root = data.get("payload") or {}
+    val = payload_root.get("value") or {}
+
+    chat_id = str(val.get("chat_id") or "")
+    text = (val.get("content") or {}).get("text") or ""
+    # Название вакансии Avito в чистом вебхуке не всегда есть.
+    # Возьмём заглушку, чтобы не пусто.
+    vacancy_title = "Отклик Avito"
+
+    # Будем считать chat_id «внешним id» для обратной отправки сообщений
+    applicant_id = str(val.get("user_id") or val.get("author_id") or "")
+
+    if not chat_id:
+        logger.warning("Avito webhook: no chat_id, payload=%s", data)
+        return {"ok": True, "skipped": True}
+
+    internal = {
+        "platform": "avito",
+        "vacancy_id": "",                    # если надо — подтягивай через свой storage/по chat_id
+        "vacancy_title": vacancy_title,
+        "applicant": {"id": chat_id, "name": f"user:{applicant_id or 'unknown'}"},
+        # можно прокидывать "raw_text" если хочешь сразу отправлять
+        "raw_text": text,
+    }
+    return await _process_incoming(internal)
 
 
 async def _process_incoming(payload: dict):
