@@ -18,10 +18,10 @@ from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
 from app.guards import require_admin
 
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 admin = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
+HASHTAG_RE = re.compile(r'(?i)(?<!\w)#\s*(мастер|оператор)\b')
 
 
 # ---------- HH OAuth ----------
@@ -256,47 +256,18 @@ async def amo_callback(code: str | None = None, state: str | None = None):
     return {"ok": True, "provider": "amo", "expires_in": expires_in}
 
 
-
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
 
-def _extract_tags(obj) -> list[str]:
-    """
-    Пытаемся собрать текстовые теги из разных возможных структур HH/Avito.
-    Поддерживает: list[str], list[dict{name|title}], dict{name|title}, str.
-    Лишнего шума не создаёт, просто best-effort.
-    """
-    tags: list[str] = []
-    def take(x):
-        if isinstance(x, str) and x.strip():
-            tags.append(x.strip())
-        elif isinstance(x, dict):
-            for k in ("name", "title", "value"):
-                v = x.get(k)
-                if isinstance(v, str) and v.strip():
-                    tags.append(v.strip())
-    if isinstance(obj, list):
-        for it in obj: take(it)
-    else:
-        take(obj)
-    return tags
 
-def _route_kind(title: str, tags: list[str]) -> str:
-    t = _norm(title)
-    all_tags = [_norm(x) for x in tags if x]
-    km = _norm(settings.ROUTING_KEYWORD_MASTER)
-    ko = _norm(settings.ROUTING_KEYWORD_OPERATOR)
-
-    # 1) по тегам
-    if any(km in x for x in all_tags): return "master"
-    if any(ko in x for x in all_tags): return "operator"
-
-    # 2) по заголовку
-    if km and km in t: return "master"
-    if ko and ko in t: return "operator"
-
-    # 3) иначе игнор
-    return "ignore"
+def _route_kind(*, desc: str = "", raw: str = "") -> str:
+    """Роутинг ТОЛЬКО по #мастер/#оператор в описании/тексте."""
+    blob = " ".join([(desc or ""), (raw or "")])
+    m = HASHTAG_RE.search(blob)
+    if not m:
+        return "ignore"
+    val = _norm(m.group(1))
+    return "master" if val.startswith("мастер") else "operator"
 
 # ---------- входящие вебхуки ----------
 @router.post("/webhooks/hh")
@@ -329,16 +300,13 @@ async def webhook_hh(request: Request):
 
     vacancy = obj.get("vacancy") or {}
 
-    hh_tags = []
-    for key in ("labels", "tags", "specializations", "professional_roles", "key_skills", "rubrics"):
-        v = vacancy.get(key)
-        if v:
-            hh_tags.extend(_extract_tags(v))
+
 
     applicant = (obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {})
 
     vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "")
     vacancy_title = (vacancy.get("name") or data.get("vacancy_title") or "")
+    vacancy_desc = (vacancy.get("description") or data.get("vacancy_description") or "")
     applicant_name = (applicant.get("name") or applicant.get("first_name") or "").strip() or "кандидат"
 
     # employer_id (владалец токена)
@@ -357,7 +325,7 @@ async def webhook_hh(request: Request):
         "owner_id": owner_id,
         "vacancy_id": vacancy_id,
         "vacancy_title": vacancy_title,
-        "vacancy_tags": hh_tags,
+        "vacancy_desc": vacancy_desc,
         "applicant": {"id": response_id, "name": applicant_name},
     }
     return await _process_incoming(payload)
@@ -386,12 +354,8 @@ async def webhook_avito(request: Request):
     ctx = (val.get("context") or {})  # иногда сюда
     item_id = str(item.get("id") or ctx.get("item_id") or "")
     vacancy_title = (item.get("title") or val.get("title") or "Отклик Avito")
+    vacancy_desc = (item.get("description") or ctx.get("description") or "")
 
-    avito_tags = []
-    for key in ("tags", "category", "rubric", "params"):
-        v = item.get(key) or ctx.get(key)
-        if v:
-            avito_tags.extend(_extract_tags(v))
 
     applicant_id = str(val.get("user_id") or val.get("author_id") or "")
 
@@ -411,22 +375,40 @@ async def webhook_avito(request: Request):
         "owner_id": owner_id,
         "vacancy_id": item_id,
         "vacancy_title": vacancy_title,
-        "vacancy_tags": avito_tags,  # <— добавили
+        "vacancy_desc": vacancy_desc,  # <-- добавили
         "applicant": {"id": chat_id, "name": f"user:{applicant_id or 'unknown'}"},
-        "raw_text": text,
+        "raw_text": text,  # <-- уже есть и участвует в роутинге
     }
     return await _process_incoming(internal)
 
 
 async def _process_incoming(payload: dict):
     title = payload.get("vacancy_title") or ""
-    tags = payload.get("vacancy_tags") or []
-    kind = _route_kind(title, tags)
-    amo = await AmoClient.create()
+    desc = payload.get("vacancy_desc") or ""  # <-- добавили
+    raw = payload.get("raw_text") or ""  # <-- есть у Avito
+    kind = _route_kind(desc=desc, raw=raw)
+    phone = (payload.get("applicant", {}) or {}).get("phone")
+    city = (payload.get("applicant", {}) or {}).get("city")
+    name = (payload.get("applicant", {}) or {}).get("name")
+    owner_id = payload.get("owner_id")
+
+    if payload.get("platform") == "hh" and payload.get("applicant", {}).get("id"):
+        try:
+            extra = await hh_adapt.fetch_applicant_details(payload["applicant"]["id"], owner_id)
+            if extra:
+                phone = phone or extra.get("phone")
+                city = city or extra.get("city")
+                name = (name if name and name != "кандидат" else (extra.get("name") or name))
+        except Exception as e:
+            logger.warning("HH enrich failed: %s", e)
+
+
 
     if kind == "ignore":
-        logger.info("routing: ignore (title=%r, tags=%r)", title, tags)
+        logger.info("routing: ignore (no hashtags) title=%r", title)
         return {"ok": True, "ignored": True, "reason": "no-keywords"}
+
+    amo = await AmoClient.create()
 
     if kind == "master":
         pipeline_id = settings.AMO_PIPELINE_ID_MASTER
@@ -435,7 +417,7 @@ async def _process_incoming(payload: dict):
         pipeline_id = settings.AMO_PIPELINE_ID_OPERATOR
         stage_id = settings.AMO_STAGE_ID_OPERATOR_NEW
 
-    lead_name = f'{title} — {payload.get("applicant", {}).get("name", "кандидат")}'.strip(" —")
+    lead_name = f'{title} — {name or "кандидат"}'.strip(" —")
 
     logger.info(
         "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
@@ -456,11 +438,9 @@ async def _process_incoming(payload: dict):
 
     lead_id = created["_embedded"]["leads"][0]["id"]
 
-    phone = (payload.get("applicant", {}) or {}).get("phone")
-    city = (payload.get("applicant", {}) or {}).get("city")
     await _enrich_lead(
         amo, lead_id,
-        applicant_name=payload.get("applicant", {}).get("name"),
+        applicant_name=name,
         phone=phone, city=city,
         vacancy_title=payload.get("vacancy_title"),
     )
@@ -483,14 +463,14 @@ async def _process_incoming(payload: dict):
 
     bot_username = settings.TELEGRAM_MASTER_BOT_USERNAME if kind == "master" else settings.TELEGRAM_OPERATOR_BOT_USERNAME
     deep_link = f"https://t.me/{bot_username}?start={lead_id}"
-    text = f"Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос: {deep_link}"
+    invite_text = f"Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос: {deep_link}"
 
     if payload.get("platform") == "avito" and payload.get("applicant", {}).get("id"):
         await publish_task({
             "platform": "avito",
             "action": "send_message",
             "external_id": payload["applicant"]["id"],
-            "text": text,
+            "text": invite_text,
             "owner_id": payload.get("owner_id"),  # <—
         })
 
@@ -499,7 +479,7 @@ async def _process_incoming(payload: dict):
             "platform": "hh",
             "action": "send_message",
             "external_id": payload["applicant"]["id"],  # response_id
-            "text": text,
+            "text": invite_text,
             "owner_id": payload.get("owner_id"),
         })
 
@@ -580,12 +560,13 @@ async def amo_webhook(request: Request):
 async def get_hh_mapping():
     return hh_map_load()
 
+
 @admin.put("/hh-mapping")
 async def put_hh_mapping(payload: dict):
     return {"ok": True, "mapping": hh_map_set(payload)}
 
 
-@admin.post("/admin/rmq-test")
+@admin.post("/rmq-test")
 async def rmq_test(payload: dict = None):
     msg = (payload or {}).get("msg", "hi")
     await publish_task({"platform": "debug", "action": "echo", "msg": msg})
@@ -618,6 +599,7 @@ async def dedup_clean(hours: int = 72):
     deleted = await cleanup_older_than(hours * 3600)
     logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
+
 
 async def _enrich_lead(amo: AmoClient, lead_id: int, *, applicant_name: str | None,
                        phone: str | None, city: str | None, vacancy_title: str | None):
@@ -658,3 +640,23 @@ async def _enrich_lead(amo: AmoClient, lead_id: int, *, applicant_name: str | No
             await amo.add_note(lead_id, note)
         except Exception as e:
             logger.warning("add note (candidate data) error: %s", e)
+
+
+@admin.get("/hh-states")
+async def hh_states(owner_id: str | None = None):
+    # owner_id — employer_id токена, если много кабинетов
+    try:
+        tok = await DbTokenStore("hh", owner_id).load()
+    except Exception as e:
+        return {"ok": False, "error": f"no hh token: {e}"}
+
+    async with httpx.AsyncClient(timeout=15) as x:
+        r = await x.get(f"{settings.HH_API_BASE.rstrip('/')}/dictionaries",
+                        headers={"Authorization": f"Bearer {tok['access_token']}",
+                                 "Accept": "application/json"})
+    if r.status_code >= 400:
+        return {"ok": False, "status": r.status_code, "body": r.text}
+
+    items = (r.json() or {}).get("negotiations_state") or []
+    # вернем список {id, name}
+    return {"ok": True, "states": [{"id": it.get("id"), "name": it.get("name")} for it in items if it]}
