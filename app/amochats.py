@@ -3,6 +3,7 @@ from email.utils import formatdate
 import httpx
 from app.config import settings
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -132,8 +133,6 @@ async def send_text_from_client(
     return cid
 
 
-
-
 async def send_text_from_manager(
         *, conversation_id: str,  # здесь нужен уже существующий uuid/id чата
         user_id: int, user_name: str | None, avatar: str | None,
@@ -151,12 +150,14 @@ async def send_text_from_manager(
     path = f"/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
     url = _base() + path
 
+    now_s = int(time.time())
     now_ms = int(time.time() * 1000)
+
     payload = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
-            "timestamp": now_ms,
+            "timestamp": now_s,
             "msec_timestamp": now_ms,
             "conversation_id": conversation_id,
             "sender": {"ref_id": settings.AMO_CHATS_SENDER_USER_AMOJO_ID},

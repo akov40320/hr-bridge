@@ -219,6 +219,13 @@ async def _process_incoming(payload: dict):
         stage_id = settings.AMO_STAGE_ID_OPERATOR_NEW
 
     lead_name = f'{title} — {payload.get("applicant", {}).get("name", "кандидат")}'.strip(" —")
+
+    # Логируем перед созданием лида
+    logger.info(
+        "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
+        payload.get("platform"), lead_name, pipeline_id, stage_id
+    )
+
     body = [{"name": lead_name, "pipeline_id": pipeline_id, "status_id": stage_id}]
     try:
         created = await amo.create_leads(body)
@@ -230,7 +237,17 @@ async def _process_incoming(payload: dict):
             "ts": int(time.time())
         })
         return {"ok": True, "queued": True, "reason": "reauth_required"}
+
     lead_id = created["_embedded"]["leads"][0]["id"]
+
+    # Логируем после создания
+    logger.info(
+        "lead:created id=%s platform=%s vac=%s ext=%s",
+        lead_id,
+        payload.get("platform"),
+        payload.get("vacancy_id"),
+        payload.get("applicant", {}).get("id")
+    )
 
     await save_link(
         lead_id=lead_id,
@@ -264,7 +281,7 @@ async def _process_incoming(payload: dict):
     try:
         await amo.add_note(lead_id, f"Отправлена ссылка на TG-бота: {deep_link}")
     except Exception as e:
-        print("add note (link sent) error:", e)
+        logger.warning("add note (link sent) error: %s", e)
 
     return {"ok": True, "lead_id": lead_id}
 

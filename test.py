@@ -7,9 +7,10 @@ DATABASE_URL = "postgresql+asyncpg://hrdb_z7kv_user:qwuuDJIRwvLiMivJPpu02njox0fw
 async def main():
     engine = create_async_engine(DATABASE_URL, echo=False)
     async with engine.begin() as conn:  # begin => автокоммит
-        res = await conn.execute(
-            text("UPDATE tg_links SET conversation_id = NULL, updated_at = NOW();")
-        )
-        print("rows updated:", res.rowcount)
+        await conn.execute(text("TRUNCATE TABLE tg_links RESTART IDENTITY CASCADE;"))
+        await conn.execute(text("TRUNCATE TABLE tg_surveys RESTART IDENTITY CASCADE;"))
+        await conn.execute(text("TRUNCATE TABLE events_dedup RESTART IDENTITY CASCADE;"))
+        await conn.execute(text("TRUNCATE TABLE lead_links RESTART IDENTITY CASCADE;"))
+        print("Tables truncated successfully")
 
 asyncio.run(main())

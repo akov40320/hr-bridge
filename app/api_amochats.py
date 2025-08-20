@@ -50,6 +50,8 @@ async def amochats_in(request: Request, scope_id: str | None = None):
     conv = root.get("conversation") or {}
     conv_ref_id = conv.get("id") or conv.get("uuid")
     client_id = conv.get("client_id") or ""
+    sender = root.get("sender") or {}
+    receiver = root.get("receiver") or {}
 
     logger.info("amo-chats IN: scope=%s conv_id=%s client_id=%s text_len=%d",
                 scope_id, conv_ref_id, client_id, len(text))

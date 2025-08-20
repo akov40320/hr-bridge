@@ -69,7 +69,8 @@ def make_router(bot_kind: str) -> Dispatcher:
                 tg_user_name=m.from_user.username
             )
             await set_conversation(m.from_user.id, bot_kind, cid)
-            logger.info("[%s] conv saved user_id=%s lead=%s conv=%s", bot_kind, m.from_user.id, lead_id, cid)
+            logger.info("[%s] conv linked: user_id=%s lead=%s conv=%s (link saved)",
+                        bot_kind, m.from_user.id, lead_id, cid)
             return cid
         except Exception as e:
             logger.warning("ensure_chat_created error: %s", e)
@@ -111,7 +112,8 @@ def make_router(bot_kind: str) -> Dispatcher:
                     tg_user_name=m.from_user.username
                 )
                 await set_conversation(m.from_user.id, bot_kind, conv_id)
-                logger.info("[%s] ensure_chat_created -> %s", bot_kind, conv_id)
+                logger.info("[%s] conv linked: user_id=%s lead=%s conv=%s (link saved)",
+                            bot_kind, m.from_user.id, lead_id, conv_id)
             except Exception as e:
                 logger.warning("ensure_chat_created error: %s", e)
 
