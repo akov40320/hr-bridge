@@ -79,7 +79,10 @@ class Settings(BaseSettings):
     # входящие из AmoChats → наш вебхук. Если Amo даёт подпись — сюда.
     AMOCHATS_INCOMING_SECRET: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    HH_WEBHOOK_URL: str = ""
+    HH_WEBHOOK_EVENTS: str = ""
+
+model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     RMQ_DLQ_QUEUE: str = "bridge.tasks.dlq"
 
