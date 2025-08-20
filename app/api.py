@@ -1,5 +1,6 @@
 import logging
 import re
+import secrets
 import time, os
 from urllib.parse import urlencode
 
@@ -80,34 +81,24 @@ async def hh_callback(code: str | None = None, state: str | None = None):
 
 
 # ---------- Avito OAuth ----------
-@router.get("/oauth/avito/start")
-def avito_start(account_id: str | None = Query(default=None)):
-    if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
-        return {
-            "ok": False,
-            "error": "avito env not set",
-            "need": {
-                "AVITO_CLIENT_ID": bool(settings.AVITO_CLIENT_ID),
-                "AVITO_REDIRECT_URI": bool(settings.AVITO_REDIRECT_URI),
-                "AVITO_AUTHORIZE_URL": bool(settings.AVITO_AUTHORIZE_URL),
-                "AVITO_TOKEN_URL": bool(settings.AVITO_TOKEN_URL),
-            },
-        }
 
-    # нормализуем любые пробелы/запятые -> запятые
+@router.get("/oauth/avito/start")
+def avito_start():
+    if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
+        return {"ok": False, "error": "avito env not set"}
+
     raw_scope = getattr(settings, "AVITO_SCOPE", "") or ""
     scope = ",".join([s.strip() for s in re.split(r"[,\s]+", raw_scope) if s.strip()])
 
-    state = f"acc:{account_id}" if account_id else "acc:default"
+    state = secrets.token_urlsafe(16)  # CSRF
     params = {
         "response_type": "code",
         "client_id": settings.AVITO_CLIENT_ID,
         "redirect_uri": settings.AVITO_REDIRECT_URI,
-        "state": "av1",
-
+        "state": state,
     }
     if scope:
-        params["scope"] = scope  # важно: запятые, без пробелов
+        params["scope"] = scope
 
     return RedirectResponse(f"{settings.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
@@ -193,9 +184,75 @@ async def health():
     return info
 
 
+# ---------- AmoCRM OAuth ----------
+@router.get("/oauth/amo/start")
+def amo_start():
+    """
+    Старт amo OAuth — редирект на портал для выдачи прав.
+    AMO_BASE_URL должен быть вида: https://<subdomain>.amocrm.ru
+    """
+    state = secrets.token_urlsafe(16)  # CSRF (опционально — можешь сохранять/валидировать)
+    params = {
+        "client_id": settings.AMO_CLIENT_ID,
+        "redirect_uri": settings.AMO_REDIRECT_URI,
+        "response_type": "code",
+        "state": state,
+    }
+    # у amo — authorize-эндпоинт на том же поддомене
+    return RedirectResponse(settings.AMO_BASE_URL.rstrip("/") + "/oauth?" + urlencode(params))
+
+
 @router.get("/oauth/amo/callback")
-async def oauth_callback(code: str | None = None, state: str | None = None):
-    return {"ok": True, "code": code}
+async def amo_callback(code: str | None = None, state: str | None = None):
+    """
+    Обмен authorization_code на access/refresh токены и сохранение в DbTokenStore("amo").
+    """
+    if not code:
+        return {"ok": False, "provider": "amo", "step": "callback", "error": "no code"}
+
+    url = settings.AMO_BASE_URL.rstrip("/") + "/oauth2/access_token"
+    payload = {
+        "client_id": settings.AMO_CLIENT_ID,
+        "client_secret": settings.AMO_CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": settings.AMO_REDIRECT_URI,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as x:
+            r = await x.post(url, json=payload, headers={"Accept": "application/json"})
+        if r.status_code >= 400:
+            return {
+                "ok": False,
+                "provider": "amo",
+                "step": "token",
+                "status": r.status_code,
+                "body": r.text,
+            }
+        d = r.json()
+    except Exception as e:
+        return {"ok": False, "provider": "amo", "step": "token-exchange-exception", "error": str(e)}
+
+    # amo обычно отдаёт expires_in (сек), server_time может не прийти — используем локальное время
+    try:
+        server_time = int(d.get("server_time", time.time()))
+        expires_in = int(d.get("expires_in", 3600))
+        access = d["access_token"]
+        refresh = d["refresh_token"]
+        expires_at = server_time + expires_in - 120
+
+        # owner_id для amo не используется → None
+        await DbTokenStore("amo").save(TokenData(
+            access_token=access,
+            refresh_token=refresh,
+            expires_at=expires_at
+        ))
+    except Exception as e:
+        return {"ok": False, "provider": "amo", "step": "save-token", "error": str(e)}
+
+    return {"ok": True, "provider": "amo", "expires_in": expires_in}
+
 
 
 def route_type_by_text(text: str) -> str:
