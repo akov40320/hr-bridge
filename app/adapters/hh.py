@@ -1,4 +1,5 @@
 import asyncio, httpx
+from typing import Optional
 from app.config import settings
 from app.oauth2 import ensure_fresh_access
 
@@ -10,7 +11,10 @@ def _is_retryable(status: int) -> bool:
     return status == 429 or 500 <= status < 600
 
 
-async def set_employer_state(response_id: str, target_state: str) -> None:
+async def set_employer_state(response_id: str, target_state: str, employer_id: Optional[str]) -> None:
+    """
+    Меняет статус отклика (response/negotiation) у конкретного работодателя.
+    """
     access = await ensure_fresh_access(
         service="hh",
         token_url=settings.HH_TOKEN_URL,
@@ -18,6 +22,7 @@ async def set_employer_state(response_id: str, target_state: str) -> None:
         client_secret=settings.HH_CLIENT_SECRET,
         redirect_uri=settings.HH_REDIRECT_URI,
         use_basic_auth=False,
+        owner_id=employer_id,
     )
 
     url = settings.HH_API_BASE.rstrip("/") + settings.HH_SET_STATE_PATH.format(response_id=response_id)
@@ -33,7 +38,7 @@ async def set_employer_state(response_id: str, target_state: str) -> None:
         if r.status_code < 400:
             return
         if _is_retryable(r.status_code):
-            await asyncio.sleep(backoff);
+            await asyncio.sleep(backoff)
             backoff *= 2
             continue
         raise HHError(f"HH set_state failed {r.status_code}: {r.text}")

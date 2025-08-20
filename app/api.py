@@ -4,7 +4,7 @@ import time, os
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import RedirectResponse
 
 from app.config import settings
@@ -16,7 +16,6 @@ from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
 from app.guards import require_admin
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,7 +29,7 @@ def hh_start():
         "response_type": "code",
         "client_id": settings.HH_CLIENT_ID,
         "redirect_uri": settings.HH_REDIRECT_URI,
-        "state": "hh1",  # можно оставить фикс, позже сделаем подпись
+        "state": "hh1",
     }
     return RedirectResponse("https://hh.ru/oauth/authorize?" + urlencode(params))
 
@@ -56,10 +55,20 @@ async def hh_callback(code: str | None = None, state: str | None = None):
     except Exception as e:
         return {"ok": False, "provider": "hh", "step": "token-exchange-exception", "error": str(e)}
 
+    # employer_id
     try:
-        os.makedirs("secrets", exist_ok=True)
+        async with httpx.AsyncClient(timeout=15) as x:
+            me = await x.get("https://api.hh.ru/me", headers={"Authorization": f"Bearer {d['access_token']}"})
+            me.raise_for_status()
+            employer_id = str(me.json().get("employer", {}).get("id") or "")
+            if not employer_id:
+                return {"ok": False, "provider": "hh", "step": "me", "error": "no employer.id"}
+    except Exception as e:
+        return {"ok": False, "provider": "hh", "step": "me", "error": str(e)}
+
+    try:
         expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
-        await DbTokenStore("hh").save(TokenData(
+        await DbTokenStore("hh", employer_id).save(TokenData(
             access_token=d["access_token"],
             refresh_token=d.get("refresh_token", ""),
             expires_at=expires_at
@@ -67,14 +76,16 @@ async def hh_callback(code: str | None = None, state: str | None = None):
     except Exception as e:
         return {"ok": False, "provider": "hh", "step": "save-token", "error": str(e)}
 
-    return {"ok": True}
+    return {"ok": True, "employer_id": employer_id}
 
 
 # ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
-def avito_start():
-    if not (
-            settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
+def avito_start(account_id: str | None = Query(default=None)):
+    """
+    Если нужен мульти-аккаунт Avito, передавай ?account_id=<...> — мы положим его в state и свяжем токен.
+    """
+    if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
         return {
             "ok": False,
             "error": "avito env not set",
@@ -85,11 +96,12 @@ def avito_start():
                 "AVITO_TOKEN_URL": bool(settings.AVITO_TOKEN_URL),
             },
         }
+    state = f"acc:{account_id}" if account_id else "acc:default"
     params = {
         "response_type": "code",
         "client_id": settings.AVITO_CLIENT_ID,
         "redirect_uri": settings.AVITO_REDIRECT_URI,
-        "state": "av1",  # позже подпишем
+        "state": state,
     }
     if getattr(settings, "AVITO_SCOPE", ""):
         params["scope"] = settings.AVITO_SCOPE
@@ -101,9 +113,13 @@ def avito_start():
 async def avito_callback(code: str | None = None, state: str | None = None):
     if not code:
         return {"ok": False, "error": "no code"}
-
     if not (settings.AVITO_TOKEN_URL and settings.AVITO_CLIENT_ID and settings.AVITO_CLIENT_SECRET):
         return {"ok": False, "error": "avito token env not set"}
+
+    # owner_id для Avito берём из state ("acc:<id>"), иначе "default"
+    owner_id = None
+    if state and state.startswith("acc:"):
+        owner_id = state.split("acc:", 1)[-1] or "default"
 
     data = {
         "grant_type": "authorization_code",
@@ -121,18 +137,16 @@ async def avito_callback(code: str | None = None, state: str | None = None):
         return {"ok": False, "provider": "avito", "step": "token-exchange-exception", "error": str(e)}
 
     try:
-        os.makedirs("secrets", exist_ok=True)
         expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
-        await DbTokenStore("avito").save(TokenData(
+        await DbTokenStore("avito", owner_id).save(TokenData(
             access_token=tok.get("access_token", ""),
             refresh_token=tok.get("refresh_token", ""),
             expires_at=expires_at
         ))
-
     except Exception as e:
         return {"ok": False, "provider": "avito", "step": "save-token", "error": str(e)}
 
-    return {"ok": True}
+    return {"ok": True, "account_id": owner_id}
 
 
 # ---------- вспомогалки ----------
@@ -177,7 +191,7 @@ def route_type_by_text(text: str) -> str:
     return "operator"
 
 
-# ---------- входящие вебхуки от источников ----------
+# ---------- входящие вебхуки ----------
 @router.post("/webhooks/hh")
 async def webhook_hh(request: Request):
     raw = await request.body()
@@ -186,60 +200,44 @@ async def webhook_hh(request: Request):
     except Exception:
         data = {}
 
-    # антидедуп
     key = calc_key("hh", raw)
     if not await check_and_store(key):
         return {"ok": True, "duplicate": True}
 
-    # HH шлёт события «переписок/откликов». Форматы могут отличаться.
-    # Достаём максимально безопасно.
     obj = (
         data.get("object")
         or data.get("negotiation")
         or data.get("response")
-        or data.get("payload")  # на всякий случай
+        or data.get("payload")
         or {}
     )
 
     vacancy = obj.get("vacancy") or {}
-    applicant = (
-        obj.get("applicant")
-        or obj.get("resume", {}).get("owner", {})
-        or {}
-    )
+    applicant = (obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {})
 
     vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "")
-    vacancy_title = (
-        vacancy.get("name")
-        or data.get("vacancy_title")
-        or ""
-    )
+    vacancy_title = (vacancy.get("name") or data.get("vacancy_title") or "")
+    applicant_id = str(applicant.get("id") or obj.get("resume", {}).get("id") or data.get("applicant_id") or "")
+    applicant_name = (applicant.get("name") or applicant.get("first_name") or "").strip() or "кандидат"
 
-    applicant_id = str(
-        applicant.get("id")
-        or obj.get("resume", {}).get("id")
-        or data.get("applicant_id")
+    # возможно, в webhooks есть работодатель/owner
+    owner_id = str(
+        data.get("employer", {}).get("id")
+        or obj.get("employer", {}).get("id")
         or ""
-    )
-    applicant_name = (
-        applicant.get("name")
-        or applicant.get("first_name")
-        or ""
-    ).strip() or "кандидат"
+    ) or None
 
-    # Если совсем ничего не достали — логируем сырые данные для анализа
     if not (vacancy_id or vacancy_title or applicant_id):
         logger.warning("HH webhook: unexpected payload: %s", data)
-        # всё равно ответим 200, чтобы не было ретраев
         return {"ok": True, "skipped": True}
 
     payload = {
         "platform": "hh",
+        "owner_id": owner_id,                   # employer_id (если есть)
         "vacancy_id": vacancy_id,
         "vacancy_title": vacancy_title,
         "applicant": {"id": applicant_id, "name": applicant_name},
     }
-
     return await _process_incoming(payload)
 
 
@@ -255,24 +253,21 @@ async def webhook_avito(request: Request):
     if not await check_and_store(key):
         return {"ok": True, "duplicate": True}
 
-    # Типичный формат Avito:
-    # { "id": "...", "version": 1, "timestamp": "...",
-    #   "payload": { "type": "message/new", "value": {
-    #       "id": "...", "chat_id": "...", "user_id": "...",
-    #       "author_id": "...", "created": "...",
-    #       "type": "text", "content": {"text": "...."}
-    #   }}}
     payload_root = data.get("payload") or {}
     val = payload_root.get("value") or {}
 
     chat_id = str(val.get("chat_id") or "")
     text = (val.get("content") or {}).get("text") or ""
-    # Название вакансии Avito в чистом вебхуке не всегда есть.
-    # Возьмём заглушку, чтобы не пусто.
     vacancy_title = "Отклик Avito"
-
-    # Будем считать chat_id «внешним id» для обратной отправки сообщений
     applicant_id = str(val.get("user_id") or val.get("author_id") or "")
+
+    # owner/account id (если Avito присылает)
+    owner_id = str(
+        data.get("account_id")
+        or payload_root.get("account_id")
+        or val.get("account_id")
+        or ""
+    ) or None
 
     if not chat_id:
         logger.warning("Avito webhook: no chat_id, payload=%s", data)
@@ -280,10 +275,10 @@ async def webhook_avito(request: Request):
 
     internal = {
         "platform": "avito",
-        "vacancy_id": "",                    # если надо — подтягивай через свой storage/по chat_id
+        "owner_id": owner_id,                   # account_id
+        "vacancy_id": "",
         "vacancy_title": vacancy_title,
         "applicant": {"id": chat_id, "name": f"user:{applicant_id or 'unknown'}"},
-        # можно прокидывать "raw_text" если хочешь сразу отправлять
         "raw_text": text,
     }
     return await _process_incoming(internal)
@@ -303,7 +298,6 @@ async def _process_incoming(payload: dict):
 
     lead_name = f'{title} — {payload.get("applicant", {}).get("name", "кандидат")}'.strip(" —")
 
-    # Логируем перед созданием лида
     logger.info(
         "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
         payload.get("platform"), lead_name, pipeline_id, stage_id
@@ -323,7 +317,6 @@ async def _process_incoming(payload: dict):
 
     lead_id = created["_embedded"]["leads"][0]["id"]
 
-    # Логируем после создания
     logger.info(
         "lead:created id=%s platform=%s vac=%s ext=%s",
         lead_id,
@@ -335,25 +328,22 @@ async def _process_incoming(payload: dict):
     await save_link(
         lead_id=lead_id,
         platform=payload.get("platform", "unknown"),
+        owner_id=payload.get("owner_id"),                              # <—
         vacancy_id=str(payload.get("vacancy_id", "")),
         external_id=str(payload.get("applicant", {}).get("id") or "") or None
     )
 
-    if kind == "master":
-        bot_username = settings.TELEGRAM_MASTER_BOT_USERNAME
-    else:
-        bot_username = settings.TELEGRAM_OPERATOR_BOT_USERNAME
-
+    bot_username = settings.TELEGRAM_MASTER_BOT_USERNAME if kind == "master" else settings.TELEGRAM_OPERATOR_BOT_USERNAME
     deep_link = f"https://t.me/{bot_username}?start={lead_id}"
     text = f"Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос: {deep_link}"
 
     if payload.get("platform") == "avito" and payload.get("applicant", {}).get("id"):
-        # negotiation_id в external_id мы уже сохранили — публикуем задачу воркеру Avito
         await publish_task({
             "platform": "avito",
             "action": "send_message",
             "external_id": payload["applicant"]["id"],
-            "text": text
+            "text": text,
+            "owner_id": payload.get("owner_id"),                        # <—
         })
 
     await amo.add_tags(lead_id, [
@@ -369,7 +359,7 @@ async def _process_incoming(payload: dict):
     return {"ok": True, "lead_id": lead_id}
 
 
-# ---------- вебхук из Amo: складываем задачи на синхронизацию ----------
+# ---------- вебхук из Amo ----------
 @router.post("/webhooks/amo")
 async def amo_webhook(request: Request):
     raw = await request.body()
@@ -380,7 +370,6 @@ async def amo_webhook(request: Request):
     hh_map_load()
     events: list[tuple[int, int]] = []
 
-    # 1) Пытаемся JSON
     try:
         data = await request.json()
         if isinstance(data, dict) and data.get("leads", {}).get("status"):
@@ -391,20 +380,19 @@ async def amo_webhook(request: Request):
     except Exception:
         pass
 
-    # 2) x-www-form-urlencoded
     if not events:
         form = await request.form()
         events = _events_from_form(form)
 
-    # 3) Кладём в очередь на синхронизацию
     for lead_id, status_id in events:
         link = await find_link(lead_id)
         if not link:
-            print("NO LINK FOR LEAD", lead_id)
+            logger.warning("NO LINK FOR LEAD %s", lead_id)
             continue
 
         platform = link.get("platform")
         ext_id = link.get("external_id")
+        owner_id = link.get("owner_id")
 
         if platform == "hh":
             state = hh_map_get(status_id)
@@ -414,7 +402,8 @@ async def amo_webhook(request: Request):
                     "action": "set_state",
                     "external_id": ext_id,
                     "target_state": state,
-                    "lead_id": lead_id
+                    "lead_id": lead_id,
+                    "owner_id": owner_id,               # employer_id
                 })
         elif platform == "avito":
             if settings.AVITO_MARK_READ_ON_STAGE_CHANGE and ext_id:
@@ -422,7 +411,8 @@ async def amo_webhook(request: Request):
                     "platform": "avito",
                     "action": "mark_read",
                     "external_id": ext_id,
-                    "lead_id": lead_id
+                    "lead_id": lead_id,
+                    "owner_id": owner_id,               # account_id
                 })
 
     return {"ok": True, "handled": len(events)}
@@ -448,10 +438,17 @@ async def rmq_test(payload: dict = None):
 
 async def _handle_task(p: dict):
     if p["platform"] == "hh" and p["action"] == "set_state":
-        await hh_adapt.set_employer_state(p["external_id"], p["target_state"])
+        await hh_adapt.set_employer_state(
+            response_id=p["external_id"],
+            target_state=p["target_state"],
+            employer_id=p.get("owner_id"),
+        )
         return
     if p["platform"] == "avito" and p["action"] == "mark_read":
-        await avito_adapt.mark_read(p["external_id"])
+        await avito_adapt.mark_read(p["external_id"], owner_id=p.get("owner_id"))
+        return
+    if p["platform"] == "avito" and p["action"] == "send_message":
+        await avito_adapt.send_message(p["external_id"], p.get("text") or "", owner_id=p.get("owner_id"))
         return
     if p["platform"] == "amo" and p["action"] == "amo_create_lead":
         amo = await AmoClient.create()

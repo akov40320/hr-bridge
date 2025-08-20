@@ -1,24 +1,21 @@
 from __future__ import annotations
-
 from typing import Any, Optional
-
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
-
 from app.db import get_session
 from app.models import LeadLink
 
 
-# --- Привязка сделки к внешнему объекту (HH/Avito) -------------------------
-
 async def save_link(
+    *,
     lead_id: int,
     platform: str,
+    owner_id: Optional[str],
     vacancy_id: str,
     external_id: Optional[str],
 ) -> None:
     """
-    Upsert связи lead ↔ внешний отклик (response_id/negotiation_id).
+    Upsert связи lead ↔ внешний объект (HH/Avito), с учётом owner_id (employer_id/account_id).
     """
     async with get_session() as s:
         stmt = (
@@ -26,6 +23,7 @@ async def save_link(
             .values(
                 lead_id=lead_id,
                 platform=platform,
+                owner_id=owner_id,
                 vacancy_id=vacancy_id,
                 external_id=external_id,
             )
@@ -33,6 +31,7 @@ async def save_link(
                 index_elements=[LeadLink.lead_id],
                 set_={
                     "platform": platform,
+                    "owner_id": owner_id,
                     "vacancy_id": vacancy_id,
                     "external_id": external_id,
                 },
@@ -43,22 +42,16 @@ async def save_link(
 
 
 async def find_link(lead_id: int) -> Optional[dict[str, Any]]:
-    """
-    Достаёт связь по lead_id. Возвращает словарь или None.
-    """
     async with get_session() as s:
         row = (
-            await s.execute(
-                select(LeadLink).where(LeadLink.lead_id == lead_id)
-            )
+            await s.execute(select(LeadLink).where(LeadLink.lead_id == lead_id))
         ).scalar_one_or_none()
-
         if not row:
             return None
-
         return {
             "lead_id": row.lead_id,
             "platform": row.platform,
+            "owner_id": row.owner_id,          # <- ключ для выбора токена
             "vacancy_id": row.vacancy_id,
             "external_id": row.external_id,
         }

@@ -10,19 +10,19 @@ class OAuth2RefreshError(Exception):
 
 
 async def refresh_tokens(
-        *,
-        service: str,
-        token_url: str,
-        client_id: str,
-        client_secret: str,
-        refresh_token: str,
-        redirect_uri: Optional[str] = None,
-        use_basic_auth: bool = False,
+    *,
+    service: str,
+    token_url: str,
+    client_id: str,
+    client_secret: str,
+    refresh_token: str,
+    redirect_uri: Optional[str] = None,
+    use_basic_auth: bool = False,
+    owner_id: Optional[str] = None,
 ) -> TokenData:
     """
-    Универсальный рефреш OAuth2 (grant_type=refresh_token).
-    HH — без basic auth (client_id/secret в теле).
-    Avito — с BasicAuth (client_id/secret в заголовке), тело минимальное.
+    Универсальный refresh_token.
+    HH — client_id/secret в теле; Avito — BasicAuth.
     """
     data = {"grant_type": "refresh_token", "refresh_token": refresh_token}
     auth = httpx.BasicAuth(client_id, client_secret) if use_basic_auth else None
@@ -40,30 +40,31 @@ async def refresh_tokens(
     d = r.json()
     server_time = int(d.get("server_time", time.time()))
     expires_in = int(d.get("expires_in", 3600))
+
     res: TokenData = {
         "access_token": d["access_token"],
         "refresh_token": d.get("refresh_token", refresh_token),
         "expires_at": server_time + expires_in - 120,
     }
-    # сохранить
-    await DbTokenStore(service).save(res)
+    await DbTokenStore(service, owner_id).save(res)
     return res
 
 
 async def ensure_fresh_access(
-        *,
-        service: str,
-        token_url: str,
-        client_id: str,
-        client_secret: str,
-        redirect_uri: Optional[str] = None,
-        use_basic_auth: bool = False,
-        margin_sec: int = 120,
+    *,
+    service: str,
+    token_url: str,
+    client_id: str,
+    client_secret: str,
+    redirect_uri: Optional[str] = None,
+    use_basic_auth: bool = False,
+    margin_sec: int = 120,
+    owner_id: Optional[str] = None,
 ) -> str:
     """
-    Возвращает актуальный access_token; если скоро истекает — рефрешит.
+    Возвращает свежий access_token, обновляя при необходимости.
     """
-    store = DbTokenStore(service)
+    store = DbTokenStore(service, owner_id)
     data = await store.load()
     now = time.time()
     if now > data["expires_at"] - margin_sec:
@@ -75,5 +76,6 @@ async def ensure_fresh_access(
             refresh_token=data["refresh_token"],
             redirect_uri=redirect_uri,
             use_basic_auth=use_basic_auth,
+            owner_id=owner_id,
         )
     return data["access_token"]
