@@ -17,31 +17,9 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 log = logging.getLogger("dburl")
 
 
-def _to_asyncpg_dsn(dsn: str) -> str:
-    """
-    Если пришёл postgresql://... → превратим в postgresql+asyncpg://...
-    Если уже asyncpg — оставляем как есть.
-    """
-    u = make_url(dsn)
-    backend = u.get_backend_name()  # 'postgresql' | 'sqlite' ...
-    driver = u.get_driver_name() or ""  # 'psycopg2' | 'asyncpg' | ''
-    if backend in ("postgresql", "postgres") and "asyncpg" not in driver:
-        u = u.set(drivername="postgresql+asyncpg")
-    return str(u)
 
 
-def _mask(u: str) -> str:
-    return re.sub(r'//([^:]+):[^@]+@', r'//\1:***@', u)
-
-
-raw = settings.DATABASE_URL
-ASYNC_DSN = _to_asyncpg_dsn(settings.DATABASE_URL)
-log.warning("DATABASE_URL REPR: %r len=%d sha256=%s",
-            raw, len(raw), hashlib.sha256(raw.encode()).hexdigest())
-log.warning("DATABASE_URL MASK: %s", _mask(raw))
-log.warning("ASYNC_DSN      : %s", _mask(ASYNC_DSN))
-
-
+ASYNC_DSN = settings.DATABASE_URL
 
 
 engine = create_async_engine(

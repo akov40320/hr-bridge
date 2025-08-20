@@ -21,10 +21,6 @@ url = os.getenv("DATABASE_URL")
 if not url:
     raise RuntimeError("DATABASE_URL не задан (ни в ENV, ни в .env).")
 
-# asyncpg любит ssl=require
-if "+asyncpg" in url and "sslmode=require" in url:
-    url = url.replace("sslmode=require", "ssl=require")
-
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
