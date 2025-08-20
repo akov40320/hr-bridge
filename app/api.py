@@ -82,9 +82,6 @@ async def hh_callback(code: str | None = None, state: str | None = None):
 # ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
 def avito_start(account_id: str | None = Query(default=None)):
-    """
-    Если нужен мульти-аккаунт Avito, передавай ?account_id=<...> — мы положим его в state и свяжем токен.
-    """
     if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
         return {
             "ok": False,
@@ -96,6 +93,11 @@ def avito_start(account_id: str | None = Query(default=None)):
                 "AVITO_TOKEN_URL": bool(settings.AVITO_TOKEN_URL),
             },
         }
+
+    # нормализуем любые пробелы/запятые -> запятые
+    raw_scope = getattr(settings, "AVITO_SCOPE", "") or ""
+    scope = ",".join([s.strip() for s in re.split(r"[,\s]+", raw_scope) if s.strip()])
+
     state = f"acc:{account_id}" if account_id else "acc:default"
     params = {
         "response_type": "code",
@@ -103,8 +105,8 @@ def avito_start(account_id: str | None = Query(default=None)):
         "redirect_uri": settings.AVITO_REDIRECT_URI,
         "state": state,
     }
-    if getattr(settings, "AVITO_SCOPE", ""):
-        params["scope"] = settings.AVITO_SCOPE
+    if scope:
+        params["scope"] = scope  # важно: запятые, без пробелов
 
     return RedirectResponse(f"{settings.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
