@@ -1,8 +1,13 @@
+import hashlib
+import logging
+import re
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.engine.url import make_url
 from app.config import settings
+
+log = logging.getLogger("dburl")
 
 
 def _to_asyncpg_dsn(dsn: str) -> str:
@@ -18,11 +23,19 @@ def _to_asyncpg_dsn(dsn: str) -> str:
     return str(u)
 
 
-ASYNC_DSN = _to_asyncpg_dsn(settings.DATABASE_URL)
+def _mask(u: str) -> str:
+    return re.sub(r'//([^:]+):[^@]+@', r'//\1:***@', u)
 
+
+raw = settings.DATABASE_URL
+ASYNC_DSN = _to_asyncpg_dsn(settings.DATABASE_URL)
+log.warning("DATABASE_URL REPR: %r len=%d sha256=%s",
+            raw, len(raw), hashlib.sha256(raw.encode()).hexdigest())
+log.warning("DATABASE_URL MASK: %s", _mask(raw))
+log.warning("ASYNC_DSN      : %s", _mask(ASYNC_DSN))
 engine = create_async_engine(
     ASYNC_DSN,
-    echo=False,  # при необходимости сделай это настройкой
+    echo=False,
     pool_pre_ping=True,
 )
 
