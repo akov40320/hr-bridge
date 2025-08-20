@@ -22,6 +22,7 @@ WORKER_MAX_ATTEMPTS = int(os.getenv("WORKER_MAX_ATTEMPTS", "6"))
 master_bot = Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) if settings.TELEGRAM_MASTER_BOT_TOKEN else None
 operator_bot = Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) if settings.TELEGRAM_OPERATOR_BOT_TOKEN else None
 
+
 async def _tg_send_with_retry(bot: Bot, chat_id: int, text: str):
     backoff = 0.5
     for _ in range(7):
@@ -36,6 +37,7 @@ async def _tg_send_with_retry(bot: Bot, chat_id: int, text: str):
             await asyncio.sleep(backoff)
             backoff *= 2
 
+
 async def _with_backoff(coro, *args, **kwargs):
     backoff = 0.5
     for _ in range(6):
@@ -47,6 +49,7 @@ async def _with_backoff(coro, *args, **kwargs):
             await asyncio.sleep(backoff)
             backoff *= 2
 
+
 def _is_transient(e: Exception) -> bool:
     if isinstance(e, (TimeoutException, ConnectError)):
         return True
@@ -54,9 +57,19 @@ def _is_transient(e: Exception) -> bool:
         return e.response.status_code == 429 or 500 <= e.response.status_code < 600
     return False
 
+
 async def handle(payload: dict, attempts: int):
     try:
-        plat = payload.get("platform"); act = payload.get("action")
+        plat = payload.get("platform");
+        act = payload.get("action")
+
+        if plat == "hh" and act == "send_message":
+            await hh_adapt.send_message(
+                payload["external_id"],  # response_id
+                payload["text"],
+                employer_id=payload.get("owner_id"),
+            )
+            return
 
         # --- Debug
         if plat == "debug" and act == "echo":
@@ -69,7 +82,8 @@ async def handle(payload: dict, attempts: int):
             return
 
         if plat == "hh" and act == "set_state":
-            await hh_adapt.set_employer_state(payload["external_id"], payload["target_state"], employer_id=payload.get("owner_id"))
+            await hh_adapt.set_employer_state(payload["external_id"], payload["target_state"],
+                                              employer_id=payload.get("owner_id"))
             return
 
         if plat == "avito" and act == "mark_read":
@@ -176,8 +190,10 @@ async def handle(payload: dict, attempts: int):
             logger.exception("Task failed terminally")
             await publish_dlq(payload, attempts + 1, str(e))
 
+
 async def run_forever():
     await consume(handle)
+
 
 if __name__ == "__main__":
     asyncio.run(run_forever())

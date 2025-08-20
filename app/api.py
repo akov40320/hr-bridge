@@ -1,11 +1,11 @@
 import logging
 import re
 import secrets
-import time, os
+import time
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Request, Depends, Query
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 
 from app.config import settings
@@ -17,6 +17,7 @@ from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh
 from app.adapters import hh as hh_adapt, avito as avito_adapt
 from app.token_store import TokenData, DbTokenStore
 from app.guards import require_admin
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -84,7 +85,8 @@ async def hh_callback(code: str | None = None, state: str | None = None):
 
 @router.get("/oauth/avito/start")
 def avito_start():
-    if not (settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
+    if not (
+            settings.AVITO_CLIENT_ID and settings.AVITO_REDIRECT_URI and settings.AVITO_AUTHORIZE_URL and settings.AVITO_TOKEN_URL):
         return {"ok": False, "error": "avito env not set"}
 
     raw_scope = getattr(settings, "AVITO_SCOPE", "") or ""
@@ -138,10 +140,10 @@ async def avito_callback(code: str | None = None, state: str | None = None):
             )
             me.raise_for_status()
             account_id = str(me.json().get("id") or "")
+            if not account_id:
+                return {"ok": False, "provider": "avito", "step": "self", "error": "no account id"}
     except Exception as e:
-        # безопасный фоллбек
-        account_id = "default"
-        logger.warning("Avito callback: fail to get account_id, fallback=default, err=%s", e)
+        return {"ok": False, "provider": "avito", "step": "self", "error": str(e)}
 
     try:
         expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
@@ -255,14 +257,46 @@ async def amo_callback(code: str | None = None, state: str | None = None):
 
 
 
-def route_type_by_text(text: str) -> str:
-    t = (text or "").lower()
-    if settings.ROUTING_KEYWORD_MASTER in t:
-        return "master"
-    if settings.ROUTING_KEYWORD_OPERATOR in t:
-        return "operator"
-    return "operator"
+def _norm(s: str) -> str:
+    return (s or "").strip().lower()
 
+def _extract_tags(obj) -> list[str]:
+    """
+    Пытаемся собрать текстовые теги из разных возможных структур HH/Avito.
+    Поддерживает: list[str], list[dict{name|title}], dict{name|title}, str.
+    Лишнего шума не создаёт, просто best-effort.
+    """
+    tags: list[str] = []
+    def take(x):
+        if isinstance(x, str) and x.strip():
+            tags.append(x.strip())
+        elif isinstance(x, dict):
+            for k in ("name", "title", "value"):
+                v = x.get(k)
+                if isinstance(v, str) and v.strip():
+                    tags.append(v.strip())
+    if isinstance(obj, list):
+        for it in obj: take(it)
+    else:
+        take(obj)
+    return tags
+
+def _route_kind(title: str, tags: list[str]) -> str:
+    t = _norm(title)
+    all_tags = [_norm(x) for x in tags if x]
+    km = _norm(settings.ROUTING_KEYWORD_MASTER)
+    ko = _norm(settings.ROUTING_KEYWORD_OPERATOR)
+
+    # 1) по тегам
+    if any(km in x for x in all_tags): return "master"
+    if any(ko in x for x in all_tags): return "operator"
+
+    # 2) по заголовку
+    if km and km in t: return "master"
+    if ko and ko in t: return "operator"
+
+    # 3) иначе игнор
+    return "ignore"
 
 # ---------- входящие вебхуки ----------
 @router.post("/webhooks/hh")
@@ -278,38 +312,53 @@ async def webhook_hh(request: Request):
         return {"ok": True, "duplicate": True}
 
     obj = (
-        data.get("object")
-        or data.get("negotiation")
-        or data.get("response")
-        or data.get("payload")
-        or {}
+            data.get("object")
+            or data.get("negotiation")
+            or data.get("response")
+            or data.get("payload")
+            or {}
+    )
+
+    # response/negotiation id — КЛЮЧЕВОЕ
+    response_id = str(
+        obj.get("id")
+        or data.get("response_id")
+        or obj.get("negotiation_id")
+        or ""
     )
 
     vacancy = obj.get("vacancy") or {}
+
+    hh_tags = []
+    for key in ("labels", "tags", "specializations", "professional_roles", "key_skills", "rubrics"):
+        v = vacancy.get(key)
+        if v:
+            hh_tags.extend(_extract_tags(v))
+
     applicant = (obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {})
 
     vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "")
     vacancy_title = (vacancy.get("name") or data.get("vacancy_title") or "")
-    applicant_id = str(applicant.get("id") or obj.get("resume", {}).get("id") or data.get("applicant_id") or "")
     applicant_name = (applicant.get("name") or applicant.get("first_name") or "").strip() or "кандидат"
 
-    # возможно, в webhooks есть работодатель/owner
+    # employer_id (владалец токена)
     owner_id = str(
         data.get("employer", {}).get("id")
         or obj.get("employer", {}).get("id")
         or ""
     ) or None
 
-    if not (vacancy_id or vacancy_title or applicant_id):
-        logger.warning("HH webhook: unexpected payload: %s", data)
+    if not response_id:
+        logger.warning("HH webhook: no response_id; payload=%s", data)
         return {"ok": True, "skipped": True}
 
     payload = {
         "platform": "hh",
-        "owner_id": owner_id,                   # employer_id (если есть)
+        "owner_id": owner_id,
         "vacancy_id": vacancy_id,
         "vacancy_title": vacancy_title,
-        "applicant": {"id": applicant_id, "name": applicant_name},
+        "vacancy_tags": hh_tags,
+        "applicant": {"id": response_id, "name": applicant_name},
     }
     return await _process_incoming(payload)
 
@@ -331,10 +380,21 @@ async def webhook_avito(request: Request):
 
     chat_id = str(val.get("chat_id") or "")
     text = (val.get("content") or {}).get("text") or ""
-    vacancy_title = "Отклик Avito"
+
+    # Пытаемся вытащить ID и заголовок объявления
+    item = (val.get("item") or {})  # иногда Avito кладёт сюда
+    ctx = (val.get("context") or {})  # иногда сюда
+    item_id = str(item.get("id") or ctx.get("item_id") or "")
+    vacancy_title = (item.get("title") or val.get("title") or "Отклик Avito")
+
+    avito_tags = []
+    for key in ("tags", "category", "rubric", "params"):
+        v = item.get(key) or ctx.get(key)
+        if v:
+            avito_tags.extend(_extract_tags(v))
+
     applicant_id = str(val.get("user_id") or val.get("author_id") or "")
 
-    # owner/account id (если Avito присылает)
     owner_id = str(
         data.get("account_id")
         or payload_root.get("account_id")
@@ -348,9 +408,10 @@ async def webhook_avito(request: Request):
 
     internal = {
         "platform": "avito",
-        "owner_id": owner_id,                   # account_id
-        "vacancy_id": "",
+        "owner_id": owner_id,
+        "vacancy_id": item_id,
         "vacancy_title": vacancy_title,
+        "vacancy_tags": avito_tags,  # <— добавили
         "applicant": {"id": chat_id, "name": f"user:{applicant_id or 'unknown'}"},
         "raw_text": text,
     }
@@ -359,8 +420,13 @@ async def webhook_avito(request: Request):
 
 async def _process_incoming(payload: dict):
     title = payload.get("vacancy_title") or ""
-    kind = route_type_by_text(title)
+    tags = payload.get("vacancy_tags") or []
+    kind = _route_kind(title, tags)
     amo = await AmoClient.create()
+
+    if kind == "ignore":
+        logger.info("routing: ignore (title=%r, tags=%r)", title, tags)
+        return {"ok": True, "ignored": True, "reason": "no-keywords"}
 
     if kind == "master":
         pipeline_id = settings.AMO_PIPELINE_ID_MASTER
@@ -390,6 +456,15 @@ async def _process_incoming(payload: dict):
 
     lead_id = created["_embedded"]["leads"][0]["id"]
 
+    phone = (payload.get("applicant", {}) or {}).get("phone")
+    city = (payload.get("applicant", {}) or {}).get("city")
+    await _enrich_lead(
+        amo, lead_id,
+        applicant_name=payload.get("applicant", {}).get("name"),
+        phone=phone, city=city,
+        vacancy_title=payload.get("vacancy_title"),
+    )
+
     logger.info(
         "lead:created id=%s platform=%s vac=%s ext=%s",
         lead_id,
@@ -401,7 +476,7 @@ async def _process_incoming(payload: dict):
     await save_link(
         lead_id=lead_id,
         platform=payload.get("platform", "unknown"),
-        owner_id=payload.get("owner_id"),                              # <—
+        owner_id=payload.get("owner_id"),  # <—
         vacancy_id=str(payload.get("vacancy_id", "")),
         external_id=str(payload.get("applicant", {}).get("id") or "") or None
     )
@@ -416,7 +491,16 @@ async def _process_incoming(payload: dict):
             "action": "send_message",
             "external_id": payload["applicant"]["id"],
             "text": text,
-            "owner_id": payload.get("owner_id"),                        # <—
+            "owner_id": payload.get("owner_id"),  # <—
+        })
+
+    if payload.get("platform") == "hh" and payload.get("applicant", {}).get("id"):
+        await publish_task({
+            "platform": "hh",
+            "action": "send_message",
+            "external_id": payload["applicant"]["id"],  # response_id
+            "text": text,
+            "owner_id": payload.get("owner_id"),
         })
 
     await amo.add_tags(lead_id, [
@@ -476,7 +560,7 @@ async def amo_webhook(request: Request):
                     "external_id": ext_id,
                     "target_state": state,
                     "lead_id": lead_id,
-                    "owner_id": owner_id,               # employer_id
+                    "owner_id": owner_id,  # employer_id
                 })
         elif platform == "avito":
             if settings.AVITO_MARK_READ_ON_STAGE_CHANGE and ext_id:
@@ -485,7 +569,7 @@ async def amo_webhook(request: Request):
                     "action": "mark_read",
                     "external_id": ext_id,
                     "lead_id": lead_id,
-                    "owner_id": owner_id,               # account_id
+                    "owner_id": owner_id,  # account_id
                 })
 
     return {"ok": True, "handled": len(events)}
@@ -496,8 +580,7 @@ async def amo_webhook(request: Request):
 async def get_hh_mapping():
     return hh_map_load()
 
-
-@admin.put("/admin/hh-mapping")
+@admin.put("/hh-mapping")
 async def put_hh_mapping(payload: dict):
     return {"ok": True, "mapping": hh_map_set(payload)}
 
@@ -535,3 +618,43 @@ async def dedup_clean(hours: int = 72):
     deleted = await cleanup_older_than(hours * 3600)
     logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
+
+async def _enrich_lead(amo: AmoClient, lead_id: int, *, applicant_name: str | None,
+                       phone: str | None, city: str | None, vacancy_title: str | None):
+    # контакт
+    contact_id = None
+    if applicant_name or phone:
+        try:
+            cr = await amo.create_contact(applicant_name or "Кандидат", phone)
+            contact_id = cr["_embedded"]["contacts"][0]["id"]
+            await amo.link_contact_to_lead(lead_id, contact_id)
+        except Exception as e:
+            logger.warning("create/link contact failed: %s", e)
+
+    # CF лида (если заданы ids)
+    cf = {}
+    if settings.AMO_CF_LEAD_CITY_ID:
+        cf[settings.AMO_CF_LEAD_CITY_ID] = city or ""
+    if settings.AMO_CF_LEAD_VACANCY_TITLE_ID:
+        cf[settings.AMO_CF_LEAD_VACANCY_TITLE_ID] = vacancy_title or ""
+    if settings.AMO_CF_LEAD_APPLICANT_PHONE_ID:
+        cf[settings.AMO_CF_LEAD_APPLICANT_PHONE_ID] = phone or ""
+    if settings.AMO_CF_LEAD_APPLICANT_NAME_ID:
+        cf[settings.AMO_CF_LEAD_APPLICANT_NAME_ID] = applicant_name or ""
+    try:
+        await amo.update_lead_custom_fields(lead_id, cf)
+    except Exception as e:
+        logger.warning("update lead CF failed: %s", e)
+
+    # если CF не настроены — продублируем в заметку
+    if not any([settings.AMO_CF_LEAD_CITY_ID, settings.AMO_CF_LEAD_VACANCY_TITLE_ID,
+                settings.AMO_CF_LEAD_APPLICANT_PHONE_ID, settings.AMO_CF_LEAD_APPLICANT_NAME_ID]):
+        try:
+            note = "Данные кандидата:\n" \
+                   f"• Имя: {applicant_name or '-'}\n" \
+                   f"• Телефон: {phone or '-'}\n" \
+                   f"• Город: {city or '-'}\n" \
+                   f"• Вакансия: {vacancy_title or '-'}"
+            await amo.add_note(lead_id, note)
+        except Exception as e:
+            logger.warning("add note (candidate data) error: %s", e)

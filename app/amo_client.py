@@ -88,3 +88,26 @@ class AmoClient:
             "params": {"text": text}
         }]
         return await self._request("POST", url, json=body)
+
+    async def create_contact(self, name: str, phone: str | None = None):
+        url = f"{self.base}/api/v4/contacts"
+        body = [{
+            "name": name,
+            **({"custom_fields_values": [
+                {"field_code": "PHONE", "values": [{"value": phone}]}
+            ]} if phone else {})
+        }]
+        return await self._request("POST", url, json=body)
+
+    async def link_contact_to_lead(self, lead_id: int, contact_id: int):
+        url = f"{self.base}/api/v4/leads/{lead_id}/link"
+        body = [{"to_entity_id": contact_id, "to_entity_type": "contacts"}]
+        return await self._request("POST", url, json=body)
+
+    async def update_lead_custom_fields(self, lead_id: int, fields: dict[int, str]):
+        if not fields:
+            return None
+        url = f"{self.base}/api/v4/leads"
+        cfv = [{"field_id": fid, "values": [{"value": val}]} for fid, val in fields.items() if val is not None]
+        body = [{"id": lead_id, "custom_fields_values": cfv}]
+        return await self._request("PATCH", url, json=body)
