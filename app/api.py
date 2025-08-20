@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from app.config import settings
 from app.amo_client import AmoClient, ReauthRequired
 from app.dedup import calc_key, check_and_store, cleanup_older_than
+from app.hh_autofill import autofill_hh_mapping
 from app.queue import publish_task
 from app.store import save_link, find_link
 from app.hh_mapping import get as hh_map_get, load as hh_map_load, set_all as hh_map_set
@@ -269,6 +270,7 @@ def _route_kind(*, desc: str = "", raw: str = "") -> str:
     val = _norm(m.group(1))
     return "master" if val.startswith("мастер") else "operator"
 
+
 # ---------- входящие вебхуки ----------
 @router.post("/webhooks/hh")
 async def webhook_hh(request: Request):
@@ -299,8 +301,6 @@ async def webhook_hh(request: Request):
     )
 
     vacancy = obj.get("vacancy") or {}
-
-
 
     applicant = (obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {})
 
@@ -356,7 +356,6 @@ async def webhook_avito(request: Request):
     vacancy_title = (item.get("title") or val.get("title") or "Отклик Avito")
     vacancy_desc = (item.get("description") or ctx.get("description") or "")
 
-
     applicant_id = str(val.get("user_id") or val.get("author_id") or "")
 
     owner_id = str(
@@ -401,8 +400,6 @@ async def _process_incoming(payload: dict):
                 name = (name if name and name != "кандидат" else (extra.get("name") or name))
         except Exception as e:
             logger.warning("HH enrich failed: %s", e)
-
-
 
     if kind == "ignore":
         logger.info("routing: ignore (no hashtags) title=%r", title)
@@ -534,14 +531,44 @@ async def amo_webhook(request: Request):
         if platform == "hh":
             state = hh_map_get(status_id)
             if state and ext_id:
+                final_state = state
+                if _is_refusal_code(state) and settings.AMO_CF_REFUSAL_REASON_ID:
+                    try:
+                        amo = await AmoClient.create()
+                        lead = await amo.get_lead(lead_id)
+                        cfv = lead.get("custom_fields_values") or []
+                        reason_text = None
+                        for f in cfv:
+                            if int(f.get("field_id") or 0) == int(settings.AMO_CF_REFUSAL_REASON_ID):
+                                vals = f.get("values") or []
+                                if vals:
+                                    v = vals[0].get("value")
+                                    if isinstance(v, dict):
+                                        reason_text = v.get("value") or v.get("text") or ""
+                                    else:
+                                        reason_text = v or ""
+
+                                break
+                        mapped = _REFUSAL_TEXT_TO_HH.get(_norm_reason(reason_text))
+                        if mapped:
+                            final_state = mapped
+                        elif reason_text is None or not reason_text.strip():
+                            try:
+                                pretty = _refusal_text(state) or state
+                                await amo.update_lead_custom_fields(lead_id,
+                                                                    {settings.AMO_CF_REFUSAL_REASON_ID: pretty})
+                            except Exception:
+                                logger.warning("fill refusal reason CF failed", exc_info=True)
+                    except Exception:
+                        logger.warning("read refusal reason CF failed", exc_info=True)
                 await publish_task({
                     "platform": "hh",
                     "action": "set_state",
                     "external_id": ext_id,
-                    "target_state": state,
+                    "target_state": final_state,
                     "lead_id": lead_id,
-                    "owner_id": owner_id,  # employer_id
-                })
+                    "owner_id": owner_id, })
+
         elif platform == "avito":
             if settings.AVITO_MARK_READ_ON_STAGE_CHANGE and ext_id:
                 await publish_task({
@@ -660,3 +687,41 @@ async def hh_states(owner_id: str | None = None):
     items = (r.json() or {}).get("negotiations_state") or []
     # вернем список {id, name}
     return {"ok": True, "states": [{"id": it.get("id"), "name": it.get("name")} for it in items if it]}
+
+
+_REFUSAL_NAMES = {
+    "discard_by_employer": "Не подходит",
+    "discard_by_applicant": "Кандидат отказался",
+    "rejected_by_applicant": "Кандидат отказался",
+    "discard_no_interaction": "Не выходит на связь",
+    "discard_vacancy_closed": "Вакансия закрыта",
+    "discard_to_other_vacancy": "Перевод на другую вакансию",
+}
+
+
+def _is_refusal_code(code: str | None) -> bool:
+    return bool(code) and (code.startswith("discard") or code.startswith("reject"))
+
+
+def _refusal_text(code: str | None) -> str | None:
+    return _REFUSAL_NAMES.get(code or "")
+
+
+# Текст причины (в Amo CF) -> код HH
+_REFUSAL_TEXT_TO_HH = {
+    "не подходит": "discard_by_employer",
+    "кандидат отказался": "discard_by_applicant",
+    "не выходит на связь": "discard_no_interaction",
+    "вакансия закрыта": "discard_vacancy_closed",
+    "перевод на другую вакансию": "discard_to_other_vacancy",
+}
+
+
+def _norm_reason(s: str | None) -> str:
+    return (s or "").strip().lower()
+
+
+@admin.post("/hh-autofill")
+async def hh_autofill_admin():
+    mapping = await autofill_hh_mapping()
+    return {"ok": True, "mapping": mapping}

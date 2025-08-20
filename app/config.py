@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     AMO_CF_LEAD_APPLICANT_PHONE_ID: int = 0
     AMO_CF_LEAD_APPLICANT_NAME_ID: int = 0
 
+    AMO_CF_REFUSAL_REASON_ID: int = 0
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     RMQ_DLQ_QUEUE: str = "bridge.tasks.dlq"

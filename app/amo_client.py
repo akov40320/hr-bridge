@@ -111,3 +111,7 @@ class AmoClient:
         cfv = [{"field_id": fid, "values": [{"value": val}]} for fid, val in fields.items() if val is not None]
         body = [{"id": lead_id, "custom_fields_values": cfv}]
         return await self._request("PATCH", url, json=body)
+
+    async def get_lead(self, lead_id: int):
+              url = f"{self.base}/api/v4/leads/{lead_id}"
+              return await self._request("GET", url)
