@@ -1,16 +1,14 @@
 import os, asyncio
 from logging.config import fileConfig
 from alembic import context
-from sqlalchemy import pool, create_engine
+from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
-
-from app.db import Base
+from app.db import Base  # важно: без подключений к БД!
 from app import models  # noqa: F401
 
 config = context.config
@@ -22,6 +20,10 @@ target_metadata = Base.metadata
 url = os.getenv("DATABASE_URL")
 if not url:
     raise RuntimeError("DATABASE_URL не задан (ни в ENV, ни в .env).")
+
+# asyncpg любит ssl=require
+if "+asyncpg" in url and "sslmode=require" in url:
+    url = url.replace("sslmode=require", "ssl=require")
 
 
 def do_run_migrations(connection: Connection) -> None:
@@ -64,7 +66,6 @@ def run_migrations_online_sync() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    # Авто-выбор: asyncpg → асинхронно, иначе синхронно
     if "+asyncpg" in url:
         asyncio.run(run_migrations_online_async())
     else:
