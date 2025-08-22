@@ -9,49 +9,15 @@ from app.store_survey import (
     start_or_reset_survey, get_survey, store_answer_and_advance, delete_survey
 )
 from app.queue import publish_task
+from app.services.survey import (
+    parse_start_arg,
+    survey_prompt,
+    survey_summary,
+    pretty_tg_identity,
+    mark_went_to_bot_async,
+)
 
 logger = logging.getLogger("tg.router")
-
-def _parse_start_arg(text: str) -> int | None:
-    parts = (text or "").strip().split(maxsplit=1)
-    if len(parts) == 2 and parts[0].startswith("/start"):
-        try:
-            return int(parts[1])
-        except Exception:
-            return None
-    return None
-
-def _survey_prompt(step: int) -> str:
-    if step == 0: return "В каком вы городе?"
-    if step == 1: return "Опишите кратко опыт по вакансии."
-    if step == 2: return "Когда вам удобно на связи? (например, завтра после 14:00)"
-    return "Спасибо, опрос завершён!"
-
-def _survey_summary(city: str | None, experience: str | None, time_pref: str | None) -> str:
-    return (
-        "Итоги опроса:\n"
-        f"• Город: {city or '-'}\n"
-        f"• Опыт: {experience or '-'}\n"
-        f"• Связь: {time_pref or '-'}"
-    )
-
-def _pretty_tg_identity(m: Message) -> str:
-    return f"@{m.from_user.username}" if m.from_user.username else f"id:{m.from_user.id}"
-
-async def mark_went_to_bot_async(lead_id: int, bot_kind: str, identity: str):
-    # переносим на воркер: добавляем заметку и тег через RMQ
-    await publish_task({
-        "platform": "amo",
-        "action": "amo_add_note",
-        "lead_id": lead_id,
-        "text": f"[{bot_kind}] Кандидат перешёл в бота (TG {identity}).",
-    })
-    await publish_task({
-        "platform": "amo",
-        "action": "amo_add_tags",
-        "lead_id": lead_id,
-        "tags": [settings.AMO_TAG_WENT_TO_BOT],
-    })
 
 def make_router(bot_kind: str) -> Dispatcher:
     dp = Dispatcher()
@@ -74,16 +40,16 @@ def make_router(bot_kind: str) -> Dispatcher:
 
     @dp.message(CommandStart())
     async def on_start(m: Message):
-        lead_id = _parse_start_arg(m.text or "")
+        lead_id = parse_start_arg(m.text or "")
         if not lead_id:
             await m.answer("Нужно открыть бота по ссылке из сообщения, чтобы я увидел вашу заявку.")
             return
 
         await upsert_tg_link(m.from_user.id, bot_kind, lead_id)
         await start_or_reset_survey(m.from_user.id, bot_kind, lead_id)
-        await mark_went_to_bot_async(lead_id, bot_kind, _pretty_tg_identity(m))
+        await mark_went_to_bot_async(lead_id, bot_kind, pretty_tg_identity(m))
 
-        greeting = "Здравствуйте! Нужны пару уточнений по заявке.\n\n" + _survey_prompt(0)
+        greeting = "Здравствуйте! Нужны пару уточнений по заявке.\n\n" + survey_prompt(0)
         await _answer_and_mirror(m, greeting, bot_kind, lead_id, conv_id=None)
 
         logger.info("[%s] /start user_id=%s lead_id=%s", bot_kind, m.from_user.id, lead_id)
@@ -130,9 +96,9 @@ def make_router(bot_kind: str) -> Dispatcher:
                 return
 
             if survey.step <= 2:
-                await _answer_and_mirror(m, _survey_prompt(survey.step), bot_kind, lead_id, conv_id)
+                await _answer_and_mirror(m, survey_prompt(survey.step), bot_kind, lead_id, conv_id)
             else:
-                summary = _survey_summary(survey.city, survey.experience, survey.time_pref)
+                summary = survey_summary(survey.city, survey.experience, survey.time_pref)
                 # ставим тег и заметку — тоже через воркер
                 await publish_task({
                     "platform": "amo",
