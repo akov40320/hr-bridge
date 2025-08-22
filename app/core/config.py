@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     RMQ_RETRY_QUEUE: str = "bridge.tasks.retry"
     RMQ_RETRY_TTL_MS: int = 5000
     RMQ_ENABLE_CONSUMER: bool = True
+    RMQ_PREFETCH: int = 32
     # DB
     DATABASE_URL: str = "postgresql+asyncpg://hr:hr@localhost:5432/hr"
 

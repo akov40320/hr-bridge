@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
-from app.services.queue import publish_task
+from app.services.queue import rmq
 from app.db.token_store import DbTokenStore, TokenData
 from app.http_client import get_http_client
 
@@ -307,7 +307,7 @@ async def amo_callback(
         )
 
         try:
-            await publish_task({"platform": "system", "action": "hh_autofill"})
+            await rmq.publish_task({"platform": "system", "action": "hh_autofill"})
             logger.info("Queued hh_autofill after amo oauth")
         except Exception:
             logger.exception("Failed to queue hh_autofill after amo oauth")

@@ -10,7 +10,7 @@ from app.http_client import get_http_client
 from app.core.config import settings
 from app.services.dedup import cleanup_older_than
 from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
-from app.services.queue import publish_task
+from app.services.queue import rmq
 from app.db.token_store import DbTokenStore
 
 router = APIRouter()
@@ -46,7 +46,7 @@ async def put_hh_mapping(payload: dict):
 @admin.post("/rmq-test")
 async def rmq_test(payload: dict | None = None):
     msg = (payload or {}).get("msg", "hi")
-    await publish_task({"platform": "debug", "action": "echo", "msg": msg})
+    await rmq.publish_task({"platform": "debug", "action": "echo", "msg": msg})
     return {"ok": True}
 
 
@@ -87,7 +87,7 @@ async def hh_states(
 
 @admin.post("/hh-autofill")
 async def hh_autofill_admin():
-    await publish_task({"platform": "system", "action": "hh_autofill"})
+    await rmq.publish_task({"platform": "system", "action": "hh_autofill"})
     return {"ok": True, "queued": True}
 
 

@@ -8,7 +8,7 @@ from app.store_chat import upsert_tg_link, get_by_user
 from app.store_survey import (
     start_or_reset_survey, get_survey, store_answer_and_advance, delete_survey
 )
-from app.services.queue import publish_task
+from app.services.queue import rmq
 from app.services.survey import (
     parse_start_arg,
     survey_prompt,
@@ -27,7 +27,7 @@ def make_router(bot_kind: str) -> Dispatcher:
         await m.answer(text)
         # 2) отправляем в AmoChats через RMQ (воркер создаст чат при необходимости)
         msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
-        await publish_task({
+        await rmq.publish_task({
             "platform": "mirror",
             "action": "bot_to_amo",
             "text": text,
@@ -76,7 +76,7 @@ def make_router(bot_kind: str) -> Dispatcher:
 
         # TG -> Amo (заметка + AmoChats) целиком через воркер
         msg_key = f"tg:{m.chat.id}:{m.message_id}"
-        await publish_task({
+        await rmq.publish_task({
             "platform": "mirror",
             "action": "tg_to_amo",
             "lead_id": lead_id,
@@ -100,13 +100,13 @@ def make_router(bot_kind: str) -> Dispatcher:
             else:
                 summary = survey_summary(survey.city, survey.experience, survey.time_pref)
                 # ставим тег и заметку — тоже через воркер
-                await publish_task({
+                await rmq.publish_task({
                     "platform": "amo",
                     "action": "amo_add_tags",
                     "lead_id": lead_id,
                     "tags": [settings.AMO_TAG_SURVEY_DONE],
                 })
-                await publish_task({
+                  await rmq.publish_task({
                     "platform": "amo",
                     "action": "amo_add_note",
                     "lead_id": lead_id,

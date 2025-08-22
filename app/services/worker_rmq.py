@@ -3,13 +3,17 @@ import asyncio, os, logging
 from aiogram import Bot
 from httpx import HTTPStatusError, TimeoutException, ConnectError
 
-from app.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
-from app.config import settings
-from app.dedup import check_and_store, calc_key
-from app.queue import consume, publish_retry, publish_dlq
+from app.adapters.amochats import (
+    send_text_from_manager,
+    ensure_chat_created,
+    send_text_from_client,
+)
+from app.core.config import settings
+from app.services.dedup import check_and_store, calc_key
+from app.services.queue import rmq
 from app.adapters import hh as hh_adapt, avito as avito_adapt
-from app.amo_client import AmoClient, ReauthRequired
-from app.logging_setup import setup_logging
+from app.adapters.amo_client import AmoClient, ReauthRequired
+from app.core.logging_setup import setup_logging
 from app.store_chat import set_conversation
 from app.services import tg_send_with_retry
 from app.core.retry import with_retry
@@ -218,18 +222,18 @@ async def handle(payload: dict, attempts: int):
 
     except ReauthRequired as e:
         logger.warning("ReauthRequired: %s", e)
-        await publish_dlq(payload, attempts + 1, f"ReauthRequired: {e}")
+        await rmq.publish_dlq(payload, attempts + 1, f"ReauthRequired: {e}")
 
     except Exception as e:
         if _is_transient(e) and attempts + 1 < WORKER_MAX_ATTEMPTS:
-            await publish_retry(payload, attempts + 1)
+            await rmq.publish_retry(payload, attempts + 1)
         else:
             logger.exception("Task failed terminally")
-            await publish_dlq(payload, attempts + 1, str(e))
+            await rmq.publish_dlq(payload, attempts + 1, str(e))
 
 
 async def run_forever():
-    await consume(handle)
+    await rmq.consume(handle)
 
 
 if __name__ == "__main__":

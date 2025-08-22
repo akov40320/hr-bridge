@@ -15,7 +15,7 @@ from app.db import init_db
 import time
 from app.services.hh_mapping import load
 from app.api.hh_webhooks import ensure_hh_webhook
-from app.services.queue import publish_task, consume
+from app.services.queue import rmq
 from app.http_client import get_http_client, close_http_client
 from app.api.tg_webhooks import router as tg_wh_router
 from app.core.logging_setup import setup_logging
@@ -92,14 +92,14 @@ async def on_startup():
         amo_tok = await DbTokenStore("amo").load()
         if amo_tok and amo_tok.get("access_token") and int(amo_tok.get("expires_at", 0)) > int(time.time()) + 30:
             if not load_hh_mapping():
-                await publish_task({"platform": "system", "action": "hh_autofill"})
+                await rmq.publish_task({"platform": "system", "action": "hh_autofill"})
                 log.info("Queued hh_autofill on startup")
     except Exception:
         log.info("Amo token not ready on startup — hh_autofill will be queued after OAuth")
 
         # стартуем RMQ consumer
     try:
-        app.state.rmq_task = asyncio.create_task(consume(_handle_task, max_attempts=10))
+        app.state.rmq_task = asyncio.create_task(rmq.consume(_handle_task, max_attempts=10))
         log.info("RMQ consumer started")
     except Exception:
         log.exception("Failed to start RMQ consumer")
@@ -117,6 +117,7 @@ async def on_shutdown():
         t.cancel()
         with contextlib.suppress(Exception):
             await t
+    await rmq.close()
     await close_http_client()
 
 

@@ -8,7 +8,7 @@ from app.services.dedup import calc_key, check_and_store
 from app.core.guards import require_admin
 from app.store_chat import get_by_lead, get_by_conversation, set_conversation, get_by_user
 from app.core.config import settings
-from app.services.queue import publish_task
+from app.services.queue import rmq
 
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
@@ -123,7 +123,7 @@ async def amochats_in(request: Request, scope_id: str | None = None):
         user_id = ln.user_id
         # надёжный ключ против дублей
         key_src = f"amo:{conv_ref_id}:{msg_id or hashlib.sha256((text or '').encode()).hexdigest()[:16]}"
-        await publish_task({
+          await rmq.publish_task({
             "platform": "mirror",
             "action": "amo_to_tg",
             "bot_kind": bot_kind,

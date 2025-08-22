@@ -11,7 +11,7 @@ from app.adapters.amo_client import AmoClient, ReauthRequired
 from app.core.config import settings
 from app.services.dedup import calc_key, check_and_store
 from app.services.hh_mapping import get as hh_map_get, load as hh_map_load
-from app.services.queue import publish_task
+from app.services.queue import rmq
 from app.store import find_link, save_link
 from app.http_client import get_http_client
 
@@ -189,7 +189,7 @@ async def _process_incoming(payload: dict, http_client: httpx.AsyncClient):
     try:
         created = await amo.create_leads(body)
     except ReauthRequired:
-        await publish_task(
+        await rmq.publish_task(
             {
                 "platform": payload.get("platform", "unknown"),
                 "action": "amo_create_lead",
@@ -238,7 +238,7 @@ async def _process_incoming(payload: dict, http_client: httpx.AsyncClient):
     )
 
     if payload.get("platform") == "avito" and payload.get("applicant", {}).get("id"):
-        await publish_task(
+        await rmq.publish_task(
             {
                 "platform": "avito",
                 "action": "send_message",
@@ -249,7 +249,7 @@ async def _process_incoming(payload: dict, http_client: httpx.AsyncClient):
         )
 
     if payload.get("platform") == "hh" and payload.get("applicant", {}).get("id"):
-        await publish_task(
+        await rmq.publish_task(
             {
                 "platform": "hh",
                 "action": "send_message",
@@ -399,7 +399,7 @@ async def amo_webhook(request: Request, http_client: httpx.AsyncClient = Depends
                                 logger.warning("Failed to copy refusal text")
                     except Exception:
                         logger.exception("Failed to map refusal reason")
-                await publish_task(
+                await rmq.publish_task(
                     {
                         "platform": "hh",
                         "action": "set_state",
@@ -409,7 +409,7 @@ async def amo_webhook(request: Request, http_client: httpx.AsyncClient = Depends
                     }
                 )
         if platform == "avito":
-            await publish_task(
+            await rmq.publish_task(
                 {
                     "platform": "avito",
                     "action": "mark_read",
