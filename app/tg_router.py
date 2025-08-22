@@ -5,23 +5,21 @@ from aiogram.types import Message
 
 from app.core.config import settings
 from app.store_chat import upsert_tg_link, get_by_user
-from app.store_survey import (
-    start_or_reset_survey, get_survey, store_answer_and_advance, delete_survey
-)
 from app.services.queue import publish_task
 from app.services.survey import (
     parse_start_arg,
     survey_prompt,
     survey_summary,
     pretty_tg_identity,
-    mark_went_to_bot_async,
 )
+from app.services.survey_service import SurveyService
 
 logger = logging.getLogger("tg.router")
 
 
 def make_router(bot_kind: str) -> Dispatcher:
     dp = Dispatcher()
+    svc = SurveyService()
 
     async def _answer_and_mirror(m: Message, text: str, bot_kind: str, lead_id: int, conv_id: str | None):
         # 1) отвечаем в TG
@@ -47,8 +45,7 @@ def make_router(bot_kind: str) -> Dispatcher:
             return
 
         await upsert_tg_link(m.from_user.id, bot_kind, lead_id)
-        await start_or_reset_survey(m.from_user.id, bot_kind, lead_id)
-        await mark_went_to_bot_async(lead_id, bot_kind, pretty_tg_identity(m))
+        await svc.start(m.from_user.id, bot_kind, lead_id, pretty_tg_identity(m))
 
         greeting = "Здравствуйте! Нужны пару уточнений по заявке.\n\n" + survey_prompt(0)
         await _answer_and_mirror(m, greeting, bot_kind, lead_id, conv_id=None)
@@ -58,7 +55,7 @@ def make_router(bot_kind: str) -> Dispatcher:
     @dp.message(F.text)
     async def on_text(m: Message):
         text = m.text or ""
-        survey = await get_survey(m.from_user.id, bot_kind)
+        survey = await svc.get(m.from_user.id, bot_kind)
 
         # найдём привязку даже если опрос завершён
         lead_id: int | None = None
@@ -91,7 +88,7 @@ def make_router(bot_kind: str) -> Dispatcher:
 
         # опрос
         if survey:
-            survey = await store_answer_and_advance(m.from_user.id, bot_kind, text)
+            survey = await svc.store_answer(m.from_user.id, bot_kind, text)
             if not survey:
                 await _answer_and_mirror(m, "Сессия не найдена. Нажмите /start ещё раз.", bot_kind, lead_id, conv_id)
                 return
@@ -100,21 +97,7 @@ def make_router(bot_kind: str) -> Dispatcher:
                 await _answer_and_mirror(m, survey_prompt(survey.step), bot_kind, lead_id, conv_id)
             else:
                 summary = survey_summary(survey.city, survey.experience, survey.time_pref)
-                # ставим тег и заметку — тоже через воркер
-                await publish_task({
-                    "platform": "amo",
-                    "action": "amo_add_tags",
-                    "lead_id": lead_id,
-                    "tags": [settings.AMO_TAG_SURVEY_DONE],
-                })
-                await publish_task({
-                    "platform": "amo",
-                    "action": "amo_add_note",
-                    "lead_id": lead_id,
-                    "text": f"[{bot_kind}] {summary}",
-                })
-
-                await delete_survey(m.from_user.id, bot_kind)
+                await svc.finish(m.from_user.id, bot_kind, lead_id, summary)
                 await _answer_and_mirror(
                     m,
                     "Спасибо! Мы передали информацию рекрутеру. С вами свяжутся.",
