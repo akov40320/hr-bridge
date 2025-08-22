@@ -2,8 +2,12 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.models import IncomingPayload
-from app.services.payload_parsers import parse_hh_payload, parse_avito_payload
+from app.models import IncomingPayload, AvitoPayload
+from app.services.payload_parsers import (
+    parse_hh_payload,
+    extract_avito_payload,
+    parse_avito_payload,
+)
 
 
 def test_parse_hh_payload_ok():
@@ -38,6 +42,29 @@ def test_parse_hh_payload_bad_json():
         parse_hh_payload(b"{bad json")
 
 
+def test_extract_avito_payload_ok():
+    raw = json.dumps(
+        {
+            "payload": {
+                "value": {
+                    "chat_id": "chat1",
+                    "content": {"text": "hi"},
+                    "item": {"id": "item1", "title": "Vac", "description": "Desc"},
+                    "user_id": "u1",
+                },
+                "account_id": "acc1",
+            }
+        }
+    ).encode()
+
+    payload = extract_avito_payload(raw)
+    assert isinstance(payload, AvitoPayload)
+    assert payload.chat_id == "chat1"
+    assert payload.item_id == "item1"
+    assert payload.text == "hi"
+    assert payload.owner_id == "acc1"
+
+
 def test_parse_avito_payload_ok():
     raw = json.dumps(
         {
@@ -53,7 +80,8 @@ def test_parse_avito_payload_ok():
         }
     ).encode()
 
-    payload = parse_avito_payload(raw)
+    avito_payload = extract_avito_payload(raw)
+    payload = parse_avito_payload(avito_payload)
     assert isinstance(payload, IncomingPayload)
     assert payload.platform == "avito"
     assert payload.owner_id == "acc1"
@@ -63,12 +91,12 @@ def test_parse_avito_payload_ok():
     assert payload.raw_text == "hi"
 
 
-def test_parse_avito_payload_missing_chat_id():
+def test_extract_avito_payload_missing_chat_id():
     raw = json.dumps({"payload": {"value": {}}}).encode()
     with pytest.raises(ValidationError):
-        parse_avito_payload(raw)
+        extract_avito_payload(raw)
 
 
-def test_parse_avito_payload_bad_json():
+def test_extract_avito_payload_bad_json():
     with pytest.raises(ValueError):
-        parse_avito_payload(b"not json")
+        extract_avito_payload(b"not json")

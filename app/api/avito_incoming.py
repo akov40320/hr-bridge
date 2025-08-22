@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from app.adapters.amo_client import AmoClient
 from app.http_client import get_http_client
 from app.services.dedup import calc_key, check_and_store
-from app.services.payload_parsers import parse_avito_payload
+from app.services.payload_parsers import extract_avito_payload, parse_avito_payload
 from app.services.lead_processor import (
     enrich_applicant,
     create_lead,
@@ -31,7 +31,8 @@ async def webhook_avito(
         return {"ok": True, "duplicate": True}
 
     try:
-        payload = parse_avito_payload(raw)
+        avito_payload = extract_avito_payload(raw)
+        payload = parse_avito_payload(avito_payload)
     except ValueError as exc:
         logger.warning("Avito webhook: %s; payload=%s", exc, raw)
         return {"ok": True, "skipped": True}

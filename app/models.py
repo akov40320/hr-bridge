@@ -29,4 +29,18 @@ class IncomingPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-__all__ = ["IncomingPayload", "Applicant"]
+class AvitoPayload(BaseModel):
+    """Raw Avito webhook payload after initial extraction."""
+
+    chat_id: str = Field(..., min_length=1)
+    item_id: str | None = None
+    item_title: str = "Отклик Avito"
+    item_description: str = ""
+    applicant_id: str | None = None
+    text: str = ""
+    owner_id: str | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+__all__ = ["IncomingPayload", "Applicant", "AvitoPayload"]
