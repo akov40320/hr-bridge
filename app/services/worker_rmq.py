@@ -3,13 +3,13 @@ import asyncio, os, logging
 from aiogram import Bot
 from httpx import HTTPStatusError, TimeoutException, ConnectError
 
-from app.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
-from app.config import settings
-from app.dedup import check_and_store, calc_key
-from app.queue import consume, publish_retry, publish_dlq
+from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
+from app.core.config import settings
+from app.services.dedup import check_and_store, calc_key
+from app.services.queue import consume, publish_retry, publish_dlq
 from app.adapters import hh as hh_adapt, avito as avito_adapt
-from app.amo_client import AmoClient, ReauthRequired
-from app.logging_setup import setup_logging
+from app.adapters.amo_client import AmoClient, ReauthRequired
+from app.core.logging_setup import setup_logging
 from app.store_chat import set_conversation
 from app.services import tg_send_with_retry
 from app.core.retry import with_retry
