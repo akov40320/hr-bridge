@@ -99,11 +99,11 @@ def test_set_webhooks(monkeypatch):
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
     monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_BASE", "https://example")
     monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", "s3cr")
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
 
     app = _build_admin_app()
     client = TestClient(app)
-    r = client.post("/admin/tg/set-webhooks")
+    r = client.post("/admin/tg/set-webhooks", headers={"X-Admin-Token": "secret"})
     assert r.status_code == 200
     assert r.json() == {"ok": True, "set": {"m": "ok"}}
 
@@ -132,11 +132,11 @@ def test_set_webhooks_no_base(monkeypatch):
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
     monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_BASE", "")
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
 
     app = _build_admin_app()
     client = TestClient(app)
-    r = client.post("/admin/tg/set-webhooks")
+    r = client.post("/admin/tg/set-webhooks", headers={"X-Admin-Token": "secret"})
     assert r.status_code == 200
     assert r.json() == {"ok": False, "error": "TELEGRAM_WEBHOOK_BASE is empty"}
     assert DummyBot.instances == []
@@ -162,11 +162,11 @@ def test_delete_webhooks(monkeypatch):
 
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
 
     app = _build_admin_app()
     client = TestClient(app)
-    r = client.post("/admin/tg/delete-webhooks")
+    r = client.post("/admin/tg/delete-webhooks", headers={"X-Admin-Token": "secret"})
     assert r.status_code == 200
     assert r.json() == {"ok": True, "results": {"m": True}}
 
@@ -196,11 +196,11 @@ def test_webhook_info(monkeypatch):
 
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
 
     app = _build_admin_app()
     client = TestClient(app)
-    r = client.get("/admin/tg/webhook-info")
+    r = client.get("/admin/tg/webhook-info", headers={"X-Admin-Token": "secret"})
     assert r.status_code == 200
     assert r.json() == {"ok": True, "info": {"m": {"url": "info"}}}
 

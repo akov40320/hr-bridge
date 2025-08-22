@@ -3,10 +3,9 @@ from .config import settings
 
 
 async def require_admin(authorization: str | None = Header(None), x_admin_token: str | None = Header(None)):
-    token = settings.ADMIN_TOKEN or ""
+    token = settings.ADMIN_TOKEN
     if not token:
-        # если не задан — пропустим (на dev), но в проде ОБЯЗАТЕЛЬНО задай
-        return
+        raise RuntimeError("ADMIN_TOKEN must be set")
     # допускаем либо Authorization: Bearer <token>, либо X-Admin-Token: <token>
     if authorization and authorization.startswith("Bearer "):
         if authorization.removeprefix("Bearer ").strip() == token:
