@@ -10,6 +10,37 @@ logger = logging.getLogger(__name__)
 class AmoChatsError(Exception): ...
 
 
+class AmoChatsClient:
+    """Helper validating required AmoChats settings once."""
+
+    def __init__(self):
+        req = {
+            "AMO_CHATS_SCOPE_ID": getattr(settings, "AMO_CHATS_SCOPE_ID", None),
+            "AMO_CHATS_SECRET": getattr(settings, "AMO_CHATS_SECRET", None),
+            "AMO_CHATS_ACCOUNT_ID": getattr(settings, "AMO_CHATS_ACCOUNT_ID", None),
+            "AMO_CHATS_CHANNEL_ID": getattr(settings, "AMO_CHATS_CHANNEL_ID", None),
+            "AMO_CHATS_SENDER_USER_AMOJO_ID": getattr(settings, "AMO_CHATS_SENDER_USER_AMOJO_ID", None),
+        }
+        missing = [k for k, v in req.items() if not v]
+        if missing:
+            raise AmoChatsError(f"AmoChats env not configured ({'/'.join(missing)})")
+        self.scope_id = req["AMO_CHATS_SCOPE_ID"]
+        self.secret = req["AMO_CHATS_SECRET"]
+        self.account_id = req["AMO_CHATS_ACCOUNT_ID"]
+        self.channel_id = req["AMO_CHATS_CHANNEL_ID"]
+        self.sender_user_amojo_id = req["AMO_CHATS_SENDER_USER_AMOJO_ID"]
+
+
+_client: AmoChatsClient | None = None
+
+
+def _get_client() -> AmoChatsClient:
+    global _client
+    if _client is None:
+        _client = AmoChatsClient()
+    return _client
+
+
 def _base() -> str:
     return "https://amojo.amocrm.ru"
 
@@ -18,31 +49,30 @@ def _dump(obj: dict) -> bytes:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
+def _build_headers(secret: str, method: str, path: str, body: bytes, account_id: str | None) -> dict:
     date = formatdate(usegmt=True)
     ctype = "application/json"
     md5 = hashlib.md5(body).hexdigest().lower()
     to_sign = "\n".join([method.upper(), md5, ctype, date, path])
     sig = hmac.new(secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha256).hexdigest().lower()
     h = {"Date": date, "Content-Type": ctype, "Content-MD5": md5, "X-Signature": sig}
-    if getattr(settings, "AMO_CHATS_ACCOUNT_ID", None):
-        h["X-Client-Id"] = settings.AMO_CHATS_ACCOUNT_ID
+    if account_id:
+        h["X-Client-Id"] = account_id
     return h
 
 
 async def connect_channel(client: httpx.AsyncClient) -> dict:
     """Одноразовое подключение канала (hook_api_version=v2). Можно вызывать повторно — безопасно."""
-    if not (settings.AMO_CHATS_CHANNEL_ID and settings.AMO_CHATS_ACCOUNT_ID and settings.AMO_CHATS_SECRET):
-        raise AmoChatsError("AmoChats connect: env not configured")
+    ac = _get_client()
 
-    path = f"/v2/origin/custom/{settings.AMO_CHATS_CHANNEL_ID}/connect"
+    path = f"/v2/origin/custom/{ac.channel_id}/connect"
     url = f"https://amojo.amocrm.ru{path}"
     body = _dump({
-        "account_id": settings.AMO_CHATS_ACCOUNT_ID,
+        "account_id": ac.account_id,
         "hook_api_version": "v2",
         "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
     })
-    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"connect failed {r.status_code}: {r.text}")
@@ -67,11 +97,9 @@ async def send_text_from_client(
         conversation_id: str | None = None,
         client: httpx.AsyncClient,
 ) -> str | None:
-    need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET, settings.AMO_CHATS_ACCOUNT_ID]
-    if not all(need):
-        raise AmoChatsError("AmoChats env not configured (SCOPE_ID/SECRET/ACCOUNT_ID)")
+    ac = _get_client()
 
-    path = f"/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
+    path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
     now_s = int(time.time())
@@ -96,7 +124,7 @@ async def send_text_from_client(
 
     async def _post(payload: dict, route: str):
         body = _dump(payload)
-        headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+        headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
         logger.debug("send_from_client POST %s -> %s bytes", route, len(body))
         r = await client.post(url, content=body, headers=headers, timeout=30)
         logger.debug("send_from_client %s response %s %s", route, r.status_code, r.text[:200])
@@ -142,12 +170,9 @@ async def send_text_from_manager(
     Сообщение 'от менеджера' — используем sender.ref_id = AMO_CHATS_SENDER_USER_AMOJO_ID,
     а в receiver кладём данные клиента (опционально).
     """
-    need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET,
-            settings.AMO_CHATS_ACCOUNT_ID, settings.AMO_CHATS_SENDER_USER_AMOJO_ID]
-    if not all(need):
-        raise AmoChatsError("AmoChats env not configured (SCOPE/SECRET/ACCOUNT_ID/SENDER_REF_ID)")
+    ac = _get_client()
 
-    path = f"/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
+    path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
     now_s = int(time.time())
@@ -160,7 +185,7 @@ async def send_text_from_manager(
             "timestamp": now_s,
             "msec_timestamp": now_ms,
             "conversation_id": conversation_id,
-            "sender": {"ref_id": settings.AMO_CHATS_SENDER_USER_AMOJO_ID},
+            "sender": {"ref_id": ac.sender_user_amojo_id},
             "receiver": {
                 "id": str(user_id),
                 **({"name": user_name} if user_name else {}),
@@ -171,7 +196,7 @@ async def send_text_from_manager(
     }
 
     body = _dump(payload)
-    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
 
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
@@ -189,11 +214,9 @@ async def ensure_chat_created(
     Форсирует создание/поиск чата в AmoChats по conversation_ref_id='lead:<id>'.
     Возвращает conversation_id (uuid). Сообщение-системка видно только в чате Amo.
     """
-    need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET, settings.AMO_CHATS_ACCOUNT_ID]
-    if not all(need):
-        raise AmoChatsError("AmoChats env not configured (SCOPE_ID/SECRET/ACCOUNT_ID)")
+    ac = _get_client()
 
-    path = f"/v2/origin/custom/{settings.AMO_CHATS_SCOPE_ID}"
+    path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
     now_s = int(time.time())
@@ -214,7 +237,7 @@ async def ensure_chat_created(
         },
     }
     body = _dump(payload)
-    headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
+    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
