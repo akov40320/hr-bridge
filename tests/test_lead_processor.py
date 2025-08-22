@@ -45,7 +45,7 @@ async def test_create_lead(monkeypatch):
     async def fake_save_link(**kwargs):
         return None
 
-    monkeypatch.setattr(lead_processor, "_enrich_lead", fake_enrich)
+    monkeypatch.setattr(lead_processor.amo_lead_enrichment, "enrich_lead", fake_enrich)
     monkeypatch.setattr(lead_processor, "save_link", fake_save_link)
 
     lead_id, kind = await lead_processor.create_lead(payload, DummyClient())
