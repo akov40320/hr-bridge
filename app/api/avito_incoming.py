@@ -4,11 +4,16 @@ import logging
 import httpx
 from fastapi import APIRouter, Depends, Request
 
+from app.adapters.amo_client import AmoClient
 from app.http_client import get_http_client
 from app.services.dedup import calc_key, check_and_store
 from app.services.payload_parsers import parse_avito_payload
-
-from .webhooks import _process_incoming
+from app.services.lead_processor import (
+    enrich_applicant,
+    create_lead,
+    send_invite,
+    tag_lead,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +36,20 @@ async def webhook_avito(
         logger.warning("Avito webhook: %s; payload=%s", exc, raw)
         return {"ok": True, "skipped": True}
 
-    return await _process_incoming(payload, http_client)
+    payload = await enrich_applicant(payload, http_client)
+
+    amo = await AmoClient.create(http_client)
+    lead_id, kind = await create_lead(payload, amo)
+
+    if not lead_id:
+        if kind == "ignore":
+            return {"ok": True, "ignored": True, "reason": "no-keywords"}
+        return {"ok": True, "queued": True, "reason": "reauth_required"}
+
+    await send_invite(payload, lead_id)
+    await tag_lead(lead_id, kind, amo)
+
+    return {"ok": True, "lead_id": lead_id}
 
 
 __all__ = ["router"]
