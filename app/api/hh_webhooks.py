@@ -1,4 +1,3 @@
-# app/hh_webhooks.py
 import logging
 import httpx
 from app.db.token_store import DbTokenStore

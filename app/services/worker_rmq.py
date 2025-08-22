@@ -4,7 +4,7 @@ from httpx import HTTPStatusError, TimeoutException, ConnectError
 
 from app.services.queue import consume, publish_retry, publish_dlq
 from app.adapters.amo_client import ReauthRequired
-from app.logging_setup import setup_logging
+from app.core.logging_setup import setup_logging
 
 from app.services.worker.hh import handle_hh_send_message, handle_hh_set_state
 from app.services.worker.avito import handle_avito_send_message, handle_avito_mark_read

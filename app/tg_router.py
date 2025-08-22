@@ -19,6 +19,7 @@ from app.services.survey import (
 
 logger = logging.getLogger("tg.router")
 
+
 def make_router(bot_kind: str) -> Dispatcher:
     dp = Dispatcher()
 
