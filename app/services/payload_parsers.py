@@ -1,11 +1,14 @@
 import json
 import logging
-from typing import Any, Dict
+
+from pydantic import ValidationError
+
+from app.models import Applicant, IncomingPayload
 
 logger = logging.getLogger(__name__)
 
 
-def parse_hh_payload(raw: bytes) -> Dict[str, Any]:
+def parse_hh_payload(raw: bytes) -> IncomingPayload:
     """Parse raw HeadHunter webhook data into normalized payload.
 
     Args:
@@ -41,7 +44,7 @@ def parse_hh_payload(raw: bytes) -> Dict[str, Any]:
     vacancy = obj.get("vacancy") or {}
     applicant = obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {}
 
-    vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "")
+    vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "") or None
     vacancy_title = vacancy.get("name") or data.get("vacancy_title") or ""
     vacancy_desc = vacancy.get("description") or data.get("vacancy_description") or ""
     applicant_name = (
@@ -57,20 +60,20 @@ def parse_hh_payload(raw: bytes) -> Dict[str, Any]:
         or None
     )
 
-    if not response_id:
-        raise ValueError("missing response_id")
+    try:
+        return IncomingPayload(
+            platform="hh",
+            owner_id=owner_id,
+            vacancy_id=vacancy_id,
+            vacancy_title=vacancy_title,
+            vacancy_desc=vacancy_desc,
+            applicant=Applicant(id=response_id, name=applicant_name),
+        )
+    except ValidationError as exc:
+        raise exc
 
-    return {
-        "platform": "hh",
-        "owner_id": owner_id,
-        "vacancy_id": vacancy_id,
-        "vacancy_title": vacancy_title,
-        "vacancy_desc": vacancy_desc,
-        "applicant": {"id": response_id, "name": applicant_name},
-    }
 
-
-def parse_avito_payload(raw: bytes) -> Dict[str, Any]:
+def parse_avito_payload(raw: bytes) -> IncomingPayload:
     """Parse raw Avito webhook data into normalized payload.
 
     Args:
@@ -92,14 +95,12 @@ def parse_avito_payload(raw: bytes) -> Dict[str, Any]:
     val = payload_root.get("value") or {}
 
     chat_id = str(val.get("chat_id") or "")
-    if not chat_id:
-        raise ValueError("missing chat_id")
 
     text = (val.get("content") or {}).get("text") or ""
     item = val.get("item") or {}
     ctx = val.get("context") or {}
 
-    item_id = str(item.get("id") or ctx.get("item_id") or "")
+    item_id = str(item.get("id") or ctx.get("item_id") or "") or None
     vacancy_title = item.get("title") or val.get("title") or "Отклик Avito"
     vacancy_desc = item.get("description") or ctx.get("description") or ""
     applicant_id = str(val.get("user_id") or val.get("author_id") or "")
@@ -114,15 +115,20 @@ def parse_avito_payload(raw: bytes) -> Dict[str, Any]:
         or None
     )
 
-    return {
-        "platform": "avito",
-        "owner_id": owner_id,
-        "vacancy_id": item_id,
-        "vacancy_title": vacancy_title,
-        "vacancy_desc": vacancy_desc,
-        "applicant": {"id": chat_id, "name": f'user:{applicant_id or "unknown"}'},
-        "raw_text": text,
-    }
+    try:
+        return IncomingPayload(
+            platform="avito",
+            owner_id=owner_id,
+            vacancy_id=item_id,
+            vacancy_title=vacancy_title,
+            vacancy_desc=vacancy_desc,
+            applicant=Applicant(
+                id=chat_id, name=f'user:{applicant_id or "unknown"}'
+            ),
+            raw_text=text,
+        )
+    except ValidationError as exc:
+        raise exc
 
 
 __all__ = ["parse_hh_payload", "parse_avito_payload"]

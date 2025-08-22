@@ -9,43 +9,45 @@ from app.services.queue import publish_task
 from app.store import save_link
 from app.api.utils import route_kind
 from app.services import amo_lead_enrichment
+from app.models import IncomingPayload
 
 logger = logging.getLogger(__name__)
 
 
-async def enrich_applicant(payload: dict, http_client: httpx.AsyncClient) -> dict:
+async def enrich_applicant(
+    payload: IncomingPayload, http_client: httpx.AsyncClient
+) -> IncomingPayload:
     """Enrich applicant data from HeadHunter if possible."""
-    if payload.get("platform") == "hh" and payload.get("applicant", {}).get("id"):
-        owner_id = payload.get("owner_id")
+    if payload.platform == "hh" and payload.applicant.id:
+        owner_id = payload.owner_id
         try:
             extra = await hh_adapt.fetch_applicant_details(
-                payload["applicant"]["id"], owner_id, http_client
+                payload.applicant.id, owner_id, http_client
             )
             if extra:
-                app = payload.setdefault("applicant", {})
-                app["phone"] = app.get("phone") or extra.get("phone")
-                app["city"] = app.get("city") or extra.get("city")
-                app["name"] = (
-                    app.get("name")
-                    if app.get("name") and app.get("name") != "кандидат"
-                    else extra.get("name") or app.get("name")
+                payload.applicant.phone = payload.applicant.phone or extra.get("phone")
+                payload.applicant.city = payload.applicant.city or extra.get("city")
+                payload.applicant.name = (
+                    payload.applicant.name
+                    if payload.applicant.name and payload.applicant.name != "кандидат"
+                    else extra.get("name") or payload.applicant.name
                 )
         except Exception as e:  # pragma: no cover - log only
             logger.warning("HH enrich failed: %s", e)
     return payload
 
 
-async def create_lead(payload: dict, client) -> tuple[int | None, str]:
+async def create_lead(payload: IncomingPayload, client) -> tuple[int | None, str]:
     """Create lead in AmoCRM and return (lead_id, kind)."""
-    title = payload.get("vacancy_title") or ""
-    desc = payload.get("vacancy_desc") or ""
-    raw = payload.get("raw_text") or ""
+    title = payload.vacancy_title or ""
+    desc = payload.vacancy_desc or ""
+    raw = payload.raw_text or ""
     kind = route_kind(desc=desc, raw=raw)
-    payload["kind"] = kind
+    payload.kind = kind
 
-    phone = (payload.get("applicant", {}) or {}).get("phone")
-    city = (payload.get("applicant", {}) or {}).get("city")
-    name = (payload.get("applicant", {}) or {}).get("name")
+    phone = payload.applicant.phone
+    city = payload.applicant.city
+    name = payload.applicant.name
 
     if kind == "ignore":
         logger.info("routing: ignore (no hashtags) title=%r", title)
@@ -62,7 +64,7 @@ async def create_lead(payload: dict, client) -> tuple[int | None, str]:
 
     logger.info(
         "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
-        payload.get("platform"),
+        payload.platform,
         lead_name,
         pipeline_id,
         stage_id,
@@ -74,7 +76,7 @@ async def create_lead(payload: dict, client) -> tuple[int | None, str]:
     except ReauthRequired:
         await publish_task(
             {
-                "platform": payload.get("platform", "unknown"),
+                "platform": payload.platform or "unknown",
                 "action": "amo_create_lead",
                 "lead_body": body,
                 "ts": int(time.time()),
@@ -90,25 +92,25 @@ async def create_lead(payload: dict, client) -> tuple[int | None, str]:
         applicant_name=name,
         phone=phone,
         city=city,
-        vacancy_title=payload.get("vacancy_title"),
+        vacancy_title=payload.vacancy_title,
     )
 
     await save_link(
         lead_id=lead_id,
-        platform=payload.get("platform", "unknown"),
-        owner_id=payload.get("owner_id"),
-        vacancy_id=str(payload.get("vacancy_id", "")),
-        external_id=str(payload.get("applicant", {}).get("id") or "") or None,
+        platform=payload.platform or "unknown",
+        owner_id=payload.owner_id,
+        vacancy_id=str(payload.vacancy_id or ""),
+        external_id=str(payload.applicant.id or "") or None,
     )
 
     return lead_id, kind
 
 
-async def send_invite(payload: dict, lead_id: int) -> str:
+async def send_invite(payload: IncomingPayload, lead_id: int) -> str:
     """Send invite link to applicant via platform-specific channels."""
-    kind = payload.get("kind") or route_kind(
-        desc=payload.get("vacancy_desc") or "",
-        raw=payload.get("raw_text") or "",
+    kind = payload.kind or route_kind(
+        desc=payload.vacancy_desc or "",
+        raw=payload.raw_text or "",
     )
     bot_username = (
         settings.TELEGRAM_MASTER_BOT_USERNAME
@@ -121,8 +123,8 @@ async def send_invite(payload: dict, lead_id: int) -> str:
         f" {deep_link}"
     )
 
-    platform = payload.get("platform")
-    applicant_id = (payload.get("applicant", {}) or {}).get("id")
+    platform = payload.platform
+    applicant_id = payload.applicant.id
     if platform == "avito" and applicant_id:
         await publish_task(
             {
@@ -130,7 +132,7 @@ async def send_invite(payload: dict, lead_id: int) -> str:
                 "action": "send_message",
                 "external_id": applicant_id,
                 "text": invite_text,
-                "owner_id": payload.get("owner_id"),
+                "owner_id": payload.owner_id,
             }
         )
     if platform == "hh" and applicant_id:
@@ -140,7 +142,7 @@ async def send_invite(payload: dict, lead_id: int) -> str:
                 "action": "send_message",
                 "external_id": applicant_id,
                 "text": invite_text,
-                "owner_id": payload.get("owner_id"),
+                "owner_id": payload.owner_id,
             }
         )
     return deep_link
