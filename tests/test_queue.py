@@ -2,7 +2,8 @@ import json
 import types
 import pytest
 
-from app.services import queue
+from app.core.config import settings
+from app.services.queue import RabbitMQClient
 
 
 @pytest.mark.asyncio
@@ -19,15 +20,15 @@ async def test_publish_task(monkeypatch):
         def __init__(self):
             self.default_exchange = DummyExchange()
 
-    dummy_chan = DummyChan()
+    client = RabbitMQClient()
 
     async def fake_ensure():
-        queue._exch = dummy_exch
-        queue._chan = dummy_chan
+        client._exch = dummy_exch
+        client._chan = DummyChan()
 
-    monkeypatch.setattr(queue, "_ensure", fake_ensure)
+    monkeypatch.setattr(client, "_ensure", fake_ensure)
 
-    await queue.publish_task({"foo": "bar"}, attempts=2)
+    await client.publish_task({"foo": "bar"}, attempts=2)
     assert published == [({"payload": {"foo": "bar"}, "attempts": 2}, "tasks")]
 
 
@@ -40,14 +41,15 @@ async def test_publish_retry(monkeypatch):
             published.append((json.loads(msg.body.decode()), routing_key))
 
     dummy_chan = types.SimpleNamespace(default_exchange=DummyExchange())
+    client = RabbitMQClient()
 
     async def fake_ensure():
-        queue._chan = dummy_chan
+        client._chan = dummy_chan
 
-    monkeypatch.setattr(queue, "_ensure", fake_ensure)
+    monkeypatch.setattr(client, "_ensure", fake_ensure)
 
-    await queue.publish_retry({"a": 1}, attempts=3)
-    assert published == [({"payload": {"a": 1}, "attempts": 3}, queue.settings.RMQ_RETRY_QUEUE)]
+    await client.publish_retry({"a": 1}, attempts=3)
+    assert published == [({"payload": {"a": 1}, "attempts": 3}, settings.RMQ_RETRY_QUEUE)]
 
 
 @pytest.mark.asyncio
@@ -59,11 +61,13 @@ async def test_publish_dlq(monkeypatch):
             published.append((json.loads(msg.body.decode()), routing_key))
 
     dummy_exch = DummyExchange()
+    client = RabbitMQClient()
 
     async def fake_ensure():
-        queue._exch = dummy_exch
+        client._exch = dummy_exch
 
-    monkeypatch.setattr(queue, "_ensure", fake_ensure)
+    monkeypatch.setattr(client, "_ensure", fake_ensure)
 
-    await queue.publish_dlq({"a": 1}, attempts=4, error="boom")
+    await client.publish_dlq({"a": 1}, attempts=4, error="boom")
     assert published == [({"payload": {"a": 1}, "attempts": 4, "error": "boom"}, "tasks.dlq")]
+

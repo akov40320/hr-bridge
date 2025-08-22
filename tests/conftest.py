@@ -121,8 +121,9 @@ def queue_mock(monkeypatch):
     for mod_name in modules:
         try:
             mod = importlib.import_module(mod_name)
-            if hasattr(mod, "publish_task"):
-                monkeypatch.setattr(mod, "publish_task", fake_publish, raising=False)
+            client = getattr(mod, "rabbitmq", None)
+            if client and hasattr(client, "publish_task"):
+                monkeypatch.setattr(client, "publish_task", fake_publish, raising=False)
         except Exception:
             pass
 

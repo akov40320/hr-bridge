@@ -70,7 +70,7 @@ async def feed(dp, bot, update):
 @pytest.mark.asyncio
 async def test_start(monkeypatch, queue_mock):
     svc = DummySurveyService()
-    monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
@@ -100,7 +100,7 @@ async def test_start(monkeypatch, queue_mock):
 @pytest.mark.asyncio
 async def test_text_step(monkeypatch, queue_mock):
     svc = DummySurveyService()
-    monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
@@ -133,7 +133,7 @@ async def test_text_step(monkeypatch, queue_mock):
 @pytest.mark.asyncio
 async def test_survey_finish(monkeypatch, queue_mock):
     svc = DummySurveyService()
-    monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
@@ -172,7 +172,7 @@ async def test_survey_finish(monkeypatch, queue_mock):
 @pytest.mark.asyncio
 async def test_text_no_lead(monkeypatch, queue_mock):
     svc = DummySurveyService()
-    monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
     async def dummy_upsert(*a, **k):
         return None
     async def dummy_get(*a, **k):
@@ -204,7 +204,7 @@ async def test_text_no_lead(monkeypatch, queue_mock):
 @pytest.mark.asyncio
 async def test_text_session_missing(monkeypatch, queue_mock):
     svc = DummySurveyService()
-    monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)

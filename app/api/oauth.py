@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
-from app.services.queue import publish_task
+from app.services.queue import rabbitmq, RabbitMQClient
 from app.db.token_store import DbTokenStore, TokenData
 from app.http_client import get_http_client
 
@@ -254,6 +254,7 @@ async def amo_callback(
     code: str | None = None,
     state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
+    queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
     if not code:
         return {"ok": False, "provider": "amo", "step": "callback", "error": "no code"}
@@ -307,7 +308,7 @@ async def amo_callback(
         )
 
         try:
-            await publish_task({"platform": "system", "action": "hh_autofill"})
+            await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
             logger.info("Queued hh_autofill after amo oauth")
         except Exception:
             logger.exception("Failed to queue hh_autofill after amo oauth")

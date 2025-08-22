@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.http_client import get_http_client
 from app.services.dedup import calc_key, check_and_store
 from app.services.hh_mapping import get as hh_map_get, load as hh_map_load
-from app.services.queue import publish_task
+from app.services.queue import rabbitmq, RabbitMQClient
 from app.store import find_link
 
 from .utils import (
@@ -50,7 +50,11 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
 
 
 async def handle_hh_event(
-    lead_id: int, status_id: int, link: dict, http_client: httpx.AsyncClient
+    lead_id: int,
+    status_id: int,
+    link: dict,
+    http_client: httpx.AsyncClient,
+    queue_client: RabbitMQClient = rabbitmq,
 ):
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
@@ -89,7 +93,7 @@ async def handle_hh_event(
         except Exception:
             logger.exception("Failed to map refusal reason")
 
-    await publish_task(
+    await queue_client.publish_task(
         {
             "platform": "hh",
             "action": "set_state",
@@ -100,10 +104,12 @@ async def handle_hh_event(
     )
 
 
-async def handle_avito_event(lead_id: int, status_id: int, link: dict):
+async def handle_avito_event(
+    lead_id: int, status_id: int, link: dict, queue_client: RabbitMQClient = rabbitmq
+):
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
-    await publish_task(
+    await queue_client.publish_task(
         {
             "platform": "avito",
             "action": "mark_read",
@@ -115,7 +121,9 @@ async def handle_avito_event(lead_id: int, status_id: int, link: dict):
 
 @router.post("/webhooks/amo")
 async def amo_webhook(
-    request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
+    request: Request,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+    queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
     raw = await request.body()
     key = calc_key("amo", raw)
@@ -133,9 +141,9 @@ async def amo_webhook(
 
         platform = link.get("platform")
         if platform == "hh":
-            await handle_hh_event(lead_id, status_id, link, http_client)
+            await handle_hh_event(lead_id, status_id, link, http_client, queue_client)
         elif platform == "avito":
-            await handle_avito_event(lead_id, status_id, link)
+            await handle_avito_event(lead_id, status_id, link, queue_client)
 
     return {"ok": True, "events": len(events)}
 
