@@ -56,6 +56,10 @@ class DbTokenStore:
             )
 
             if row:
+                # Выполняем update только при наличии изменений
+                has_changes = any(getattr(row, k) != v for k, v in values.items())
+                if not has_changes:
+                    return
                 await s.execute(
                     update(Token)
                     .where(
