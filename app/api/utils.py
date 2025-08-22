@@ -1,13 +1,18 @@
 """Utility helpers used across API modules."""
 
 import re
+from typing import Mapping
 
 
-HASHTAG_RE = re.compile(r"(?i)(?<!\\w)#\\s*(мастер|оператор)\\b")
+HASHTAG_RE = re.compile(r"(?i)(?<!\w)#\s*(?:мастер|оператор)\b")
 
 
-def events_from_form(form) -> list[tuple[int, int]]:
-    """Extract lead/status pairs from AmoCRM webhook form."""
+def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
+    """Extract lead/status pairs from AmoCRM webhook form.
+
+    Args:
+        form: Mapping of form field names to their values.
+    """
     keys = list(form.keys())
     idxs: set[int] = set()
     for k in keys:
@@ -29,8 +34,8 @@ def route_kind(*, desc: str = "", raw: str = "") -> str:
     m = HASHTAG_RE.search(blob)
     if not m:
         return "ignore"
-    val = (m.group(1) or "").strip().lower()
-    return "master" if val.startswith("мастер") else "operator"
+    val = m.group(0).lower()
+    return "master" if "мастер" in val else "operator"
 
 
 _REFUSAL_NAMES = {
