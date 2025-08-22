@@ -1,23 +1,7 @@
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.api import hh_incoming
 from app.models import IncomingPayload, Applicant
-
-
-@pytest.fixture
-def client(monkeypatch):
-    app = FastAPI()
-    app.include_router(hh_incoming.router)
-
-    class DummyAmoClient:
-        @classmethod
-        async def create(cls, http_client):
-            return object()
-
-    monkeypatch.setattr(hh_incoming, "AmoClient", DummyAmoClient)
-    return TestClient(app)
 
 
 def _payload() -> IncomingPayload:

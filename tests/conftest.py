@@ -1,8 +1,11 @@
 import os
 import sys
 import types
+import importlib
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 # Ensure project root is on sys.path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -75,3 +78,79 @@ async def in_memory_db(monkeypatch):
         yield
     finally:
         await engine.dispose()
+
+
+@pytest.fixture
+def app(monkeypatch):
+    """FastAPI application with essential routers for tests."""
+    from app.api import hh_incoming
+
+    application = FastAPI()
+
+    class DummyAmoClient:
+        @classmethod
+        async def create(cls, http_client):
+            return object()
+
+    monkeypatch.setattr(hh_incoming, "AmoClient", DummyAmoClient, raising=False)
+    application.include_router(hh_incoming.router)
+    return application
+
+
+@pytest.fixture
+def client(app):
+    """Synchronous test client for FastAPI app."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def queue_mock(monkeypatch):
+    """Capture tasks published to the queue."""
+    published: list = []
+
+    async def fake_publish(payload, *args, **kwargs):
+        published.append(payload)
+
+    modules = [
+        "app.services.queue",
+        "app.services.lead_processor",
+        "app.services.survey",
+        "app.services.survey_service",
+        "app.tg_router",
+    ]
+    for mod_name in modules:
+        try:
+            mod = importlib.import_module(mod_name)
+            if hasattr(mod, "publish_task"):
+                monkeypatch.setattr(mod, "publish_task", fake_publish, raising=False)
+        except Exception:
+            pass
+
+    return published
+
+
+@pytest.fixture
+def token_mock(monkeypatch):
+    """Mock OAuth token retrieval."""
+    async def fake_ensure_fresh_access(**kwargs):
+        return "token"
+
+    async def fake_refresh_tokens(*args, **kwargs):
+        return {"access_token": "token"}
+
+    modules = [
+        "app.oauth2",
+        "app.adapters.hh",
+        "app.adapters.avito",
+    ]
+    for mod_name in modules:
+        try:
+            mod = importlib.import_module(mod_name)
+            if hasattr(mod, "ensure_fresh_access"):
+                monkeypatch.setattr(mod, "ensure_fresh_access", fake_ensure_fresh_access, raising=False)
+            if mod_name == "app.oauth2" and hasattr(mod, "refresh_tokens"):
+                monkeypatch.setattr(mod, "refresh_tokens", fake_refresh_tokens, raising=False)
+        except Exception:
+            pass
+
+    return "token"

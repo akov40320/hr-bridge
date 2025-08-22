@@ -68,24 +68,12 @@ async def feed(dp, bot, update):
 
 
 @pytest.mark.asyncio
-async def test_start(monkeypatch):
+async def test_start(monkeypatch, queue_mock):
     svc = DummySurveyService()
     monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
-
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr(tg_router, "publish_task", fake_publish)
-    # survey and survey_service also import publish_task
-    import app.services.survey as survey_mod
-    import app.services.survey_service as svc_mod
-    monkeypatch.setattr(survey_mod, "publish_task", fake_publish)
-    monkeypatch.setattr(svc_mod, "publish_task", fake_publish)
 
     dp = tg_router.make_router("master")
     bot, sent = make_bot()
@@ -105,28 +93,17 @@ async def test_start(monkeypatch):
     await bot.session.close()
 
     assert sent and "Здравствуйте" in sent[0]["text"]
-    assert published[-1]["action"] == "bot_to_amo"
-    assert published[-1]["lead_id"] == 777
+    assert queue_mock[-1]["action"] == "bot_to_amo"
+    assert queue_mock[-1]["lead_id"] == 777
 
 
 @pytest.mark.asyncio
-async def test_text_step(monkeypatch):
+async def test_text_step(monkeypatch, queue_mock):
     svc = DummySurveyService()
     monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
-
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr(tg_router, "publish_task", fake_publish)
-    import app.services.survey as survey_mod
-    import app.services.survey_service as svc_mod
-    monkeypatch.setattr(survey_mod, "publish_task", fake_publish)
-    monkeypatch.setattr(svc_mod, "publish_task", fake_publish)
 
     await svc.start(1, "master", 555, "id:1")
 
@@ -148,29 +125,18 @@ async def test_text_step(monkeypatch):
     await bot.session.close()
 
     assert sent and "Опишите" in sent[0]["text"]
-    assert published[0]["action"] == "tg_to_amo"
-    assert published[1]["action"] == "bot_to_amo"
+    assert queue_mock[0]["action"] == "tg_to_amo"
+    assert queue_mock[1]["action"] == "bot_to_amo"
     assert svc.data[1]["step"] == 1
 
 
 @pytest.mark.asyncio
-async def test_survey_finish(monkeypatch):
+async def test_survey_finish(monkeypatch, queue_mock):
     svc = DummySurveyService()
     monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
-
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr(tg_router, "publish_task", fake_publish)
-    import app.services.survey as survey_mod
-    import app.services.survey_service as svc_mod
-    monkeypatch.setattr(survey_mod, "publish_task", fake_publish)
-    monkeypatch.setattr(svc_mod, "publish_task", fake_publish)
 
     svc.data[1] = {
         "lead_id": 555,
@@ -197,14 +163,14 @@ async def test_survey_finish(monkeypatch):
     await bot.session.close()
 
     assert sent and "Спасибо" in sent[0]["text"]
-    assert published[0]["action"] == "tg_to_amo"
-    assert published[1]["action"] == "bot_to_amo"
+    assert queue_mock[0]["action"] == "tg_to_amo"
+    assert queue_mock[1]["action"] == "bot_to_amo"
     # finish called with summary
     assert svc.finished and "Итоги опроса" in svc.finished[3]
 
 
 @pytest.mark.asyncio
-async def test_text_no_lead(monkeypatch):
+async def test_text_no_lead(monkeypatch, queue_mock):
     svc = DummySurveyService()
     monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
     async def dummy_upsert(*a, **k):
@@ -213,17 +179,6 @@ async def test_text_no_lead(monkeypatch):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
     monkeypatch.setattr(tg_router, "get_by_user", dummy_get)
-
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr(tg_router, "publish_task", fake_publish)
-    import app.services.survey as survey_mod
-    import app.services.survey_service as svc_mod
-    monkeypatch.setattr(survey_mod, "publish_task", fake_publish)
-    monkeypatch.setattr(svc_mod, "publish_task", fake_publish)
 
     dp = tg_router.make_router("master")
     bot, sent = make_bot()
@@ -243,27 +198,16 @@ async def test_text_no_lead(monkeypatch):
     await bot.session.close()
 
     assert sent and "Нажмите /start" in sent[0]["text"]
-    assert published == []
+    assert queue_mock == []
 
 
 @pytest.mark.asyncio
-async def test_text_session_missing(monkeypatch):
+async def test_text_session_missing(monkeypatch, queue_mock):
     svc = DummySurveyService()
     monkeypatch.setattr(tg_router, "SurveyService", lambda: svc)
     async def dummy_upsert(*a, **k):
         return None
     monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
-
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr(tg_router, "publish_task", fake_publish)
-    import app.services.survey as survey_mod
-    import app.services.survey_service as svc_mod
-    monkeypatch.setattr(survey_mod, "publish_task", fake_publish)
-    monkeypatch.setattr(svc_mod, "publish_task", fake_publish)
 
     svc.data[1] = {"lead_id": 555, "step": 0}
 
@@ -290,5 +234,5 @@ async def test_text_session_missing(monkeypatch):
     await bot.session.close()
 
     assert sent and "Сессия не найдена" in sent[0]["text"]
-    assert published[0]["action"] == "tg_to_amo"
-    assert published[1]["action"] == "bot_to_amo"
+    assert queue_mock[0]["action"] == "tg_to_amo"
+    assert queue_mock[1]["action"] == "bot_to_amo"

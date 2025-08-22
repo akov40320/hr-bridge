@@ -59,14 +59,7 @@ async def test_create_lead(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_invite(monkeypatch):
-    calls = []
-
-    async def fake_publish(payload):
-        calls.append(payload)
-
-    monkeypatch.setattr(lead_processor, "publish_task", fake_publish)
-
+async def test_send_invite(queue_mock):
     payload = IncomingPayload(
         platform="hh",
         owner_id="o1",
@@ -76,7 +69,7 @@ async def test_send_invite(monkeypatch):
 
     link = await lead_processor.send_invite(payload, 555)
     assert "start=555" in link
-    assert calls and calls[0]["platform"] == "hh"
+    assert queue_mock and queue_mock[0]["platform"] == "hh"
 
 
 @pytest.mark.asyncio
