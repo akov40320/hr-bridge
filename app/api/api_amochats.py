@@ -100,8 +100,10 @@ async def amochats_in(request: Request, scope_id: str | None = None):
         if isinstance(ext_id, str) and ext_id.startswith("tg:"):
             try:
                 tg_uid = int(ext_id.split(":", 1)[1])
-            except:
-                pass
+            except ValueError:
+                logger.debug("amo-chats bad tg ext_id: %r", ext_id)
+                logger.warning("amo-chats failed to parse tg uid from ext_id %r", ext_id)
+                tg_uid = None
 
         if tg_uid:
             cand = []
