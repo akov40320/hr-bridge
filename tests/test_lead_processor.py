@@ -1,11 +1,16 @@
 import pytest
 
+from app.models import Applicant, IncomingPayload
 from app.services import lead_processor
 
 
 @pytest.mark.asyncio
 async def test_enrich_applicant(monkeypatch):
-    payload = {"platform": "hh", "owner_id": "o1", "applicant": {"id": "1", "name": "кандидат"}}
+    payload = IncomingPayload(
+        platform="hh",
+        owner_id="o1",
+        applicant=Applicant(id="1", name="кандидат"),
+    )
 
     async def fake_fetch(applicant_id, owner_id, http_client):
         return {"phone": "123", "city": "Moscow", "name": "Ivan"}
@@ -13,22 +18,22 @@ async def test_enrich_applicant(monkeypatch):
     monkeypatch.setattr(lead_processor.hh_adapt, "fetch_applicant_details", fake_fetch)
 
     result = await lead_processor.enrich_applicant(payload, None)
-    assert result["applicant"]["phone"] == "123"
-    assert result["applicant"]["city"] == "Moscow"
-    assert result["applicant"]["name"] == "Ivan"
+    assert result.applicant.phone == "123"
+    assert result.applicant.city == "Moscow"
+    assert result.applicant.name == "Ivan"
 
 
 @pytest.mark.asyncio
 async def test_create_lead(monkeypatch):
-    payload = {
-        "platform": "hh",
-        "vacancy_title": "Title",
-        "vacancy_desc": "",
-        "raw_text": "",
-        "applicant": {"id": "1", "name": "John"},
-        "owner_id": "own",
-        "vacancy_id": "vac",
-    }
+    payload = IncomingPayload(
+        platform="hh",
+        vacancy_title="Title",
+        vacancy_desc="",
+        raw_text="",
+        applicant=Applicant(id="1", name="John"),
+        owner_id="own",
+        vacancy_id="vac",
+    )
 
     monkeypatch.setattr(lead_processor, "route_kind", lambda **kw: "master")
 
@@ -62,12 +67,12 @@ async def test_send_invite(monkeypatch):
 
     monkeypatch.setattr(lead_processor, "publish_task", fake_publish)
 
-    payload = {
-        "platform": "hh",
-        "owner_id": "o1",
-        "applicant": {"id": "resp"},
-        "kind": "master",
-    }
+    payload = IncomingPayload(
+        platform="hh",
+        owner_id="o1",
+        applicant=Applicant(id="resp", name="name"),
+        kind="master",
+    )
 
     link = await lead_processor.send_invite(payload, 555)
     assert "start=555" in link
