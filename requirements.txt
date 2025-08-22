@@ -12,3 +12,4 @@ aiogram
 psycopg[binary]
 python-dotenv
 psycopg2-binary
+pytest-asyncio
