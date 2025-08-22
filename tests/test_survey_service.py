@@ -6,7 +6,7 @@ from app.services.survey_service import SurveyService
 
 
 @pytest.mark.asyncio
-async def test_start(monkeypatch):
+async def test_start(monkeypatch, queue_mock):
     called = []
 
     async def fake_start_or_reset(user_id, bot_kind, lead_id):
@@ -16,18 +16,11 @@ async def test_start(monkeypatch):
         "app.services.survey_service.start_or_reset_survey", fake_start_or_reset
     )
 
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr("app.services.survey.publish_task", fake_publish)
-
     svc = SurveyService()
     await svc.start(1, "bot", 10, "id:42")
 
     assert called == [(1, "bot", 10)]
-    assert published == [
+    assert queue_mock == [
         {
             "platform": "amo",
             "action": "amo_add_note",
@@ -63,7 +56,7 @@ async def test_store_answer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_finish(monkeypatch):
+async def test_finish(monkeypatch, queue_mock):
     deleted = []
 
     async def fake_delete(user_id, bot_kind):
@@ -71,17 +64,10 @@ async def test_finish(monkeypatch):
 
     monkeypatch.setattr("app.services.survey_service.delete_survey", fake_delete)
 
-    published = []
-
-    async def fake_publish(payload):
-        published.append(payload)
-
-    monkeypatch.setattr("app.services.survey_service.publish_task", fake_publish)
-
     svc = SurveyService()
     await svc.finish(3, "b3", 33, "summary")
 
-    assert published == [
+    assert queue_mock == [
         {
             "platform": "amo",
             "action": "amo_add_tags",
