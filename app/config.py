@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     AMO_CLIENT_SECRET: str
     AMO_REDIRECT_URI: str
 
+    AMO_ACCESS_TOKEN: str = ""
+    AMO_REFRESH_TOKEN: str = ""
+    AMO_EXPIRES_AT: int = 0
+
     AMO_PIPELINE_ID_MASTER: int
     AMO_STAGE_ID_MASTER_NEW: int
     AMO_PIPELINE_ID_OPERATOR: int
@@ -33,10 +37,17 @@ class Settings(BaseSettings):
     HH_CLIENT_SECRET: str = ""
     HH_REDIRECT_URI: str = ""
 
+    HH_ACCESS_TOKEN: str = ""
+    HH_REFRESH_TOKEN: str = ""
+    HH_EXPIRES_AT: int = 0
+
     # Avito OAuth
     AVITO_CLIENT_ID: str = ""
     AVITO_CLIENT_SECRET: str = ""
     AVITO_REDIRECT_URI: str = ""
+    AVITO_ACCESS_TOKEN: str = ""
+    AVITO_REFRESH_TOKEN: str = ""
+    AVITO_EXPIRES_AT: int = 0
     AVITO_AUTHORIZE_URL: str = "https://avito.ru/oauth"
     AVITO_TOKEN_URL: str = "https://api.avito.ru/token"
     AVITO_SCOPE: str = ""
