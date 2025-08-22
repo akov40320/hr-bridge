@@ -1,8 +1,8 @@
 import logging
 from aiogram import Bot
 
-from app.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
-from app.config import settings
+from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
+from app.core.config import settings
 from app.services.dedup import check_and_store, calc_key
 from app.store_chat import set_conversation
 from app.services import tg_send_with_retry
