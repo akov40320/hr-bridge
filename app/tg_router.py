@@ -5,7 +5,7 @@ from aiogram.types import Message
 
 from app.core.config import settings
 from app.store_chat import upsert_tg_link, get_by_user
-from app.services.queue import publish_task
+from app.services.queue import rabbitmq, RabbitMQClient
 from app.services.survey import (
     parse_start_arg,
     survey_prompt,
@@ -17,16 +17,16 @@ from app.services.survey_service import SurveyService
 logger = logging.getLogger("tg.router")
 
 
-def make_router(bot_kind: str) -> Dispatcher:
+def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:
     dp = Dispatcher()
-    svc = SurveyService()
+    svc = SurveyService(queue_client)
 
     async def _answer_and_mirror(m: Message, text: str, bot_kind: str, lead_id: int, conv_id: str | None):
         # 1) отвечаем в TG
         await m.answer(text)
         # 2) отправляем в AmoChats через RMQ (воркер создаст чат при необходимости)
         msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
-        await publish_task({
+        await queue_client.publish_task({
             "platform": "mirror",
             "action": "bot_to_amo",
             "text": text,
@@ -74,7 +74,7 @@ def make_router(bot_kind: str) -> Dispatcher:
 
         # TG -> Amo (заметка + AmoChats) целиком через воркер
         msg_key = f"tg:{m.chat.id}:{m.message_id}"
-        await publish_task({
+        await queue_client.publish_task({
             "platform": "mirror",
             "action": "tg_to_amo",
             "lead_id": lead_id,

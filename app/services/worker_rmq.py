@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio, os, logging
 from httpx import HTTPStatusError, TimeoutException, ConnectError
 
-from app.services.queue import consume, publish_retry, publish_dlq
+from app.services.queue import rabbitmq, RabbitMQClient
 from app.adapters.amo_client import ReauthRequired
 from app.core.logging_setup import setup_logging
 
@@ -52,7 +52,7 @@ HANDLERS = {
 }
 
 
-async def handle(payload: dict, attempts: int):
+async def handle(payload: dict, attempts: int, queue_client: RabbitMQClient = rabbitmq):
     try:
         plat = payload.get("platform")
         act = payload.get("action")
@@ -63,18 +63,18 @@ async def handle(payload: dict, attempts: int):
 
     except ReauthRequired as e:
         logger.warning("ReauthRequired: %s", e)
-        await publish_dlq(payload, attempts + 1, f"ReauthRequired: {e}")
+        await queue_client.publish_dlq(payload, attempts + 1, f"ReauthRequired: {e}")
 
     except Exception as e:
         if _is_transient(e) and attempts + 1 < WORKER_MAX_ATTEMPTS:
-            await publish_retry(payload, attempts + 1)
+            await queue_client.publish_retry(payload, attempts + 1)
         else:
             logger.exception("Task failed terminally")
-            await publish_dlq(payload, attempts + 1, str(e))
+            await queue_client.publish_dlq(payload, attempts + 1, str(e))
 
 
-async def run_forever():
-    await consume(handle)
+async def run_forever(queue_client: RabbitMQClient = rabbitmq):
+    await queue_client.consume(lambda payload, attempts: handle(payload, attempts, queue_client))
 
 
 if __name__ == "__main__":

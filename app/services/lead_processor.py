@@ -6,7 +6,7 @@ import json
 from app.adapters import hh as hh_adapt
 from app.adapters.amo_client import ReauthRequired
 from app.core.config import settings
-from app.services.queue import publish_task
+from app.services.queue import rabbitmq, RabbitMQClient
 from app.store import save_link
 from app.api.utils import route_kind
 from app.services import amo_lead_enrichment
@@ -42,7 +42,11 @@ async def enrich_applicant(
     return payload
 
 
-async def create_lead(payload: IncomingPayload, client) -> tuple[int | None, str]:
+async def create_lead(
+    payload: IncomingPayload,
+    client,
+    queue_client: RabbitMQClient = rabbitmq,
+) -> tuple[int | None, str]:
     """Create lead in AmoCRM and return (lead_id, kind)."""
     title = payload.vacancy_title or ""
     desc = payload.vacancy_desc or ""
@@ -79,7 +83,7 @@ async def create_lead(payload: IncomingPayload, client) -> tuple[int | None, str
     try:
         created = await client.create_leads(body)
     except ReauthRequired:
-        await publish_task(
+        await queue_client.publish_task(
             {
                 "platform": payload.platform or "unknown",
                 "action": "amo_create_lead",
@@ -111,7 +115,9 @@ async def create_lead(payload: IncomingPayload, client) -> tuple[int | None, str
     return lead_id, kind
 
 
-async def send_invite(payload: IncomingPayload, lead_id: int) -> str:
+async def send_invite(
+    payload: IncomingPayload, lead_id: int, queue_client: RabbitMQClient = rabbitmq
+) -> str:
     """Send invite link to applicant via platform-specific channels."""
     kind = payload.kind or route_kind(
         desc=payload.vacancy_desc or "",
@@ -131,7 +137,7 @@ async def send_invite(payload: IncomingPayload, lead_id: int) -> str:
     platform = payload.platform
     applicant_id = payload.applicant.id
     if platform == "avito" and applicant_id:
-        await publish_task(
+        await queue_client.publish_task(
             {
                 "platform": "avito",
                 "action": "send_message",
@@ -141,7 +147,7 @@ async def send_invite(payload: IncomingPayload, lead_id: int) -> str:
             }
         )
     if platform == "hh" and applicant_id:
-        await publish_task(
+        await queue_client.publish_task(
             {
                 "platform": "hh",
                 "action": "send_message",

@@ -1,7 +1,7 @@
 from aiogram.types import Message
 
 from app.core.config import settings
-from app.services.queue import publish_task
+from app.services.queue import rabbitmq, RabbitMQClient
 
 
 def parse_start_arg(text: str) -> int | None:
@@ -37,15 +37,20 @@ def pretty_tg_identity(m: Message) -> str:
     return f"@{m.from_user.username}" if m.from_user.username else f"id:{m.from_user.id}"
 
 
-async def mark_went_to_bot_async(lead_id: int, bot_kind: str, identity: str):
+async def mark_went_to_bot_async(
+    lead_id: int,
+    bot_kind: str,
+    identity: str,
+    queue_client: RabbitMQClient = rabbitmq,
+):
     # переносим на воркер: добавляем заметку и тег через RMQ
-    await publish_task({
+    await queue_client.publish_task({
         "platform": "amo",
         "action": "amo_add_note",
         "lead_id": lead_id,
         "text": f"[{bot_kind}] Кандидат перешёл в бота (TG {identity}).",
     })
-    await publish_task({
+    await queue_client.publish_task({
         "platform": "amo",
         "action": "amo_add_tags",
         "lead_id": lead_id,
