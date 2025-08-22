@@ -20,12 +20,15 @@ from app.http_client import get_http_client, close_http_client
 from app.api.tg_webhooks import router as tg_wh_router
 from app.core.logging_setup import setup_logging
 from app.db.token_store import DbTokenStore
+from app.core.middleware import LoggingMiddleware, metrics_endpoint
 
 log = logging.getLogger(__name__)
 
 setup_logging("INFO")
 
 app = FastAPI(title="Recruiting Bridge")
+app.add_middleware(LoggingMiddleware)
+app.add_route("/metrics", metrics_endpoint)
 app.include_router(router)
 app.include_router(admin)
 app.include_router(router_amo_chats)

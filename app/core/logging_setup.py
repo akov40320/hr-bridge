@@ -1,10 +1,27 @@
-import logging, sys
+"""Logging setup using a JSON formatter."""
+
+import logging
+import sys
+
+from pythonjsonlogger import jsonlogger
 
 
-def setup_logging(level: str = "INFO"):
+def setup_logging(level: str = "INFO") -> None:
+    """Configure root logger with JSON formatting.
+
+    Parameters
+    ----------
+    level: str
+        Logging level for root logger.
+    """
+
     root = logging.getLogger()
     root.setLevel(level)
-    h = logging.StreamHandler(sys.stdout)
-    fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s | %(message)s')
-    h.setFormatter(fmt)
-    root.handlers = [h]
+
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = jsonlogger.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s"
+    )
+    handler.setFormatter(formatter)
+    root.handlers = [handler]
+
