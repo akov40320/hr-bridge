@@ -81,8 +81,6 @@ async def auto_register_telegram_webhooks() -> None:
 
 @app.on_event("startup")
 async def on_startup():
-    app.state.http_client = get_http_client()
-
     await init_db()
     await ensure_tokens()
     try:
@@ -104,7 +102,7 @@ async def on_startup():
     except Exception:
         log.exception("Failed to start RMQ consumer")
 
-    client = app.state.http_client
+    client = get_http_client()
     await ensure_hh_webhook(client)
     await auto_register_telegram_webhooks()
     await ensure_amo_chats_connected(log, client)
