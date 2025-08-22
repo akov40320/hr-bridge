@@ -1,13 +1,10 @@
-import os, asyncio
+import asyncio
 from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from app.config import settings
 from app.db import Base  # важно: без подключений к БД!
 from app import models  # noqa: F401
 
@@ -17,7 +14,7 @@ if config.config_file_name:
 
 target_metadata = Base.metadata
 
-url = os.getenv("DATABASE_URL")
+url = settings.DATABASE_URL
 if not url:
     raise RuntimeError("DATABASE_URL не задан (ни в ENV, ни в .env).")
 
