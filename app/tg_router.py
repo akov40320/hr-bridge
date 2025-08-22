@@ -26,7 +26,7 @@ def make_router(bot_kind: str) -> Dispatcher:
         # 1) отвечаем в TG
         await m.answer(text)
         # 2) отправляем в AmoChats через RMQ (воркер создаст чат при необходимости)
-        msg_key = f"bot_to_amo:{lead_id}:{m.message_id}".encode("utf-8")
+        msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
         await publish_task({
             "platform": "mirror",
             "action": "bot_to_amo",
@@ -35,7 +35,7 @@ def make_router(bot_kind: str) -> Dispatcher:
             "user_name": m.from_user.username,
             "conversation_id": conv_id,
             "lead_id": lead_id,
-            "msg_key": msg_key.decode("utf-8"),
+            "msg_key": msg_key,
         })
 
     @dp.message(CommandStart())
