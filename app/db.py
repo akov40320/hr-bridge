@@ -1,23 +1,7 @@
-import hashlib
-import logging
-import re
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.engine.url import make_url
 from app.config import settings
-import asyncio, asyncpg
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-log = logging.getLogger("dburl")
-
-
-
 
 ASYNC_DSN = settings.DATABASE_URL
 
