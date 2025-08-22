@@ -2,6 +2,7 @@ import json
 from urllib.parse import urlencode
 
 import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 
 from app.api.amo_webhooks import parse_status_events
@@ -47,7 +48,7 @@ async def test_parse_status_events_json():
 
 
 @pytest.mark.asyncio
-async def test_parse_status_events_form():
+async def test_parse_status_events_form_error():
     form_data = {
         "leads[status][0][id]": "3",
         "leads[status][0][status_id]": "30",
@@ -55,5 +56,6 @@ async def test_parse_status_events_form():
         "leads[status][1][status_id]": "40",
     }
     req = _form_request(form_data)
-    events = await parse_status_events(req)
-    assert events == [(3, 30), (4, 40)]
+    with pytest.raises(HTTPException) as exc:
+        await parse_status_events(req)
+    assert exc.value.status_code == 400
