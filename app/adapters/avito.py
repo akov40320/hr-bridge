@@ -1,7 +1,9 @@
-import asyncio, httpx
+import httpx
 from typing import Optional
+
 from app.config import settings
 from app.oauth2 import ensure_fresh_access
+from app.core.retry import with_retry
 
 
 class AvitoError(Exception): ...
@@ -34,8 +36,7 @@ async def send_message(
     url = settings.AVITO_API_BASE.rstrip("/") + settings.AVITO_SEND_MESSAGE_PATH.format(negotiation_id=negotiation_id)
     body = {"message": {"text": text}}
 
-    backoff = 0.5
-    for _ in range(5):
+    async def attempt() -> None:
         r = await client.post(
             url,
             json=body,
@@ -45,14 +46,16 @@ async def send_message(
             },
             timeout=30,
         )
-        if r.status_code < 400:
-            return
-        if _is_retryable(r.status_code):
-            await asyncio.sleep(backoff)
-            backoff *= 2
-            continue
-        raise AvitoError(f"Avito send_message failed {r.status_code}: {r.text}")
-    raise AvitoError(f"Avito send_message retry exhausted for {negotiation_id}")
+        r.raise_for_status()
+
+    try:
+        await with_retry(
+            attempt,
+            attempts=5,
+            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
+        )
+    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
+        raise AvitoError(f"Avito send_message failed {e.response.status_code}: {e.response.text}") from e
 
 
 async def mark_read(
@@ -63,8 +66,7 @@ async def mark_read(
     access = await _access_token(owner_id, client)
     url = settings.AVITO_API_BASE.rstrip("/") + settings.AVITO_MARK_READ_PATH.format(negotiation_id=negotiation_id)
 
-    backoff = 0.5
-    for _ in range(5):
+    async def attempt() -> None:
         r = await client.post(
             url,
             headers={
@@ -73,11 +75,13 @@ async def mark_read(
             },
             timeout=20,
         )
-        if r.status_code < 400:
-            return
-        if _is_retryable(r.status_code):
-            await asyncio.sleep(backoff)
-            backoff *= 2
-            continue
-        raise AvitoError(f"Avito mark_read failed {r.status_code}: {r.text}")
-    raise AvitoError(f"Avito mark_read retry exhausted for {negotiation_id}")
+        r.raise_for_status()
+
+    try:
+        await with_retry(
+            attempt,
+            attempts=5,
+            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
+        )
+    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
+        raise AvitoError(f"Avito mark_read failed {e.response.status_code}: {e.response.text}") from e
