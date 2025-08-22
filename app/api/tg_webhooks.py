@@ -10,58 +10,44 @@ logger = logging.getLogger("tg.webhooks")
 
 router = APIRouter()
 
-# Делаем «долгоживущие» инстансы ботов и диспетчеров (не создаём на каждый запрос)
-master_bot = Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) if settings.TELEGRAM_MASTER_BOT_TOKEN else None
-operator_bot = Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) if settings.TELEGRAM_OPERATOR_BOT_TOKEN else None
 
-master_dp = make_router("master") if master_bot else None
-operator_dp = make_router("operator") if operator_bot else None
+def make_tg_webhook(bot: Bot | None, kind: str):
+    """Фабрика обработчиков Telegram вебхуков."""
+    dp = make_router(kind) if bot else None
 
+    async def _handler(request: Request):
+        if not bot or not dp:
+            logger.warning("%s webhook called, but bot or dp is None -> 503", kind)
+            return Response(status_code=503)
 
-@router.post("/tg/webhook/master")
-async def tg_master_wh(request: Request):
-    if not master_bot or not master_dp:
-        logger.warning("master webhook called, but bot or dp is None -> 503")
-        return Response(status_code=503)
+        if settings.TELEGRAM_WEBHOOK_SECRET and \
+           request.headers.get("X-Telegram-Bot-Api-Secret-Token") != settings.TELEGRAM_WEBHOOK_SECRET:
+            logger.warning("%s webhook: bad secret -> 401", kind)
+            return Response(status_code=401)
 
-    if settings.TELEGRAM_WEBHOOK_SECRET and \
-       request.headers.get("X-Telegram-Bot-Api-Secret-Token") != settings.TELEGRAM_WEBHOOK_SECRET:
-        logger.warning("master webhook: bad secret -> 401")
-        return Response(status_code=401)
+        try:
+            payload = await request.json()
+            upd = Update.model_validate(payload)
+        except Exception:
+            logger.exception("%s webhook: invalid json/update", kind)
+            return Response(status_code=400)
 
-    try:
-        payload = await request.json()
-        upd = Update.model_validate(payload)
-    except Exception as e:
-        logger.exception("master webhook: invalid json/update")
-        return Response(status_code=400)
+        await dp.feed_update(bot=bot, update=upd)
+        logger.info("%s webhook ok: update_id=%s", kind, getattr(upd, "update_id", None))
+        return {"ok": True}
 
-    await master_dp.feed_update(bot=master_bot, update=upd)
-    logger.info("master webhook ok: update_id=%s", getattr(upd, "update_id", None))
-    return {"ok": True}
+    return _handler
 
 
-@router.post("/tg/webhook/operator")
-async def tg_operator_wh(request: Request):
-    if not operator_bot or not operator_dp:
-        logger.warning("operator webhook called, but bot or dp is None -> 503")
-        return Response(status_code=503)
+tokens = {
+    "master": settings.TELEGRAM_MASTER_BOT_TOKEN,
+    "operator": settings.TELEGRAM_OPERATOR_BOT_TOKEN,
+}
 
-    if settings.TELEGRAM_WEBHOOK_SECRET and \
-       request.headers.get("X-Telegram-Bot-Api-Secret-Token") != settings.TELEGRAM_WEBHOOK_SECRET:
-        logger.warning("operator webhook: bad secret -> 401")
-        return Response(status_code=401)
+bots = {k: Bot(t) if t else None for k, t in tokens.items()}
 
-    try:
-        payload = await request.json()
-        upd = Update.model_validate(payload)
-    except Exception:
-        logger.exception("operator webhook: invalid json/update")
-        return Response(status_code=400)
-
-    await operator_dp.feed_update(bot=operator_bot, update=upd)
-    logger.info("operator webhook ok: update_id=%s", getattr(upd, "update_id", None))
-    return {"ok": True}
+for kind, bot in bots.items():
+    router.post(f"/tg/webhook/{kind}")(make_tg_webhook(bot, kind))
 
 
 admin_tg = APIRouter(prefix="/admin/tg", dependencies=[Depends(require_admin)])
@@ -76,23 +62,15 @@ async def set_webhooks():
     allowed = ["message"]
     out = {}
 
-    if settings.TELEGRAM_MASTER_BOT_TOKEN:
-        async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
-            out["master"] = await bot.set_webhook(
-                url=f"{base}/tg/webhook/master",
-                secret_token=secret,
-                allowed_updates=allowed,
-                drop_pending_updates=True,
-            )
-
-    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
-        async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
-            out["operator"] = await bot.set_webhook(
-                url=f"{base}/tg/webhook/operator",
-                secret_token=secret,
-                allowed_updates=allowed,
-                drop_pending_updates=True,
-            )
+    for kind, token in tokens.items():
+        if token:
+            async with Bot(token) as bot:
+                out[kind] = await bot.set_webhook(
+                    url=f"{base}/tg/webhook/{kind}",
+                    secret_token=secret,
+                    allowed_updates=allowed,
+                    drop_pending_updates=True,
+                )
 
     return {"ok": True, "set": out}
 
@@ -100,22 +78,18 @@ async def set_webhooks():
 @admin_tg.post("/delete-webhooks")
 async def delete_webhooks():
     results = {}
-    if settings.TELEGRAM_MASTER_BOT_TOKEN:
-        async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
-            results["master"] = await bot.delete_webhook(drop_pending_updates=True)
-    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
-        async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
-            results["operator"] = await bot.delete_webhook(drop_pending_updates=True)
+    for kind, token in tokens.items():
+        if token:
+            async with Bot(token) as bot:
+                results[kind] = await bot.delete_webhook(drop_pending_updates=True)
     return {"ok": True, "results": results}
 
 
 @admin_tg.get("/webhook-info")
 async def webhook_info():
     res = {}
-    if settings.TELEGRAM_MASTER_BOT_TOKEN:
-        async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as bot:
-            res["master"] = await bot.get_webhook_info()
-    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
-        async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as bot:
-            res["operator"] = await bot.get_webhook_info()
+    for kind, token in tokens.items():
+        if token:
+            async with Bot(token) as bot:
+                res[kind] = await bot.get_webhook_info()
     return {"ok": True, "info": res}
