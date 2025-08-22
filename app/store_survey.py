@@ -9,18 +9,45 @@ from app.db.models import TgSurvey
 async def start_or_reset_survey(user_id: int, bot_kind: str, lead_id: int) -> None:
     """Создаёт/сбрасывает сессию: step=0, чистые ответы."""
     async with get_session() as s:
-        stmt = (
-            insert(TgSurvey)
-            .values(user_id=user_id, bot_kind=bot_kind, lead_id=lead_id, step=0,
-                    city=None, experience=None, time_pref=None)
-            .on_conflict_do_update(
-                index_elements=[TgSurvey.user_id, TgSurvey.bot_kind],
-                set_={
-                    "lead_id": lead_id, "step": 0,
-                    "city": None, "experience": None, "time_pref": None
-                }
+        new_data = {
+            "user_id": user_id,
+            "bot_kind": bot_kind,
+            "lead_id": lead_id,
+            "step": 0,
+            "city": None,
+            "experience": None,
+            "time_pref": None,
+        }
+
+        existing = (
+            await s.execute(
+                select(TgSurvey).where(
+                    TgSurvey.user_id == user_id, TgSurvey.bot_kind == bot_kind
+                )
             )
-        )
+        ).scalar_one_or_none()
+
+        if existing is None:
+            stmt = insert(TgSurvey).values(**new_data).on_conflict_do_nothing()
+        else:
+            diff = {
+                k: v
+                for k, v in new_data.items()
+                if getattr(existing, k) != v and k not in {"user_id", "bot_kind"}
+            }
+
+            if diff:
+                stmt = (
+                    insert(TgSurvey)
+                    .values(**new_data)
+                    .on_conflict_do_update(
+                        index_elements=[TgSurvey.user_id, TgSurvey.bot_kind],
+                        set_=diff,
+                    )
+                )
+            else:
+                stmt = insert(TgSurvey).values(**new_data).on_conflict_do_nothing()
+
         await s.execute(stmt)
         await s.commit()
 
