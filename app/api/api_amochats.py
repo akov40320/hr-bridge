@@ -14,30 +14,27 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
-@router_amo_chats.middleware("http")
-async def verify_signature(request: Request, call_next):
+async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()
-    if settings.AMOCHATS_INCOMING_SECRET:
+    secret = settings.AMOCHATS_INCOMING_SECRET or ""
+    if secret:
         got = (request.headers.get("X-Signature") or "").lower()
-        calc = hmac.new(
-            settings.AMOCHATS_INCOMING_SECRET.encode(),
-            raw,
-            hashlib.sha256,
-        ).hexdigest().lower()
+        calc = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest().lower()
         if not (got and secrets.compare_digest(got, calc)):
             logger.warning(
-                "amo-chats invalid signature: got=%s calc=%s sha256(body)=%s len=%d path=%s",
+                "amo‑chats invalid signature: got=%s calc=%s sha256(body)=%s len=%d path=%s",
                 got[:12],
                 calc[:12],
                 hashlib.sha256(raw).hexdigest()[:12],
                 len(raw),
                 request.url.path,
             )
-            return Response(status_code=401)
-    return await call_next(request)
+            raise HTTPException(status_code=401, detail="Invalid signature")
 
-
-@router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}")
+@router_amo_chats.post(
+    "/webhooks/amo-chats/in/{scope_id}",
+    dependencies=[Depends(verify_amochats_signature)],
+)
 async def amochats_in(
     request: Request,
     scope_id: str | None = None,
