@@ -1,0 +1,18 @@
+class Settings:
+    TELEGRAM_MASTER_BOT_TOKEN = None
+    TELEGRAM_OPERATOR_BOT_TOKEN = None
+    HH_TOKEN_URL = ""
+    HH_CLIENT_ID = ""
+    HH_CLIENT_SECRET = ""
+    HH_REDIRECT_URI = ""
+    HH_API_BASE = ""
+    HH_SET_STATE_PATH = ""
+    AVITO_TOKEN_URL = ""
+    AVITO_CLIENT_ID = ""
+    AVITO_CLIENT_SECRET = ""
+    AVITO_REDIRECT_URI = ""
+    AVITO_API_BASE = ""
+    AVITO_SEND_MESSAGE_PATH = ""
+    AVITO_MARK_READ_PATH = ""
+
+settings = Settings()

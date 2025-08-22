@@ -3,7 +3,7 @@ from typing import Optional
 
 from app.config import settings
 from app.oauth2 import ensure_fresh_access
-from app.core.retry import with_retry
+from app.services import send_with_retry
 
 
 class AvitoError(Exception): ...
@@ -36,23 +36,19 @@ async def send_message(
     url = settings.AVITO_API_BASE.rstrip("/") + settings.AVITO_SEND_MESSAGE_PATH.format(negotiation_id=negotiation_id)
     body = {"message": {"text": text}}
 
-    async def attempt() -> None:
-        r = await client.post(
-            url,
-            json=body,
-            headers={
-                "Authorization": f"Bearer {access}",
-                "Accept": "application/json",
-            },
-            timeout=30,
-        )
-        r.raise_for_status()
-
     try:
-        await with_retry(
-            attempt,
-            attempts=5,
-            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
+        await send_with_retry(
+            client,
+            lambda c: c.post(
+                url,
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {access}",
+                    "Accept": "application/json",
+                },
+                timeout=30,
+            ),
+            _is_retryable,
         )
     except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
         raise AvitoError(f"Avito send_message failed {e.response.status_code}: {e.response.text}") from e
@@ -66,22 +62,18 @@ async def mark_read(
     access = await _access_token(owner_id, client)
     url = settings.AVITO_API_BASE.rstrip("/") + settings.AVITO_MARK_READ_PATH.format(negotiation_id=negotiation_id)
 
-    async def attempt() -> None:
-        r = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access}",
-                "Accept": "application/json",
-            },
-            timeout=20,
-        )
-        r.raise_for_status()
-
     try:
-        await with_retry(
-            attempt,
-            attempts=5,
-            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
+        await send_with_retry(
+            client,
+            lambda c: c.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access}",
+                    "Accept": "application/json",
+                },
+                timeout=20,
+            ),
+            _is_retryable,
         )
     except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
         raise AvitoError(f"Avito mark_read failed {e.response.status_code}: {e.response.text}") from e
