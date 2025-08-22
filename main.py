@@ -6,7 +6,8 @@ from aiogram import Bot
 from fastapi import FastAPI
 
 from app.amochats import ensure_amo_chats_connected
-from app.api import router, admin, _handle_task
+from app.api import router, admin
+from app.api.tasks import handle_task as _handle_task
 from app.api_amochats import router_amo_chats, amo_admin
 from app.bootstrap import ensure_tokens
 from app.config import settings
