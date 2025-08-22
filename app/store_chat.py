@@ -7,6 +7,17 @@ from app.db.models import TgLink
 
 async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:
     async with get_session() as s:
+        current_lead = (
+            await s.execute(
+                select(TgLink.lead_id).where(
+                    TgLink.user_id == user_id, TgLink.bot_kind == bot_kind
+                )
+            )
+        ).scalar_one_or_none()
+
+        if current_lead == lead_id:
+            return
+
         stmt = (
             pg_insert(TgLink)
             .values(user_id=user_id, bot_kind=bot_kind, lead_id=lead_id, updated_at=func.now())
