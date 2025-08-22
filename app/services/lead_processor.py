@@ -1,6 +1,7 @@
 import logging
 import time
 import httpx
+import json
 
 from app.adapters import hh as hh_adapt
 from app.adapters.amo_client import ReauthRequired
@@ -32,8 +33,12 @@ async def enrich_applicant(
                     if payload.applicant.name and payload.applicant.name != "кандидат"
                     else extra.get("name") or payload.applicant.name
                 )
-        except Exception as e:  # pragma: no cover - log only
-            logger.warning("HH enrich failed: %s", e)
+        except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover - log only
+            logger.warning(
+                "HH enrich failed for applicant %s: %s",
+                payload.applicant.id,
+                type(e).__name__,
+            )
     return payload
 
 
