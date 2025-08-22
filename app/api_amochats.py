@@ -13,21 +13,33 @@ from app.queue import publish_task
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
-def _hmac_body(secret: str, raw: bytes) -> str:
-    return hmac.new(secret.encode(), raw, hashlib.sha1).hexdigest().lower()
+
+@router_amo_chats.middleware("http")
+async def verify_signature(request: Request, call_next):
+    raw = await request.body()
+    if settings.AMOCHATS_INCOMING_SECRET:
+        got = (request.headers.get("X-Signature") or "").lower()
+        calc = hmac.new(
+            settings.AMOCHATS_INCOMING_SECRET.encode(),
+            raw,
+            hashlib.sha256,
+        ).hexdigest().lower()
+        if not (got and secrets.compare_digest(got, calc)):
+            logger.warning(
+                "amo-chats invalid signature: got=%s calc=%s sha256(body)=%s len=%d path=%s",
+                got[:12],
+                calc[:12],
+                hashlib.sha256(raw).hexdigest()[:12],
+                len(raw),
+                request.url.path,
+            )
+            return Response(status_code=401)
+    return await call_next(request)
+
 
 @router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}")
 async def amochats_in(request: Request, scope_id: str | None = None):
     raw = await request.body()
-    if settings.AMOCHATS_INCOMING_SECRET:
-        got = (request.headers.get("X-Signature") or "").lower()
-        calc = _hmac_body(settings.AMOCHATS_INCOMING_SECRET, raw)
-        if not (got and secrets.compare_digest(got, calc)):
-            logger.warning(
-                "amo-chats invalid signature: got=%s calc=%s sha1(body)=%s len=%d path=%s",
-                got[:12], calc[:12], hashlib.sha1(raw).hexdigest()[:12], len(raw), request.url.path
-            )
-            return Response(status_code=401)
 
     key = calc_key("amo_chats", raw)
     if not await check_and_store(key):
@@ -110,7 +122,7 @@ async def amochats_in(request: Request, scope_id: str | None = None):
         bot_kind = ln.bot_kind
         user_id = ln.user_id
         # надёжный ключ против дублей
-        key_src = f"amo:{conv_ref_id}:{msg_id or hashlib.sha1((text or '').encode()).hexdigest()[:16]}"
+        key_src = f"amo:{conv_ref_id}:{msg_id or hashlib.sha256((text or '').encode()).hexdigest()[:16]}"
         await publish_task({
             "platform": "mirror",
             "action": "amo_to_tg",
