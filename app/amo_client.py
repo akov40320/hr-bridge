@@ -1,4 +1,6 @@
 import time, httpx
+import time
+import httpx
 from app.config import settings
 from app.token_store import TokenData, DbTokenStore
 
@@ -8,18 +10,19 @@ class ReauthRequired(Exception):
 
 
 class AmoClient:
-    def __init__(self, tokens: TokenData, store: DbTokenStore):
+    def __init__(self, tokens: TokenData, store: DbTokenStore, client: httpx.AsyncClient):
         self.base = settings.AMO_BASE_URL.rstrip("/")
         self.store = store
         self._access = tokens["access_token"]
         self._refresh = tokens["refresh_token"]
         self._expires_at = tokens["expires_at"]
+        self.client = client
 
     @classmethod
-    async def create(cls):
+    async def create(cls, client: httpx.AsyncClient):
         store = DbTokenStore("amo")
         tokens = await store.load()
-        return cls(tokens, store)
+        return cls(tokens, store, client)
 
     @property
     def headers(self):
@@ -34,8 +37,7 @@ class AmoClient:
             "refresh_token": self._refresh,
             "redirect_uri": settings.AMO_REDIRECT_URI,
         }
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.post(url, json=payload)
+        r = await self.client.post(url, json=payload, timeout=30)
         if r.status_code in (400, 401) and "invalid_grant" in (r.text or "").lower():
             raise ReauthRequired("Amo refresh_token invalid_grant")
         r.raise_for_status()
@@ -59,12 +61,10 @@ class AmoClient:
 
     async def _request(self, method: str, url: str, **kw):
         await self._ensure_token()
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.request(method, url, headers=self.headers, **kw)
+        r = await self.client.request(method, url, headers=self.headers, timeout=30, **kw)
         if r.status_code == 401:
             await self._refresh_token()
-            async with httpx.AsyncClient(timeout=30) as x:
-                r = await x.request(method, url, headers=self.headers, **kw)
+            r = await self.client.request(method, url, headers=self.headers, timeout=30, **kw)
         if r.is_error:
             print("AMO ERROR:", r.status_code, r.text)
             r.raise_for_status()
@@ -113,5 +113,5 @@ class AmoClient:
         return await self._request("PATCH", url, json=body)
 
     async def get_lead(self, lead_id: int):
-              url = f"{self.base}/api/v4/leads/{lead_id}"
-              return await self._request("GET", url)
+        url = f"{self.base}/api/v4/leads/{lead_id}"
+        return await self._request("GET", url)

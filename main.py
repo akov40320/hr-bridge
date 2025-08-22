@@ -16,6 +16,7 @@ import time
 from app.hh_mapping import load
 from app.hh_webhooks import ensure_hh_webhook
 from app.queue import publish_task, consume
+from app.http_client import get_http_client, close_http_client
 from app.tg_webhooks import router as tg_wh_router
 from app.logging_setup import setup_logging
 from app.token_store import DbTokenStore
@@ -80,6 +81,8 @@ async def auto_register_telegram_webhooks() -> None:
 
 @app.on_event("startup")
 async def on_startup():
+    app.state.http_client = get_http_client()
+
     await init_db()
     await ensure_tokens()
     try:
@@ -101,9 +104,10 @@ async def on_startup():
     except Exception:
         log.exception("Failed to start RMQ consumer")
 
-    await ensure_hh_webhook()
+    client = app.state.http_client
+    await ensure_hh_webhook(client)
     await auto_register_telegram_webhooks()
-    await ensure_amo_chats_connected(log)
+    await ensure_amo_chats_connected(log, client)
 
 
 @app.on_event("shutdown")
@@ -113,6 +117,7 @@ async def on_shutdown():
         t.cancel()
         with contextlib.suppress(Exception):
             await t
+    await close_http_client()
 
 
 @app.get("/")

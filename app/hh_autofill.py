@@ -26,7 +26,10 @@ _STAGE_NAME_TO_HH = {
 }
 
 
-async def _fetch_pipeline_statuses(pipeline_id: int) -> list[dict]:
+async def _fetch_pipeline_statuses(
+    pipeline_id: int,
+    client: httpx.AsyncClient,
+) -> list[dict]:
     try:
         tok = await DbTokenStore("amo").load()
     except Exception as e:
@@ -35,20 +38,23 @@ async def _fetch_pipeline_statuses(pipeline_id: int) -> list[dict]:
 
     url = settings.AMO_BASE_URL.rstrip("/") + f"/api/v4/leads/pipelines/{pipeline_id}"
     try:
-        async with httpx.AsyncClient(timeout=20) as x:
-            r = await x.get(url, headers={
+        r = await client.get(
+            url,
+            headers={
                 "Authorization": f"Bearer {tok['access_token']}",
                 "Accept": "application/json",
-            })
-            r.raise_for_status()
-            pj = r.json() or {}
-            return (pj.get("_embedded") or {}).get("statuses") or []
+            },
+            timeout=20,
+        )
+        r.raise_for_status()
+        pj = r.json() or {}
+        return (pj.get("_embedded") or {}).get("statuses") or []
     except Exception as e:
         log.warning("hh-autofill: cannot fetch pipeline %s: %s", pipeline_id, e)
         return []
 
 
-async def autofill_hh_mapping() -> dict[str, str]:
+async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
     """
     Строит {amo_status_id: hh_code} по названиям стадий двух воронок (master/operator)
     и сохраняет в data/hh_mapping.json.
@@ -66,7 +72,7 @@ async def autofill_hh_mapping() -> dict[str, str]:
             log.info("hh-autofill: pipeline %s is not configured — skip", label)
             continue
 
-        statuses = await _fetch_pipeline_statuses(int(pid))
+        statuses = await _fetch_pipeline_statuses(int(pid), client)
         if not statuses:
             log.info("hh-autofill: no statuses for pipeline %s (%s)", label, pid)
             continue

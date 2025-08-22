@@ -21,7 +21,7 @@ def _events() -> list[str]:
     return ["negotiation_created"]
 
 
-async def ensure_hh_webhook() -> None:
+async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
     url = _target_url()
     if not url:
         log.info("HH webhook: HH_WEBHOOK_URL пуст — пропускаю регистрацию")
@@ -41,38 +41,42 @@ async def ensure_hh_webhook() -> None:
     want_events = _events()
 
     try:
-        async with httpx.AsyncClient(timeout=20) as x:
-            r = await x.get(HH_SUBS_URL, headers=headers)
-            r.raise_for_status()
-            js = r.json()
-            items = js if isinstance(js, list) else js.get("items", [])
+        r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
+        r.raise_for_status()
+        js = r.json()
+        items = js if isinstance(js, list) else js.get("items", [])
 
-            current = None
-            for it in items:
-                if str(it.get("url", "")).strip() == url:
-                    current = it
-                    break
+        current = None
+        for it in items:
+            if str(it.get("url", "")).strip() == url:
+                current = it
+                break
 
-            if not current:
-                body = {"url": url, "events": want_events}
-                cr = await x.post(HH_SUBS_URL, json=body, headers=headers)
-                if cr.status_code in (401, 403, 404):
-                    log.warning("HH webhook: %s — нет прав/токен/фича недоступна", cr.status_code)
-                    return
-                cr.raise_for_status()
-                log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_events))
+        if not current:
+            body = {"url": url, "events": want_events}
+            cr = await client.post(HH_SUBS_URL, json=body, headers=headers, timeout=20)
+            if cr.status_code in (401, 403, 404):
+                log.warning("HH webhook: %s — нет прав/токен/фича недоступна", cr.status_code)
                 return
+            cr.raise_for_status()
+            log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_events))
+            return
 
-            have_events = sorted([e.strip() for e in current.get("events", [])])
-            if sorted(want_events) != have_events:
-                del_id = current.get("id") or current.get("subscription_id")
-                if del_id:
-                    await x.delete(f"{HH_SUBS_URL}/{del_id}", headers=headers)
-                cr = await x.post(HH_SUBS_URL, json={"url": url, "events": want_events}, headers=headers)
-                cr.raise_for_status()
-                log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_events))
-            else:
-                log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_events))
+        have_events = sorted([e.strip() for e in current.get("events", [])])
+        if sorted(want_events) != have_events:
+            del_id = current.get("id") or current.get("subscription_id")
+            if del_id:
+                await client.delete(f"{HH_SUBS_URL}/{del_id}", headers=headers, timeout=20)
+            cr = await client.post(
+                HH_SUBS_URL,
+                json={"url": url, "events": want_events},
+                headers=headers,
+                timeout=20,
+            )
+            cr.raise_for_status()
+            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_events))
+        else:
+            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_events))
 
     except httpx.HTTPStatusError as e:
         log.exception("HH webhook: HTTP error (%s): %s", e.response.status_code, e.response.text)

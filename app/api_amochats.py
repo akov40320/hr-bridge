@@ -1,7 +1,9 @@
 import logging, hmac, hashlib, secrets
+import httpx
 from fastapi import APIRouter, Request, Response, Depends
 
 from app.amochats import connect_channel
+from app.http_client import get_http_client
 from app.dedup import calc_key, check_and_store
 from app.guards import require_admin
 from app.store_chat import get_by_lead, get_by_conversation, set_conversation, get_by_user
@@ -126,6 +128,6 @@ from fastapi import APIRouter as _APIRouter  # avoid shadow
 amo_admin = _APIRouter(prefix="/admin/amo-chats", dependencies=[Depends(require_admin)])
 
 @amo_admin.post("/connect")
-async def admin_connect():
-    resp = await connect_channel()
+async def admin_connect(http_client: httpx.AsyncClient = Depends(get_http_client)):
+    resp = await connect_channel(http_client)
     return {"ok": True, "response": resp}
