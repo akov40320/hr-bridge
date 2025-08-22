@@ -1,7 +1,9 @@
-import asyncio, httpx
+import httpx
 from typing import Optional
+
 from app.config import settings
 from app.oauth2 import ensure_fresh_access
+from app.core.retry import with_retry
 
 
 class HHError(Exception): ...
@@ -17,9 +19,7 @@ async def set_employer_state(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
-    """
-    Меняет статус отклика (response/negotiation) у конкретного работодателя.
-    """
+    """Меняет статус отклика (response/negotiation) у конкретного работодателя."""
     access = await ensure_fresh_access(
         service="hh",
         token_url=settings.HH_TOKEN_URL,
@@ -34,8 +34,7 @@ async def set_employer_state(
     url = settings.HH_API_BASE.rstrip("/") + settings.HH_SET_STATE_PATH.format(response_id=response_id)
     payload = {"status": target_state}
 
-    backoff = 0.5
-    for _ in range(5):
+    async def attempt() -> None:
         r = await client.post(
             url,
             json=payload,
@@ -45,15 +44,16 @@ async def set_employer_state(
             },
             timeout=30,
         )
-        if r.status_code < 400:
-            return
-        if _is_retryable(r.status_code):
-            await asyncio.sleep(backoff)
-            backoff *= 2
-            continue
-        raise HHError(f"HH set_state failed {r.status_code}: {r.text}")
+        r.raise_for_status()
 
-    raise HHError(f"HH set_state retry exhausted for {response_id}->{target_state}")
+    try:
+        await with_retry(
+            attempt,
+            attempts=5,
+            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
+        )
+    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
+        raise HHError(f"HH set_state failed {e.response.status_code}: {e.response.text}") from e
 
 
 async def send_message(
@@ -75,8 +75,7 @@ async def send_message(
     url = settings.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
     payload = {"message": {"text": text}}
 
-    backoff = 0.5
-    for _ in range(5):
+    async def attempt() -> None:
         r = await client.post(
             url,
             json=payload,
@@ -86,12 +85,16 @@ async def send_message(
             },
             timeout=30,
         )
-        if r.status_code < 400:
-            return
-        if _is_retryable(r.status_code):
-            await asyncio.sleep(backoff); backoff *= 2; continue
-        raise HHError(f"HH send_message failed {r.status_code}: {r.text}")
-    raise HHError(f"HH send_message retry exhausted for {response_id}")
+        r.raise_for_status()
+
+    try:
+        await with_retry(
+            attempt,
+            attempts=5,
+            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
+        )
+    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
+        raise HHError(f"HH send_message failed {e.response.status_code}: {e.response.text}") from e
 
 
 async def fetch_applicant_details(
