@@ -1,7 +1,10 @@
 import time
+import logging
 import httpx
 from app.core.config import settings
 from app.db.token_store import TokenData, DbTokenStore
+
+logger = logging.getLogger(__name__)
 
 
 class ReauthRequired(Exception):
@@ -65,7 +68,14 @@ class AmoClient:
             await self._refresh_token()
             r = await self.client.request(method, url, headers=self.headers, timeout=30, **kw)
         if r.is_error:
-            print("AMO ERROR:", r.status_code, r.text)
+            payload = kw.get("json") or kw.get("data")
+            logger.error(
+                "AMO ERROR: status=%s, text=%s, url=%s, payload=%s",
+                r.status_code,
+                r.text,
+                getattr(r, "url", url),
+                payload,
+            )
             r.raise_for_status()
         return r.json() if r.content else None
 
