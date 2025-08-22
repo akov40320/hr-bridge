@@ -11,7 +11,7 @@ def events_from_form(form) -> list[tuple[int, int]]:
     keys = list(form.keys())
     idxs: set[int] = set()
     for k in keys:
-        m = re.match(r"leads\\[status\\]\\[(\\d+)\\]\\[id\\]$", k)
+        m = re.match(r"leads\[status\]\[(\d+)\]\[id\]$", k)
         if m:
             idxs.add(int(m.group(1)))
     events: list[tuple[int, int]] = []
