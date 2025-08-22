@@ -15,7 +15,7 @@ from app.db import init_db
 import time
 from app.services.hh_mapping import load
 from app.api.hh_webhooks import ensure_hh_webhook
-from app.services.queue import publish_task, consume
+from app.services.queue import publish_task, consume, connect as queue_connect, close as queue_close
 from app.http_client import get_http_client, close_http_client
 from app.api.tg_webhooks import router as tg_wh_router
 from app.core.logging_setup import setup_logging
@@ -83,6 +83,7 @@ async def auto_register_telegram_webhooks() -> None:
 async def on_startup():
     await init_db()
     await ensure_tokens()
+    await queue_connect()
     try:
         from app.db.token_store import DbTokenStore
         from app.services.hh_mapping import load as load_hh_mapping
@@ -115,6 +116,7 @@ async def on_shutdown():
         t.cancel()
         with contextlib.suppress(Exception):
             await t
+    await queue_close()
     await close_http_client()
 
 
