@@ -1,7 +1,7 @@
 import json, os
 import aio_pika
 import logging
-from app.config import settings
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 _conn = _chan = _exch = None

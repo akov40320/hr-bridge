@@ -1,7 +1,7 @@
 from aiogram.types import Message
 
-from app.config import settings
-from app.queue import publish_task
+from app.core.config import settings
+from app.services.queue import publish_task
 
 
 def parse_start_arg(text: str) -> int | None:

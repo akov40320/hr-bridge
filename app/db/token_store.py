@@ -1,8 +1,8 @@
 import time
 from typing import TypedDict, Optional
 from sqlalchemy import select, insert, update
-from app.db import get_session
-from app.models import Token
+from .db import get_session
+from .models import Token
 
 
 class TokenData(TypedDict):

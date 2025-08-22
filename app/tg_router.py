@@ -3,12 +3,12 @@ from aiogram import Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from app.config import settings
+from app.core.config import settings
 from app.store_chat import upsert_tg_link, get_by_user
 from app.store_survey import (
     start_or_reset_survey, get_survey, store_answer_and_advance, delete_survey
 )
-from app.queue import publish_task
+from app.services.queue import publish_task
 from app.services.survey import (
     parse_start_arg,
     survey_prompt,

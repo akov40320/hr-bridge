@@ -1,8 +1,8 @@
 # app/hh_webhooks.py
 import logging
 import httpx
-from app.token_store import DbTokenStore
-from app.config import settings
+from app.db.token_store import DbTokenStore
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 

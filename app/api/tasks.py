@@ -3,9 +3,9 @@
 import time as _time
 
 from app.adapters import avito as avito_adapt, hh as hh_adapt
-from app.amo_client import AmoClient
-from app.hh_autofill import autofill_hh_mapping
-from app.token_store import DbTokenStore
+from app.adapters.amo_client import AmoClient
+from app.services.hh_autofill import autofill_hh_mapping
+from app.db.token_store import DbTokenStore
 from app.http_client import get_http_client
 
 

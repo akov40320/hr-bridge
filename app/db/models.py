@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, Text, Integer, JSON, TIMESTAMP, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from app.db import Base
+from .db import Base
 
 
 class Token(Base):

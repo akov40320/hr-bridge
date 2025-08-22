@@ -3,7 +3,7 @@ import hashlib
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import text
 from app.db import get_session
-from app.models import EventDedup
+from app.db.models import EventDedup
 
 
 def calc_key(source: str, payload: str | bytes) -> str:

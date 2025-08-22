@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from app.config import settings
+from app.core.config import settings
 
 
 engine = create_async_engine(
@@ -28,7 +28,7 @@ async def init_db():
     Только для dev/локального первого запуска.
     В проде использовать Alembic миграции.
     """
-    from app import models  # noqa: F401  (важно: регистрирует таблицы в Base.metadata)
+    from . import models  # noqa: F401  (важно: регистрирует таблицы в Base.metadata)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

@@ -7,11 +7,11 @@ import httpx
 from fastapi import APIRouter, Request, Depends
 
 from app.adapters import avito as avito_adapt, hh as hh_adapt
-from app.amo_client import AmoClient, ReauthRequired
-from app.config import settings
-from app.dedup import calc_key, check_and_store
-from app.hh_mapping import get as hh_map_get, load as hh_map_load
-from app.queue import publish_task
+from app.adapters.amo_client import AmoClient, ReauthRequired
+from app.core.config import settings
+from app.services.dedup import calc_key, check_and_store
+from app.services.hh_mapping import get as hh_map_get, load as hh_map_load
+from app.services.queue import publish_task
 from app.store import find_link, save_link
 from app.http_client import get_http_client
 

@@ -7,11 +7,11 @@ import httpx
 from fastapi import APIRouter, Depends
 from app.http_client import get_http_client
 
-from app.config import settings
-from app.dedup import cleanup_older_than
-from app.hh_mapping import load as hh_map_load, set_all as hh_map_set
-from app.queue import publish_task
-from app.token_store import DbTokenStore
+from app.core.config import settings
+from app.services.dedup import cleanup_older_than
+from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
+from app.services.queue import publish_task
+from app.db.token_store import DbTokenStore
 
 router = APIRouter()
 admin = APIRouter()

@@ -2,13 +2,13 @@ import logging, hmac, hashlib, secrets
 import httpx
 from fastapi import APIRouter, Request, Response, Depends
 
-from app.amochats import connect_channel
+from app.adapters.amochats import connect_channel
 from app.http_client import get_http_client
-from app.dedup import calc_key, check_and_store
-from app.guards import require_admin
+from app.services.dedup import calc_key, check_and_store
+from app.core.guards import require_admin
 from app.store_chat import get_by_lead, get_by_conversation, set_conversation, get_by_user
-from app.config import settings
-from app.queue import publish_task
+from app.core.config import settings
+from app.services.queue import publish_task
 
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()

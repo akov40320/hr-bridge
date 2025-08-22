@@ -5,21 +5,21 @@ import uvicorn
 from aiogram import Bot
 from fastapi import FastAPI
 
-from app.amochats import ensure_amo_chats_connected
+from app.adapters.amochats import ensure_amo_chats_connected
 from app.api import router, admin
 from app.api.tasks import handle_task as _handle_task
-from app.api_amochats import router_amo_chats, amo_admin
+from app.api.api_amochats import router_amo_chats, amo_admin
 from app.bootstrap import ensure_tokens
-from app.config import settings
+from app.core.config import settings
 from app.db import init_db
 import time
-from app.hh_mapping import load
-from app.hh_webhooks import ensure_hh_webhook
-from app.queue import publish_task, consume
+from app.services.hh_mapping import load
+from app.api.hh_webhooks import ensure_hh_webhook
+from app.services.queue import publish_task, consume
 from app.http_client import get_http_client, close_http_client
-from app.tg_webhooks import router as tg_wh_router
-from app.logging_setup import setup_logging
-from app.token_store import DbTokenStore
+from app.api.tg_webhooks import router as tg_wh_router
+from app.core.logging_setup import setup_logging
+from app.db.token_store import DbTokenStore
 
 log = logging.getLogger(__name__)
 
@@ -86,8 +86,8 @@ async def on_startup():
     await init_db()
     await ensure_tokens()
     try:
-        from app.token_store import DbTokenStore
-        from app.hh_mapping import load as load_hh_mapping
+        from app.db.token_store import DbTokenStore
+        from app.services.hh_mapping import load as load_hh_mapping
 
         amo_tok = await DbTokenStore("amo").load()
         if amo_tok and amo_tok.get("access_token") and int(amo_tok.get("expires_at", 0)) > int(time.time()) + 30:
