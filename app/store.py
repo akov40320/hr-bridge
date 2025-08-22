@@ -18,25 +18,37 @@ async def save_link(
     Upsert связи lead ↔ внешний объект (HH/Avito), с учётом owner_id (employer_id/account_id).
     """
     async with get_session() as s:
-        stmt = (
-            insert(LeadLink)
-            .values(
-                lead_id=lead_id,
-                platform=platform,
-                owner_id=owner_id,
-                vacancy_id=vacancy_id,
-                external_id=external_id,
+        values = {
+            "lead_id": lead_id,
+            "platform": platform,
+            "owner_id": owner_id,
+            "vacancy_id": vacancy_id,
+            "external_id": external_id,
+        }
+
+        existing = (
+            await s.execute(select(LeadLink).where(LeadLink.lead_id == lead_id))
+        ).scalar_one_or_none()
+
+        if existing:
+            update_fields = {
+                key: value
+                for key, value in values.items()
+                if getattr(existing, key) != value
+            }
+            if not update_fields:
+                return
+            stmt = (
+                insert(LeadLink)
+                .values(**values)
+                .on_conflict_do_update(
+                    index_elements=[LeadLink.lead_id],
+                    set_=update_fields,
+                )
             )
-            .on_conflict_do_update(
-                index_elements=[LeadLink.lead_id],
-                set_={
-                    "platform": platform,
-                    "owner_id": owner_id,
-                    "vacancy_id": vacancy_id,
-                    "external_id": external_id,
-                },
-            )
-        )
+        else:
+            stmt = insert(LeadLink).values(**values)
+
         await s.execute(stmt)
         await s.commit()
 
