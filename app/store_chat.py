@@ -2,7 +2,7 @@ from typing import Optional
 from sqlalchemy import select, update, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.db import get_session
-from app.models import TgLink
+from app.db.models import TgLink
 
 
 async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:

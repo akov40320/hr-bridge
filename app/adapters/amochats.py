@@ -1,7 +1,7 @@
 import hashlib, hmac, json, time, uuid
 from email.utils import formatdate
 import httpx
-from app.config import settings
+from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)

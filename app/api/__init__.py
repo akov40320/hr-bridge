@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
-from app.guards import require_admin
+from app.core.guards import require_admin
 
 # Import submodules before defining routers to avoid name clashes
 from . import oauth, webhooks, admin as admin_module  # noqa: E402

@@ -10,9 +10,9 @@ import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 
-from app.config import settings
-from app.queue import publish_task
-from app.token_store import DbTokenStore, TokenData
+from app.core.config import settings
+from app.services.queue import publish_task
+from app.db.token_store import DbTokenStore, TokenData
 from app.http_client import get_http_client
 
 logger = logging.getLogger(__name__)

@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import update, delete
 from app.db import get_session
-from app.models import TgSurvey
+from app.db.models import TgSurvey
 
 
 async def start_or_reset_survey(user_id: int, bot_kind: str, lead_id: int) -> None:

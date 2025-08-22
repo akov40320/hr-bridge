@@ -4,9 +4,9 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
-from app.config import settings
+from app.core.config import settings
 from app.db import Base  # важно: без подключений к БД!
-from app import models  # noqa: F401
+from app.db import models  # noqa: F401
 
 config = context.config
 if config.config_file_name:

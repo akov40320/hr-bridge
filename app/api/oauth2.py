@@ -2,7 +2,7 @@ from __future__ import annotations
 import time
 import httpx
 from typing import Optional
-from app.token_store import DbTokenStore, TokenData
+from app.db.token_store import DbTokenStore, TokenData
 from app.http_client import get_http_client
 
 

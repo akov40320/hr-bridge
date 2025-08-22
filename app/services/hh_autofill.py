@@ -3,9 +3,9 @@ import re
 import logging
 import httpx
 
-from app.config import settings
-from app.token_store import DbTokenStore
-from app.hh_mapping import load as hh_map_load, set_all as hh_map_set
+from app.core.config import settings
+from app.db.token_store import DbTokenStore
+from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 
 log = logging.getLogger(__name__)
 

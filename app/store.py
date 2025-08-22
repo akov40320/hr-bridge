@@ -3,7 +3,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from app.db import get_session
-from app.models import LeadLink
+from app.db.models import LeadLink
 
 
 async def save_link(

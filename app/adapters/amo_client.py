@@ -1,8 +1,8 @@
 import time, httpx
 import time
 import httpx
-from app.config import settings
-from app.token_store import TokenData, DbTokenStore
+from app.core.config import settings
+from app.db.token_store import TokenData, DbTokenStore
 
 
 class ReauthRequired(Exception):
