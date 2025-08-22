@@ -3,11 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
-ASYNC_DSN = settings.DATABASE_URL
-
 
 engine = create_async_engine(
-    ASYNC_DSN,
+    settings.DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
 )

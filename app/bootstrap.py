@@ -1,5 +1,5 @@
-import os
 from app.token_store import DbTokenStore, TokenData
+from app.config import settings
 
 
 async def ensure_tokens():
@@ -14,9 +14,9 @@ async def ensure_tokens():
         except Exception:
             pass
 
-        at = os.getenv(f"{prefix}_ACCESS_TOKEN")
-        rt = os.getenv(f"{prefix}_REFRESH_TOKEN")
-        ea = os.getenv(f"{prefix}_EXPIRES_AT")
+        at = getattr(settings, f"{prefix}_ACCESS_TOKEN", None)
+        rt = getattr(settings, f"{prefix}_REFRESH_TOKEN", None)
+        ea = getattr(settings, f"{prefix}_EXPIRES_AT", None)
         if at and rt and ea:
             await store.save(TokenData(
                 access_token=at,
