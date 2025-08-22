@@ -106,42 +106,58 @@ async def publish_dlq(payload: dict, attempts: int, error: str | None = None) ->
 async def consume(handler, max_attempts: int = 10):
     if not _conn or _conn.is_closed or not _chan or _chan.is_closed:
         await _ensure()
-    while True:
-        try:
-            q = await _chan.get_queue(settings.RMQ_TASK_QUEUE)
-            async with q.iterator() as it:
-                async for message in it:
-                    obj = None
-                    attempts = 0
-                    payload = {}
-                    try:
-                        obj = json.loads(message.body.decode("utf-8"))
-                        payload = obj.get("payload") or {}
+
+    async def _worker():
+        while True:
+            try:
+                if not _conn or _conn.is_closed or not _chan or _chan.is_closed:
+                    await _ensure()
+
+                q = await _chan.get_queue(settings.RMQ_TASK_QUEUE)
+                async with q.iterator() as it:
+                    async for message in it:
+                        obj = None
+                        attempts = 0
+                        payload = {}
                         try:
-                            attempts = int(obj.get("attempts") or 0)
-                        except Exception:
-                            attempts = 0
+                            obj = json.loads(message.body.decode("utf-8"))
+                            payload = obj.get("payload") or {}
+                            try:
+                                attempts = int(obj.get("attempts") or 0)
+                            except Exception:
+                                attempts = 0
 
-                        # запустим обработчик
-                        await handler(payload, attempts)
+                            # запустим обработчик
+                            await handler(payload, attempts)
 
-                        # успех
-                        await message.ack()
+                            # успех
+                            await message.ack()
 
-                    except Exception as e:
-                        # не оставляем в очереди — ACK и перекидываем в retry/DLQ
-                        await message.ack()
-                        try:
-                            cur_attempts = attempts + 1
-                            if cur_attempts >= max_attempts:
-                                await publish_dlq(payload, cur_attempts, str(e))
-                                logger.exception("sent to DLQ after attempts=%s", cur_attempts)
-                            else:
-                                await publish_retry(payload, cur_attempts)
-                                logger.exception("requeued to retry, attempt=%s", cur_attempts)
-                        except Exception:
-                            logger.exception("failed to republish to retry/DLQ")
-        except aio_exc.AMQPError:
-            logger.exception("RMQ connection lost, retrying ...")
-            await asyncio.sleep(1)
-            await _ensure()
+                        except Exception as e:
+                            # не оставляем в очереди — ACK и перекидываем в retry/DLQ
+                            await message.ack()
+                            try:
+                                cur_attempts = attempts + 1
+                                if cur_attempts >= max_attempts:
+                                    await publish_dlq(payload, cur_attempts, str(e))
+                                    logger.exception(
+                                        "sent to DLQ after attempts=%s", cur_attempts
+                                    )
+                                else:
+                                    await publish_retry(payload, cur_attempts)
+                                    logger.exception(
+                                        "requeued to retry, attempt=%s", cur_attempts
+                                    )
+                            except Exception:
+                                logger.exception("failed to republish to retry/DLQ")
+            except asyncio.CancelledError:
+                break
+            except aio_exc.AMQPError:
+                logger.exception("RMQ connection lost, retrying ...")
+                await asyncio.sleep(1)
+                await _ensure()
+
+    workers = settings.RMQ_CONSUMERS
+    async with asyncio.TaskGroup() as tg:
+        for _ in range(workers):
+            tg.create_task(_worker())
