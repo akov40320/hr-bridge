@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -67,7 +68,7 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
     TELEGRAM_WEBHOOK_BASE: str = ""  # например, https://hr-bridge.onrender.com
 
-    ADMIN_TOKEN: str = ""
+    ADMIN_TOKEN: str = Field(..., min_length=1)
 
     HH_API_BASE: str = "https://api.hh.ru"
     HH_SET_STATE_PATH: str = "/negotiations/{response_id}/status"
@@ -78,14 +79,14 @@ class Settings(BaseSettings):
     AVITO_MARK_READ_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/read"
 
     # --- AmoChats (amojo) ---
-    AMO_CHATS_BASE: str = "https://amojo.amocrm.ru"
-    AMO_CHATS_SCOPE_ID: str  # cf188c..._83c08...
-    AMO_CHATS_SECRET: str  # cf2032...
-    AMO_CHATS_CHANNEL_ID: str  # cf188c...
-    AMO_CHATS_ACCOUNT_ID: str  # 83c0858...
-    AMO_CHATS_SENDER_USER_AMOJO_ID: str  # e71231...
+    AMO_CHATS_BASE: str = Field("https://amojo.amocrm.ru", min_length=1)
+    AMO_CHATS_SCOPE_ID: str = Field(..., min_length=1)  # cf188c..._83c08...
+    AMO_CHATS_SECRET: str = Field(..., min_length=1)  # cf2032...
+    AMO_CHATS_CHANNEL_ID: str = Field(..., min_length=1)  # cf188c...
+    AMO_CHATS_ACCOUNT_ID: str = Field(..., min_length=1)  # 83c0858...
+    AMO_CHATS_SENDER_USER_AMOJO_ID: str = Field(..., min_length=1)  # e71231...
     AMOCHATS_ENABLED: bool = True
-    AMO_CHATS_SENDER_NAME: str = "tg-bridge"
+    AMO_CHATS_SENDER_NAME: str = Field("tg-bridge", min_length=1)
     AMO_CHATS_AUTOCONNECT: bool = True
 
     # входящие из AmoChats → наш вебхук. Если Amo даёт подпись — сюда (HMAC-SHA256).
@@ -104,6 +105,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     RMQ_DLQ_QUEUE: str = "bridge.tasks.dlq"
+
+    def validate_required(self) -> None:
+        required = [
+            "ADMIN_TOKEN",
+            "AMO_CHATS_SCOPE_ID",
+            "AMO_CHATS_SECRET",
+            "AMO_CHATS_CHANNEL_ID",
+            "AMO_CHATS_ACCOUNT_ID",
+            "AMO_CHATS_SENDER_USER_AMOJO_ID",
+        ]
+        missing = [name for name in required if not getattr(self, name, None)]
+        if missing:
+            raise ValueError(f"Missing required settings: {', '.join(missing)}")
 
 
 settings = Settings()
