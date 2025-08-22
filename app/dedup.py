@@ -6,7 +6,9 @@ from app.db import get_session
 from app.models import EventDedup
 
 
-def calc_key(source: str, payload: bytes) -> str:
+def calc_key(source: str, payload: str | bytes) -> str:
+    if isinstance(payload, str):
+        payload = payload.encode("utf-8")
     return f"{source}:{hashlib.sha256(payload).hexdigest()}"
 
 

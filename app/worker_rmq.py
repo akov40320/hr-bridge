@@ -101,7 +101,7 @@ async def handle_amo_add_tags(payload: dict):
 
 
 async def handle_mirror_amo_to_tg(payload: dict):
-    msg_key = (payload.get("msg_key") or "").encode("utf-8")
+    msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
@@ -117,7 +117,7 @@ async def handle_mirror_amo_to_tg(payload: dict):
 
 
 async def handle_mirror_tg_to_amo(payload: dict):
-    msg_key = (payload.get("msg_key") or "").encode("utf-8")
+    msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
@@ -146,7 +146,7 @@ async def handle_mirror_tg_to_amo(payload: dict):
 
 
 async def handle_mirror_bot_to_amo(payload: dict):
-    msg_key = (payload.get("msg_key") or "").encode("utf-8")
+    msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
