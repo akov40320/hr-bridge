@@ -23,7 +23,7 @@ def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
     ctype = "application/json"
     md5 = hashlib.md5(body).hexdigest().lower()
     to_sign = "\n".join([method.upper(), md5, ctype, date, path])
-    sig = hmac.new(secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha1).hexdigest().lower()
+    sig = hmac.new(secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha256).hexdigest().lower()
     h = {"Date": date, "Content-Type": ctype, "Content-MD5": md5, "X-Signature": sig}
     if getattr(settings, "AMO_CHATS_ACCOUNT_ID", None):
         h["X-Client-Id"] = settings.AMO_CHATS_ACCOUNT_ID

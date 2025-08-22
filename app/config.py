@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     AMO_CHATS_SENDER_NAME: str = "tg-bridge"
     AMO_CHATS_AUTOCONNECT: bool = True
 
-    # входящие из AmoChats → наш вебхук. Если Amo даёт подпись — сюда.
+    # входящие из AmoChats → наш вебхук. Если Amo даёт подпись — сюда (HMAC-SHA256).
     AMOCHATS_INCOMING_SECRET: str = ""
 
     HH_WEBHOOK_URL: str = ""
