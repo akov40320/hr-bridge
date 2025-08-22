@@ -81,6 +81,7 @@ async def auto_register_telegram_webhooks() -> None:
 
 @app.on_event("startup")
 async def on_startup():
+    settings.validate_required()
     await init_db()
     await ensure_tokens()
     await rabbitmq.connect()
