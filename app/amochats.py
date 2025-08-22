@@ -30,7 +30,7 @@ def _build_headers(secret: str, method: str, path: str, body: bytes) -> dict:
     return h
 
 
-async def connect_channel() -> dict:
+async def connect_channel(client: httpx.AsyncClient) -> dict:
     """Одноразовое подключение канала (hook_api_version=v2). Можно вызывать повторно — безопасно."""
     if not (settings.AMO_CHATS_CHANNEL_ID and settings.AMO_CHATS_ACCOUNT_ID and settings.AMO_CHATS_SECRET):
         raise AmoChatsError("AmoChats connect: env not configured")
@@ -43,19 +43,18 @@ async def connect_channel() -> dict:
         "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
     })
     headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
-    async with httpx.AsyncClient(timeout=30) as x:
-        r = await x.post(url, content=body, headers=headers)
+    r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"connect failed {r.status_code}: {r.text}")
     return r.json() if r.content else {}
 
 
-async def ensure_amo_chats_connected(logger) -> None:
+async def ensure_amo_chats_connected(logger, client: httpx.AsyncClient) -> None:
     if not settings.AMO_CHATS_AUTOCONNECT:
         logger.info("AmoChats autoconnect disabled")
         return
     try:
-        await connect_channel()
+        await connect_channel(client)
         logger.info("AmoChats channel connected (v2)")
     except AmoChatsError as e:
         # если уже подключён — Amo обычно вернёт 200/204; на всякий логируем warning
@@ -66,6 +65,7 @@ async def send_text_from_client(
         *, lead_id: int, text: str,
         tg_user_id: int, tg_user_name: str | None = None,
         conversation_id: str | None = None,
+        client: httpx.AsyncClient,
 ) -> str | None:
     need = [settings.AMO_CHATS_SCOPE_ID, settings.AMO_CHATS_SECRET, settings.AMO_CHATS_ACCOUNT_ID]
     if not all(need):
@@ -98,8 +98,7 @@ async def send_text_from_client(
         body = _dump(payload)
         headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
         logger.debug("send_from_client POST %s -> %s bytes", route, len(body))
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.post(url, content=body, headers=headers)
+        r = await client.post(url, content=body, headers=headers, timeout=30)
         logger.debug("send_from_client %s response %s %s", route, r.status_code, r.text[:200])
         return r
 
@@ -137,6 +136,7 @@ async def send_text_from_manager(
         *, conversation_id: str,  # здесь нужен уже существующий uuid/id чата
         user_id: int, user_name: str | None, avatar: str | None,
         text: str,
+        client: httpx.AsyncClient,
 ) -> None:
     """
     Сообщение 'от менеджера' — используем sender.ref_id = AMO_CHATS_SENDER_USER_AMOJO_ID,
@@ -173,13 +173,18 @@ async def send_text_from_manager(
     body = _dump(payload)
     headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
 
-    async with httpx.AsyncClient(timeout=30) as x:
-        r = await x.post(url, content=body, headers=headers)
+    r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"send_text_from_manager failed {r.status_code}: {r.text}")
 
 
-async def ensure_chat_created(*, lead_id: int, tg_user_id: int, tg_user_name: str | None) -> str:
+async def ensure_chat_created(
+        *,
+        lead_id: int,
+        tg_user_id: int,
+        tg_user_name: str | None,
+        client: httpx.AsyncClient,
+) -> str:
     """
     Форсирует создание/поиск чата в AmoChats по conversation_ref_id='lead:<id>'.
     Возвращает conversation_id (uuid). Сообщение-системка видно только в чате Amo.
@@ -210,8 +215,7 @@ async def ensure_chat_created(*, lead_id: int, tg_user_id: int, tg_user_name: st
     }
     body = _dump(payload)
     headers = _build_headers(settings.AMO_CHATS_SECRET, "POST", path, body)
-    async with httpx.AsyncClient(timeout=30) as x:
-        r = await x.post(url, content=body, headers=headers)
+    r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
 

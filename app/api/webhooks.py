@@ -2,8 +2,9 @@
 
 import logging
 import time
+import httpx
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 
 from app.adapters import avito as avito_adapt, hh as hh_adapt
 from app.amo_client import AmoClient, ReauthRequired
@@ -12,6 +13,7 @@ from app.dedup import calc_key, check_and_store
 from app.hh_mapping import get as hh_map_get, load as hh_map_load
 from app.queue import publish_task
 from app.store import find_link, save_link
+from app.http_client import get_http_client
 
 from .utils import (
     REFUSAL_TEXT_TO_HH,
@@ -28,7 +30,7 @@ router = APIRouter()
 
 
 @router.post("/webhooks/hh")
-async def webhook_hh(request: Request):
+async def webhook_hh(request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)):
     raw = await request.body()
     try:
         data = await request.json()
@@ -83,11 +85,11 @@ async def webhook_hh(request: Request):
         "vacancy_desc": vacancy_desc,
         "applicant": {"id": response_id, "name": applicant_name},
     }
-    return await _process_incoming(payload)
+    return await _process_incoming(payload, http_client)
 
 
 @router.post("/webhooks/avito")
-async def webhook_avito(request: Request):
+async def webhook_avito(request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)):
     raw = await request.body()
     try:
         data = await request.json()
@@ -133,10 +135,10 @@ async def webhook_avito(request: Request):
         "applicant": {"id": chat_id, "name": f"user:{applicant_id or 'unknown'}"},
         "raw_text": text,
     }
-    return await _process_incoming(internal)
+    return await _process_incoming(internal, http_client)
 
 
-async def _process_incoming(payload: dict):
+async def _process_incoming(payload: dict, http_client: httpx.AsyncClient):
     title = payload.get("vacancy_title") or ""
     desc = payload.get("vacancy_desc") or ""
     raw = payload.get("raw_text") or ""
@@ -149,7 +151,7 @@ async def _process_incoming(payload: dict):
     if payload.get("platform") == "hh" and payload.get("applicant", {}).get("id"):
         try:
             extra = await hh_adapt.fetch_applicant_details(
-                payload["applicant"]["id"], owner_id
+                payload["applicant"]["id"], owner_id, http_client
             )
             if extra:
                 phone = phone or extra.get("phone")
@@ -164,7 +166,7 @@ async def _process_incoming(payload: dict):
         logger.info("routing: ignore (no hashtags) title=%r", title)
         return {"ok": True, "ignored": True, "reason": "no-keywords"}
 
-    amo = await AmoClient.create()
+    amo = await AmoClient.create(http_client)
 
     if kind == "master":
         pipeline_id = settings.AMO_PIPELINE_ID_MASTER
@@ -327,7 +329,7 @@ async def _enrich_lead(
 
 
 @router.post("/webhooks/amo")
-async def amo_webhook(request: Request):
+async def amo_webhook(request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)):
     raw = await request.body()
     key = calc_key("amo", raw)
     if not await check_and_store(key):
@@ -366,7 +368,7 @@ async def amo_webhook(request: Request):
                 final_state = state
                 if is_refusal_code(state) and settings.AMO_CF_REFUSAL_REASON_ID:
                     try:
-                        amo = await AmoClient.create()
+                        amo = await AmoClient.create(http_client)
                         lead = await amo.get_lead(lead_id)
                         cfv = lead.get("custom_fields_values") or []
                         reason_text = None

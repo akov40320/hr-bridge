@@ -12,6 +12,7 @@ from app.amo_client import AmoClient, ReauthRequired
 from app.logging_setup import setup_logging
 from app.store_chat import set_conversation
 from app.services import tg_send_with_retry, with_backoff
+from app.http_client import get_http_client
 
 setup_logging("INFO")
 logger = logging.getLogger(__name__)
@@ -33,10 +34,12 @@ def _is_transient(e: Exception) -> bool:
 
 async def handle_hh_send_message(payload: dict):
     logger.info("hh.send_message: %s", payload.get("external_id"))
+    client = get_http_client()
     await hh_adapt.send_message(
         payload["external_id"],
         payload["text"],
         employer_id=payload.get("owner_id"),
+        client=client,
     )
 
 
@@ -46,10 +49,12 @@ async def handle_hh_set_state(payload: dict):
         payload.get("external_id"),
         payload.get("target_state"),
     )
+    client = get_http_client()
     await hh_adapt.set_employer_state(
         payload["external_id"],
         payload["target_state"],
         employer_id=payload.get("owner_id"),
+        client=client,
     )
 
 
@@ -59,33 +64,39 @@ async def handle_debug_echo(payload: dict):
 
 async def handle_avito_send_message(payload: dict):
     logger.info("avito.send_message: %s", payload.get("external_id"))
+    client = get_http_client()
     await avito_adapt.send_message(
         payload["external_id"],
         payload["text"],
         owner_id=payload.get("owner_id"),
+        client=client,
     )
 
 
 async def handle_avito_mark_read(payload: dict):
     logger.info("avito.mark_read: %s", payload.get("external_id"))
-    await avito_adapt.mark_read(payload["external_id"], owner_id=payload.get("owner_id"))
+    await avito_adapt.mark_read(
+        payload["external_id"],
+        owner_id=payload.get("owner_id"),
+        client=get_http_client(),
+    )
 
 
 async def handle_amo_create_lead(payload: dict):
     logger.info("amo.create_lead")
-    amo = await AmoClient.create()
+    amo = await AmoClient.create(get_http_client())
     await amo.create_leads(payload["lead_body"])
 
 
 async def handle_amo_add_note(payload: dict):
     logger.info("amo.add_note: %s", payload.get("lead_id"))
-    amo = await AmoClient.create()
+    amo = await AmoClient.create(get_http_client())
     await amo.add_note(int(payload["lead_id"]), payload["text"])
 
 
 async def handle_amo_add_tags(payload: dict):
     logger.info("amo.add_tags: %s", payload.get("lead_id"))
-    amo = await AmoClient.create()
+    amo = await AmoClient.create(get_http_client())
     await amo.add_tags(int(payload["lead_id"]), list(payload.get("tags") or []))
 
 
@@ -118,8 +129,9 @@ async def handle_mirror_tg_to_amo(payload: dict):
     tg_user_name = payload.get("tg_user_name")
     conv_id = payload.get("conversation_id")
     bot_kind = payload.get("bot_kind")
-    amo = await AmoClient.create()
+    amo = await AmoClient.create(get_http_client())
     await with_backoff(amo.add_note, lead_id, f"[TG->{bot_kind}] {text}")
+    client = get_http_client()
     new_cid = await with_backoff(
         send_text_from_client,
         lead_id=lead_id,
@@ -127,6 +139,7 @@ async def handle_mirror_tg_to_amo(payload: dict):
         tg_user_id=tg_user_id,
         tg_user_name=tg_user_name,
         conversation_id=conv_id,
+        client=client,
     )
     if new_cid and new_cid != conv_id:
         await set_conversation(tg_user_id, bot_kind, new_cid)
@@ -150,6 +163,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
             lead_id=int(lead_id),
             tg_user_id=user_id,
             tg_user_name=user_name,
+            client=get_http_client(),
         )
     if not conv_id:
         raise RuntimeError("bot_to_amo: no conversation_id and no lead_id to create one")
@@ -160,6 +174,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
         user_name=user_name,
         avatar=None,
         text=text,
+        client=get_http_client(),
     )
 
 

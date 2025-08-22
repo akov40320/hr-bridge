@@ -4,7 +4,8 @@ import logging
 import time
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.http_client import get_http_client
 
 from app.config import settings
 from app.dedup import cleanup_older_than
@@ -57,20 +58,23 @@ async def dedup_clean(hours: int = 72):
 
 
 @admin.get("/hh-states")
-async def hh_states(owner_id: str | None = None):
+async def hh_states(
+    owner_id: str | None = None,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
     try:
         tok = await DbTokenStore("hh", owner_id).load()
     except Exception as e:
         return {"ok": False, "error": f"no hh token: {e}"}
 
-    async with httpx.AsyncClient(timeout=15) as x:
-        r = await x.get(
-            f"{settings.HH_API_BASE.rstrip('/')}/dictionaries",
-            headers={
-                "Authorization": f"Bearer {tok['access_token']}",
-                "Accept": "application/json",
-            },
-        )
+    r = await http_client.get(
+        f"{settings.HH_API_BASE.rstrip('/')}/dictionaries",
+        headers={
+            "Authorization": f"Bearer {tok['access_token']}",
+            "Accept": "application/json",
+        },
+        timeout=15,
+    )
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "body": r.text}
 

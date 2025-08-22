@@ -7,12 +7,13 @@ import time
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.queue import publish_task
 from app.token_store import DbTokenStore, TokenData
+from app.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,11 @@ def hh_start():
 
 
 @router.get("/oauth/hh/callback")
-async def hh_callback(code: str | None = None, state: str | None = None):
+async def hh_callback(
+    code: str | None = None,
+    state: str | None = None,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
     if not code:
         return {"ok": False, "error": "no code"}
 
@@ -44,12 +49,12 @@ async def hh_callback(code: str | None = None, state: str | None = None):
         "redirect_uri": settings.HH_REDIRECT_URI,
     }
     try:
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.post(
-                "https://api.hh.ru/token",
-                data=data,
-                headers={"Accept": "application/json"},
-            )
+        r = await http_client.post(
+            "https://api.hh.ru/token",
+            data=data,
+            headers={"Accept": "application/json"},
+            timeout=30,
+        )
         if r.status_code >= 400:
             return {
                 "ok": False,
@@ -69,20 +74,20 @@ async def hh_callback(code: str | None = None, state: str | None = None):
 
     # employer_id
     try:
-        async with httpx.AsyncClient(timeout=15) as x:
-            me = await x.get(
-                "https://api.hh.ru/me",
-                headers={"Authorization": f"Bearer {d['access_token']}"},
-            )
-            me.raise_for_status()
-            employer_id = str(me.json().get("employer", {}).get("id") or "")
-            if not employer_id:
-                return {
-                    "ok": False,
-                    "provider": "hh",
-                    "step": "me",
-                    "error": "no employer.id",
-                }
+        me = await http_client.get(
+            "https://api.hh.ru/me",
+            headers={"Authorization": f"Bearer {d['access_token']}"},
+            timeout=15,
+        )
+        me.raise_for_status()
+        employer_id = str(me.json().get("employer", {}).get("id") or "")
+        if not employer_id:
+            return {
+                "ok": False,
+                "provider": "hh",
+                "step": "me",
+                "error": "no employer.id",
+            }
     except Exception as e:
         return {"ok": False, "provider": "hh", "step": "me", "error": str(e)}
 
@@ -134,7 +139,11 @@ def avito_start():
 
 
 @router.get("/oauth/avito/callback")
-async def avito_callback(code: str | None = None, state: str | None = None):
+async def avito_callback(
+    code: str | None = None,
+    state: str | None = None,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
     if not code:
         return {"ok": False, "error": "no code"}
     if not (
@@ -151,8 +160,12 @@ async def avito_callback(code: str | None = None, state: str | None = None):
     }
     try:
         auth = httpx.BasicAuth(settings.AVITO_CLIENT_ID, settings.AVITO_CLIENT_SECRET)
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.post(settings.AVITO_TOKEN_URL, data=data, auth=auth)
+        r = await http_client.post(
+            settings.AVITO_TOKEN_URL,
+            data=data,
+            auth=auth,
+            timeout=30,
+        )
         if r.status_code >= 400:
             return {
                 "ok": False,
@@ -181,23 +194,23 @@ async def avito_callback(code: str | None = None, state: str | None = None):
 
     # 👉 автоматически узнаём account_id
     try:
-        async with httpx.AsyncClient(timeout=15) as x:
-            me = await x.get(
-                "https://api.avito.ru/core/v1/accounts/self",
-                headers={
-                    "Authorization": f"Bearer {access}",
-                    "Accept": "application/json",
-                },
-            )
-            me.raise_for_status()
-            account_id = str(me.json().get("id") or "")
-            if not account_id:
-                return {
-                    "ok": False,
-                    "provider": "avito",
-                    "step": "self",
-                    "error": "no account id",
-                }
+        me = await http_client.get(
+            "https://api.avito.ru/core/v1/accounts/self",
+            headers={
+                "Authorization": f"Bearer {access}",
+                "Accept": "application/json",
+            },
+            timeout=15,
+        )
+        me.raise_for_status()
+        account_id = str(me.json().get("id") or "")
+        if not account_id:
+            return {
+                "ok": False,
+                "provider": "avito",
+                "step": "self",
+                "error": "no account id",
+            }
     except Exception as e:
         return {"ok": False, "provider": "avito", "step": "self", "error": str(e)}
 
@@ -237,7 +250,11 @@ def amo_start():
 
 
 @router.get("/oauth/amo/callback")
-async def amo_callback(code: str | None = None, state: str | None = None):
+async def amo_callback(
+    code: str | None = None,
+    state: str | None = None,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
     if not code:
         return {"ok": False, "provider": "amo", "step": "callback", "error": "no code"}
 
@@ -251,8 +268,12 @@ async def amo_callback(code: str | None = None, state: str | None = None):
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as x:
-            r = await x.post(url, json=payload, headers={"Accept": "application/json"})
+        r = await http_client.post(
+            url,
+            json=payload,
+            headers={"Accept": "application/json"},
+            timeout=30,
+        )
         if r.status_code >= 400:
             return {
                 "ok": False,

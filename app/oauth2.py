@@ -3,6 +3,7 @@ import time
 import httpx
 from typing import Optional
 from app.token_store import DbTokenStore, TokenData
+from app.http_client import get_http_client
 
 
 class OAuth2RefreshError(Exception):
@@ -19,6 +20,7 @@ async def refresh_tokens(
     redirect_uri: Optional[str] = None,
     use_basic_auth: bool = False,
     owner_id: Optional[str] = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> TokenData:
     """
     Универсальный refresh_token.
@@ -32,8 +34,14 @@ async def refresh_tokens(
     if redirect_uri:
         data["redirect_uri"] = redirect_uri
 
-    async with httpx.AsyncClient(timeout=30) as x:
-        r = await x.post(token_url, data=data, headers={"Accept": "application/json"}, auth=auth)
+    client = http_client or get_http_client()
+    r = await client.post(
+        token_url,
+        data=data,
+        headers={"Accept": "application/json"},
+        auth=auth,
+        timeout=30,
+    )
     if r.status_code >= 400:
         raise OAuth2RefreshError(f"{service} refresh failed {r.status_code}: {r.text}")
 
@@ -60,6 +68,7 @@ async def ensure_fresh_access(
     use_basic_auth: bool = False,
     margin_sec: int = 120,
     owner_id: Optional[str] = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> str:
     """
     Возвращает свежий access_token, обновляя при необходимости.
@@ -77,5 +86,6 @@ async def ensure_fresh_access(
             redirect_uri=redirect_uri,
             use_basic_auth=use_basic_auth,
             owner_id=owner_id,
+            http_client=http_client,
         )
     return data["access_token"]
