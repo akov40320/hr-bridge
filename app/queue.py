@@ -74,10 +74,15 @@ async def consume(handler, max_attempts: int = 10):
     async with q.iterator() as it:
         async for message in it:
             obj = None
+            attempts = 0
+            payload = {}
             try:
                 obj = json.loads(message.body.decode("utf-8"))
                 payload = obj.get("payload") or {}
-                attempts = int(obj.get("attempts") or 0)
+                try:
+                    attempts = int(obj.get("attempts") or 0)
+                except Exception:
+                    attempts = 0
 
                 # запустим обработчик
                 await handler(payload, attempts)
@@ -89,12 +94,12 @@ async def consume(handler, max_attempts: int = 10):
                 # не оставляем в очереди — ACK и перекидываем в retry/DLQ
                 await message.ack()
                 try:
-                    cur_attempts = (attempts if obj is not None else 0) + 1
+                    cur_attempts = attempts + 1
                     if cur_attempts >= max_attempts:
-                        await publish_dlq(payload or {}, cur_attempts, str(e))
+                        await publish_dlq(payload, cur_attempts, str(e))
                         logger.exception("sent to DLQ after attempts=%s", cur_attempts)
                     else:
-                        await publish_retry(payload or {}, cur_attempts)
+                        await publish_retry(payload, cur_attempts)
                         logger.exception("requeued to retry, attempt=%s", cur_attempts)
                 except Exception:
                     logger.exception("failed to republish to retry/DLQ")
