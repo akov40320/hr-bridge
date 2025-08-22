@@ -1,8 +1,9 @@
 """Endpoints handling incoming AmoCRM webhooks."""
 
+import json
 import logging
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.adapters.amo_client import AmoClient
 from app.core.config import settings
@@ -35,8 +36,12 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
                 lead_id = int(it["id"])
                 status_id = int(it.get("new_status_id") or it.get("status_id"))
                 events.append((lead_id, status_id))
-    except Exception:
-        pass
+    except (json.JSONDecodeError, KeyError, ValueError) as exc:
+        body = (await request.body()).decode("utf-8", errors="replace")
+        logger.warning(
+            "Failed to parse AmoCRM status webhook: %s; body=%s", exc, body[:200]
+        )
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
 
     if not events:
         form = await request.form()
