@@ -5,6 +5,7 @@ from app.core.config import get_settings
 import logging
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class AmoChatsError(Exception):
@@ -15,13 +16,12 @@ class AmoChatsClient:
     """Helper validating required AmoChats settings once."""
 
     def __init__(self):
-        self._s = get_settings()
         req = {
-            "AMO_CHATS_SCOPE_ID": getattr(self._s, "AMO_CHATS_SCOPE_ID", None),
-            "AMO_CHATS_SECRET": getattr(self._s, "AMO_CHATS_SECRET", None),
-            "AMO_CHATS_ACCOUNT_ID": getattr(self._s, "AMO_CHATS_ACCOUNT_ID", None),
-            "AMO_CHATS_CHANNEL_ID": getattr(self._s, "AMO_CHATS_CHANNEL_ID", None),
-            "AMO_CHATS_SENDER_USER_AMOJO_ID": getattr(self._s, "AMO_CHATS_SENDER_USER_AMOJO_ID", None),
+            "AMO_CHATS_SCOPE_ID": getattr(settings, "AMO_CHATS_SCOPE_ID", None),
+            "AMO_CHATS_SECRET": getattr(settings, "AMO_CHATS_SECRET", None),
+            "AMO_CHATS_ACCOUNT_ID": getattr(settings, "AMO_CHATS_ACCOUNT_ID", None),
+            "AMO_CHATS_CHANNEL_ID": getattr(settings, "AMO_CHATS_CHANNEL_ID", None),
+            "AMO_CHATS_SENDER_USER_AMOJO_ID": getattr(settings, "AMO_CHATS_SENDER_USER_AMOJO_ID", None),
         }
         missing = [k for k, v in req.items() if not v]
         if missing:
@@ -72,7 +72,7 @@ async def connect_channel(client: httpx.AsyncClient) -> dict:
     body = _dump({
         "account_id": ac.account_id,
         "hook_api_version": "v2",
-        "title": getattr(ac._s, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
+        "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
     })
     headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
@@ -82,8 +82,7 @@ async def connect_channel(client: httpx.AsyncClient) -> dict:
 
 
 async def ensure_amo_chats_connected(logger, client: httpx.AsyncClient) -> None:
-    s = get_settings()
-    if not getattr(s, "AMO_CHATS_AUTOCONNECT", False):
+    if not getattr(settings, "AMO_CHATS_AUTOCONNECT", False):
         logger.info("AmoChats autoconnect disabled")
         return
     try:
