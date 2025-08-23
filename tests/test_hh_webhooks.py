@@ -9,6 +9,14 @@ from app.db import models
 from app.db.token_store import DbTokenStore
 
 
+@pytest.fixture(autouse=True)
+def patch_ensure_fresh_access(monkeypatch):
+    async def fake_ensure(*, config, **kwargs):
+        return f"tok{config.owner_id}"
+
+    monkeypatch.setattr(hh_webhooks, "ensure_fresh_access", fake_ensure)
+
+
 @pytest.mark.asyncio
 async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
     # Insert tokens for two employers
@@ -59,6 +67,10 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
 def _set_events(monkeypatch, value: str):
     class Dummy:
         HH_WEBHOOK_EVENTS = value
+        HH_TOKEN_URL = "https://example.com/token"
+        HH_CLIENT_ID = "id"
+        HH_CLIENT_SECRET = "secret"
+        HH_REDIRECT_URI = "http://example.com/cb"
 
     monkeypatch.setattr(hh_webhooks, "get_settings", lambda: Dummy())
 
