@@ -1,3 +1,5 @@
+"""Expose base model and database session utilities."""
+
 from .base import Base
 from .db import (
     get_engine,
