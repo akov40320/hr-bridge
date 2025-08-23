@@ -49,10 +49,12 @@ _REFUSAL_NAMES = {
 
 
 def is_refusal_code(code: str | None) -> bool:
+    """Return ``True`` if the given code represents a refusal."""
     return bool(code) and (code.startswith("discard") or code.startswith("reject"))
 
 
 def refusal_text(code: str | None) -> str | None:
+    """Map a refusal code to its human‑readable description."""
     return _REFUSAL_NAMES.get(code or "")
 
 
@@ -67,6 +69,7 @@ REFUSAL_TEXT_TO_HH = {
 
 
 def norm_reason(s: str | None) -> str:
+    """Normalize reason text by stripping whitespace and lowering case."""
     return (s or "").strip().lower()
 
 
@@ -78,4 +81,3 @@ __all__ = [
     "REFUSAL_TEXT_TO_HH",
     "norm_reason",
 ]
-
