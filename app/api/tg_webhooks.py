@@ -6,7 +6,7 @@ instances are provided directly.
 """
 
 import logging
-from typing import cast  
+from typing import cast
 
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
