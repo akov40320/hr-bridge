@@ -19,7 +19,9 @@ class Token(Base):
     expires_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )
 
     __table_args__ = (
@@ -38,7 +40,8 @@ class LeadLink(Base):
     external_id: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
     )
 
 
@@ -49,9 +52,14 @@ class TgLink(Base):
     bot_kind: Mapped[str] = mapped_column(Text, primary_key=True)  # "master" | "operator"
     lead_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
     conversation_id: Mapped[str | None] = mapped_column(Text)  # для AmoChats
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )
 
 
@@ -68,10 +76,13 @@ class TgSurvey(Base):
     time_pref: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )
 
 
@@ -80,5 +91,6 @@ class EventDedup(Base):
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), index=True
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
     )
