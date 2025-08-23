@@ -1,3 +1,9 @@
+"""Интерфейсы для хранения и получения данных опроса Telegram.
+
+Модуль содержит функции для создания, чтения, обновления и удаления записей
+о прохождении опроса пользователем.
+"""
+
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -53,6 +59,7 @@ async def start_or_reset_survey(user_id: int, bot_kind: str, lead_id: int) -> No
 
 
 async def get_survey(user_id: int, bot_kind: str) -> Optional[TgSurvey]:
+    """Возвращает запись опроса для указанного пользователя."""
     async with get_session() as s:
         row = (
             await s.execute(
@@ -106,6 +113,7 @@ async def store_answer_and_advance(user_id: int, bot_kind: str, text: str) -> Op
 
 
 async def delete_survey(user_id: int, bot_kind: str) -> None:
+    """Удаляет запись опроса пользователя."""
     async with get_session() as s:
         await s.execute(
             delete(TgSurvey).where(
