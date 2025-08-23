@@ -1,3 +1,5 @@
+"""Persistence helpers for links between leads and external resources."""
+
 from __future__ import annotations
 from typing import Any, Optional
 from sqlalchemy import select
@@ -54,6 +56,7 @@ async def save_link(
 
 
 async def find_link(lead_id: int) -> Optional[dict[str, Any]]:
+    """Fetch link data for a lead if it exists."""
     async with get_session() as s:
         row = (
             await s.execute(select(LeadLink).where(LeadLink.lead_id == lead_id))
