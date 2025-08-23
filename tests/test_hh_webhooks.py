@@ -1,3 +1,4 @@
+import json
 import pytest
 import httpx
 from sqlalchemy import insert
@@ -53,3 +54,91 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
 
     assert captured, "no requests were made"
     assert captured[0].headers.get("Authorization") == "Bearer tok2"
+
+
+def _set_events(monkeypatch, value: str):
+    class Dummy:
+        HH_WEBHOOK_EVENTS = value
+
+    monkeypatch.setattr(hh_webhooks, "get_settings", lambda: Dummy())
+
+
+def test_events_filtered(monkeypatch, caplog):
+    _set_events(monkeypatch, "negotiation_created,invalid")
+
+    with caplog.at_level("WARNING"):
+        events = hh_webhooks._events()
+
+    assert events == ["negotiation_created"]
+    assert "unsupported events" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_ensure_skips_when_no_valid_events(in_memory_db, monkeypatch):
+    async with get_session() as s:
+        await s.execute(
+            insert(models.Token).values(
+                id=1,
+                service="hh",
+                owner_id="1",
+                access_token="tok1",
+                refresh_token="r1",
+                expires_at=0,
+            )
+        )
+        await s.commit()
+
+    async def fake_list_owners(service: str):
+        return ["1"]
+
+    monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
+    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    _set_events(monkeypatch, "invalid")
+
+    captured = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await hh_webhooks.ensure_hh_webhook(client)
+
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
+    async with get_session() as s:
+        await s.execute(
+            insert(models.Token).values(
+                id=1,
+                service="hh",
+                owner_id="1",
+                access_token="tok1",
+                refresh_token="r1",
+                expires_at=0,
+            )
+        )
+        await s.commit()
+
+    async def fake_list_owners(service: str):
+        return ["1"]
+
+    monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
+    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    _set_events(monkeypatch, "negotiation_created,invalid")
+
+    captured = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await hh_webhooks.ensure_hh_webhook(client)
+
+    assert len(captured) == 2
+    assert json.loads(captured[1].content)["actions"] == ["negotiation_created"]
