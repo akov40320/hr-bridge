@@ -1,3 +1,5 @@
+"""Shared logic for processing job board webhooks."""
+
 import logging
 from typing import Callable
 
