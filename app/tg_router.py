@@ -1,4 +1,7 @@
+"""Telegram bot router for mirroring messages and collecting survey responses."""
+
 import logging
+
 from aiogram import Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
@@ -17,40 +20,61 @@ logger = logging.getLogger("tg.router")
 
 
 def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:
+    """Create a dispatcher with handlers for Telegram survey bots."""
     dp = Dispatcher()
     svc = SurveyService(queue_client)
 
-    async def _answer_and_mirror(m: Message, text: str, bot_kind: str, lead_id: int, conv_id: str | None):
+    async def _answer_and_mirror(
+        m: Message, text: str, lead_id: int, conv_id: str | None
+    ) -> None:
+        """Reply to user and mirror message to the CRM queue."""
         await m.answer(text)
         msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
-        await queue_client.publish_task({
-            "platform": "mirror",
-            "action": "bot_to_amo",
-            "text": text,
-            "user_id": m.from_user.id,
-            "user_name": m.from_user.username,
-            "conversation_id": conv_id,
-            "lead_id": lead_id,
-            "msg_key": msg_key,
-        })
+        await queue_client.publish_task(
+            {
+                "platform": "mirror",
+                "action": "bot_to_amo",
+                "text": text,
+                "user_id": m.from_user.id,
+                "user_name": m.from_user.username,
+                "conversation_id": conv_id,
+                "lead_id": lead_id,
+                "msg_key": msg_key,
+            }
+        )
 
     @dp.message(CommandStart())
-    async def on_start(m: Message):
+    async def on_start(m: Message) -> None:
+        """Handle /start command to register user and start survey."""
         lead_id = parse_start_arg(m.text or "")
         if not lead_id:
-            await m.answer("Нужно открыть бота по ссылке из сообщения, чтобы я увидел вашу заявку.")
+            await m.answer(
+                "Нужно открыть бота по ссылке из сообщения, "
+                "чтобы я увидел вашу заявку."
+            )
             return
 
         await upsert_tg_link(m.from_user.id, bot_kind, lead_id)
-        await svc.start(m.from_user.id, bot_kind, lead_id, pretty_tg_identity(m))
+        await svc.start(
+            m.from_user.id, bot_kind, lead_id, pretty_tg_identity(m)
+        )
 
-        greeting = "Здравствуйте! Нужны пару уточнений по заявке.\n\n" + survey_prompt(0)
-        await _answer_and_mirror(m, greeting, bot_kind, lead_id, conv_id=None)
+        greeting = (
+            "Здравствуйте! Нужны пару уточнений по заявке.\n\n"
+            + survey_prompt(0)
+        )
+        await _answer_and_mirror(m, greeting, lead_id, conv_id=None)
 
-        logger.info("[%s] /start user_id=%s lead_id=%s", bot_kind, m.from_user.id, lead_id)
+        logger.info(
+            "[%s] /start user_id=%s lead_id=%s",
+            bot_kind,
+            m.from_user.id,
+            lead_id,
+        )
 
     @dp.message(F.text)
-    async def on_text(m: Message):
+    async def on_text(m: Message) -> None:
+        """Process text messages, mirror to CRM, and advance survey."""
         text = m.text or ""
         survey = await svc.get(m.from_user.id, bot_kind)
 
@@ -65,38 +89,66 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                 conv_id = link.conversation_id
 
         if not lead_id:
-            await m.answer("Нажмите /start по ссылке из сообщения, чтобы привязать диалог к заявке.")
+            await m.answer(
+                "Нажмите /start по ссылке из сообщения, "
+                "чтобы привязать диалог к заявке."
+            )
             return
 
         msg_key = f"tg:{m.chat.id}:{m.message_id}"
-        await queue_client.publish_task({
-            "platform": "mirror",
-            "action": "tg_to_amo",
-            "lead_id": lead_id,
-            "text": text,
-            "tg_user_id": m.from_user.id,
-            "tg_user_name": m.from_user.username,
-            "conversation_id": conv_id,
-            "bot_kind": bot_kind,
-            "msg_key": msg_key,
-        })
+        await queue_client.publish_task(
+            {
+                "platform": "mirror",
+                "action": "tg_to_amo",
+                "lead_id": lead_id,
+                "text": text,
+                "tg_user_id": m.from_user.id,
+                "tg_user_name": m.from_user.username,
+                "conversation_id": conv_id,
+                "bot_kind": bot_kind,
+                "msg_key": msg_key,
+            }
+        )
 
         if survey:
-            survey = await svc.store_answer(m.from_user.id, bot_kind, text)
+            survey = await svc.store_answer(
+                m.from_user.id, bot_kind, text
+            )
             if not survey:
-                await _answer_and_mirror(m, "Сессия не найдена. Нажмите /start ещё раз.", bot_kind, lead_id, conv_id)
+                await _answer_and_mirror(
+                    m,
+                    "Сессия не найдена. Нажмите /start ещё раз.",
+                    lead_id,
+                    conv_id,
+                )
                 return
 
             if survey.step <= 2:
-                await _answer_and_mirror(m, survey_prompt(survey.step), bot_kind, lead_id, conv_id)
-            else:
-                summary = survey_summary(survey.city, survey.experience, survey.time_pref)
-                await svc.finish(m.from_user.id, bot_kind, lead_id, summary)
                 await _answer_and_mirror(
                     m,
-                    "Спасибо! Мы передали информацию рекрутеру. С вами свяжутся.",
-                    bot_kind, lead_id, conv_id
+                    survey_prompt(survey.step),
+                    lead_id,
+                    conv_id,
                 )
-                logger.info("[%s] survey finished user_id=%s lead_id=%s", bot_kind, m.from_user.id, lead_id)
+            else:
+                summary = survey_summary(
+                    survey.city, survey.experience, survey.time_pref
+                )
+                await svc.finish(
+                    m.from_user.id, bot_kind, lead_id, summary
+                )
+                await _answer_and_mirror(
+                    m,
+                    "Спасибо! Мы передали информацию рекрутеру. "
+                    "С вами свяжутся.",
+                    lead_id,
+                    conv_id,
+                )
+                logger.info(
+                    "[%s] survey finished user_id=%s lead_id=%s",
+                    bot_kind,
+                    m.from_user.id,
+                    lead_id,
+                )
 
     return dp
