@@ -1,4 +1,4 @@
-"""Ensure HH webhook subscriptions are configured as expected."""
+"""Обеспечивает корректную регистрацию подписок HH вебхуков."""
 
 import logging
 import httpx
@@ -10,8 +10,23 @@ from app.core.config import get_settings
 log = logging.getLogger(__name__)
 HH_SUBS_URL = "https://api.hh.ru/webhook/subscriptions"
 
-# Supported webhook events from HeadHunter API.
-ALLOWED_ACTIONS = {"negotiation_created"}
+ALLOWED_TYPES = {
+    "NEW_NEGOTIATION_VACANCY",
+    "NEW_NEGOTIATION_MESSAGE",
+    "NEGOTIATION_EMPLOYER_STATE_CHANGE",
+}
+
+ALIAS2TYPE = {
+    "negotiation.created": "NEW_NEGOTIATION_VACANCY",
+    "negotiation_created": "NEW_NEGOTIATION_VACANCY",
+    "NEW_NEGOTIATION_VACANCY": "NEW_NEGOTIATION_VACANCY",
+    "message.created": "NEW_NEGOTIATION_MESSAGE",
+    "message_created": "NEW_NEGOTIATION_MESSAGE",
+    "NEW_NEGOTIATION_MESSAGE": "NEW_NEGOTIATION_MESSAGE",
+    "negotiation.status.changed": "NEGOTIATION_EMPLOYER_STATE_CHANGE",
+    "negotiation.status_changed": "NEGOTIATION_EMPLOYER_STATE_CHANGE",
+    "NEGOTIATION_EMPLOYER_STATE_CHANGE": "NEGOTIATION_EMPLOYER_STATE_CHANGE",
+}
 
 
 def _target_url() -> str:
@@ -19,23 +34,37 @@ def _target_url() -> str:
     return (getattr(s, "HH_WEBHOOK_URL", "") or "").strip()
 
 
-def _events() -> list[str]:
+def _hh_user_agent() -> str:
+    s = get_settings()
+    ua = (getattr(s, "HH_USER_AGENT", "") or "").strip()
+    return ua or "hr-bridge/1.0 (https://hr-bridge.onrender.com)"
+
+
+def _wanted_types() -> list[str]:
     s = get_settings()
     raw = (getattr(s, "HH_WEBHOOK_EVENTS", "") or "").strip()
-    events = (
-        [e.strip() for e in raw.split(",") if e.strip()]
-        if raw
-        else ["negotiation_created"]
-    )
-    allowed = [e for e in events if e in ALLOWED_ACTIONS]
-    invalid = [e for e in events if e not in ALLOWED_ACTIONS]
+    items = [e.strip() for e in raw.split(",") if e.strip()] if raw else []
+    if not items:
+        items = ["NEW_NEGOTIATION_VACANCY"]
+    mapped = [ALIAS2TYPE.get(x, x) for x in items]
+    invalid = [t for t in mapped if t not in ALLOWED_TYPES]
     if invalid:
-        log.warning("HH webhook: unsupported events ignored: %s", ",".join(invalid))
-    return allowed
+        log.warning("HH webhook: неподдерживаемые типы проигнорированы: %s", ",".join(invalid))
+    return [t for t in mapped if t in ALLOWED_TYPES]
+
+
+def _build_actions(types: list[str]) -> list[dict]:
+    out: list[dict] = []
+    for t in types:
+        if t == "NEW_NEGOTIATION_VACANCY":
+            out.append({"type": t, "settings": {"vacancies_only_mine": False}})
+        else:
+            out.append({"type": t})
+    return out
 
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
-    """Создать или обновить подписку HH вебхуков, используя первого доступного работодателя."""
+    """Создать или обновить подписку HH вебхуков (берётся первый доступный работодатель)."""
 
     url = _target_url()
     if not url:
@@ -56,11 +85,14 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         "Authorization": f"Bearer {tok['access_token']}",
         "Accept": "application/json",
         "Content-Type": "application/json",
+        "HH-User-Agent": _hh_user_agent(),
     }
-    want_actions = _events()  # список строк событий
-    if not want_actions:
-        log.warning("HH webhook: no valid events specified — skipping registration")
+
+    want_types = _wanted_types()
+    if not want_types:
+        log.warning("HH webhook: нет валидных типов действий — пропускаю регистрацию")
         return
+    want_actions = _build_actions(want_types)
 
     try:
         r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
@@ -76,15 +108,12 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         if not current:
             body = {"url": url, "actions": want_actions}
             cr = await client.post(HH_SUBS_URL, json=body, headers=headers, timeout=20)
-            if cr.status_code in (401, 403, 404):
-                log.warning("HH webhook: %s — нет прав/токен/фича недоступна", cr.status_code)
-                return
             cr.raise_for_status()
-            log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_actions))
+            log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_types))
             return
 
-        have_actions = sorted([e.strip() for e in current.get("actions", [])])
-        if sorted(want_actions) != have_actions:
+        current_types = sorted([a.get("type", "") for a in current.get("actions", [])])
+        if sorted(want_types) != current_types:
             del_id = current.get("id") or current.get("subscription_id")
             if del_id:
                 await client.delete(f"{HH_SUBS_URL}/{del_id}", headers=headers, timeout=20)
@@ -95,13 +124,11 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
                 timeout=20,
             )
             cr.raise_for_status()
-            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_actions))
+            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_types))
         else:
-            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_actions))
+            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_types))
 
     except httpx.HTTPStatusError as e:
         log.exception("HH webhook: HTTP ошибка (%s): %s", e.response.status_code, e.response.text)
     except (httpx.HTTPError, ValueError) as e:
         log.exception("HH webhook: непредвиденная ошибка: %s", e)
-
-
