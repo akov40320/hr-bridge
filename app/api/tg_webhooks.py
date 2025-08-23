@@ -20,21 +20,13 @@ tokens = {
 }
 
 
-def make_tg_webhook(kind: str):
-    """Фабрика обработчиков Telegram вебхуков с ленивой инициализацией Bot и настроек."""
+def make_tg_webhook(kind: str, *_args, **_kwargs):  # ← принимает лишние аргументы
     async def _handler(request: Request):
-        if kind == "master":
-            token = settings.TELEGRAM_MASTER_BOT_TOKEN
-        elif kind == "operator":
-            token = settings.TELEGRAM_OPERATOR_BOT_TOKEN
-        else:
-            token = None
-
+        token = tokens.get(kind)
         if not token:
             logger.warning("%s webhook called, but token is empty -> 503", kind)
             return Response(status_code=503)
 
-        # Проверка секрета
         secret_hdr = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
         if settings.TELEGRAM_WEBHOOK_SECRET and secret_hdr != settings.TELEGRAM_WEBHOOK_SECRET:
             logger.warning("%s webhook: bad secret -> 401", kind)
