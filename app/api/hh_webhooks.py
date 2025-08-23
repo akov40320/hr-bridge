@@ -47,7 +47,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
-    want_events = _events()
+    want_actions = _events()  # список строк событий
 
     try:
         r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
@@ -61,33 +61,34 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         current = next((it for it in items if str(it.get("url", "")).strip() == url), None)
 
         if not current:
-            body = {"url": url, "events": want_events}
+            body = {"url": url, "actions": want_actions}
             cr = await client.post(HH_SUBS_URL, json=body, headers=headers, timeout=20)
             if cr.status_code in (401, 403, 404):
                 log.warning("HH webhook: %s — нет прав/токен/фича недоступна", cr.status_code)
                 return
             cr.raise_for_status()
-            log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_events))
+            log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_actions))
             return
 
-        have_events = sorted([e.strip() for e in current.get("events", [])])
-        if sorted(want_events) != have_events:
+        have_actions = sorted([e.strip() for e in current.get("actions", [])])
+        if sorted(want_actions) != have_actions:
             del_id = current.get("id") or current.get("subscription_id")
             if del_id:
                 await client.delete(f"{HH_SUBS_URL}/{del_id}", headers=headers, timeout=20)
             cr = await client.post(
                 HH_SUBS_URL,
-                json={"url": url, "events": want_events},
+                json={"url": url, "actions": want_actions},
                 headers=headers,
                 timeout=20,
             )
             cr.raise_for_status()
-            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_events))
+            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_actions))
         else:
-            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_events))
+            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_actions))
 
     except httpx.HTTPStatusError as e:
         log.exception("HH webhook: HTTP ошибка (%s): %s", e.response.status_code, e.response.text)
     except (httpx.HTTPError, ValueError) as e:
         log.exception("HH webhook: непредвиденная ошибка: %s", e)
+
 
