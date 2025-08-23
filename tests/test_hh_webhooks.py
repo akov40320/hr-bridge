@@ -67,10 +67,12 @@ def test_events_filtered(monkeypatch, caplog):
     _set_events(monkeypatch, "negotiation_created,invalid")
 
     with caplog.at_level("WARNING"):
-        events = hh_webhooks._events()
+        actions = hh_webhooks._actions()
 
-    assert events == ["negotiation_created"]
-    assert "unsupported events" in caplog.text
+    assert actions == [
+        {"type": "NEW_NEGOTIATION_VACANCY", "settings": {"vacancies_only_mine": False}}
+    ]
+    assert "неподдерживаемые события" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -141,4 +143,6 @@ async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
         await hh_webhooks.ensure_hh_webhook(client)
 
     assert len(captured) == 2
-    assert json.loads(captured[1].content)["actions"] == ["negotiation_created"]
+    assert json.loads(captured[1].content)["actions"] == [
+        {"type": "NEW_NEGOTIATION_VACANCY", "settings": {"vacancies_only_mine": False}}
+    ]

@@ -37,6 +37,28 @@ def test_parse_hh_payload_missing_id():
         parse_hh_payload(raw)
 
 
+def test_parse_hh_payload_new_negotiation():
+    raw = json.dumps(
+        {
+            "id": "notification1",
+            "payload": {
+                "topic_id": "topic1",
+                "resume_id": "resume1",
+                "vacancy_id": "vac1",
+                "employer_id": "emp1",
+                "chat_id": "chat1",
+            },
+        }
+    ).encode()
+
+    payload = parse_hh_payload(raw)
+    assert payload.platform == "hh"
+    assert payload.owner_id == "emp1"
+    assert payload.vacancy_id == "vac1"
+    assert payload.applicant.id == "topic1"
+    assert payload.applicant.name == "кандидат"
+
+
 def test_parse_hh_payload_bad_json():
     with pytest.raises(ValueError):
         parse_hh_payload(b"{bad json")
