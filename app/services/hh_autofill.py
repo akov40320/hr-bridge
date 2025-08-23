@@ -1,6 +1,13 @@
+"""Mapping utility for the HH autofill service.
+
+The module fetches Amo CRM pipeline statuses and builds a mapping to
+HeadHunter status codes. The resulting mapping is stored for later reuse.
+"""
+
 import re
 import logging
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
 from app.db.token_store import DbTokenStore
@@ -31,7 +38,7 @@ async def _fetch_pipeline_statuses(
 ) -> list[dict]:
     try:
         tok = await DbTokenStore("amo").load()
-    except Exception as e:
+    except (RuntimeError, SQLAlchemyError) as e:
         log.warning("hh-autofill: no amo token: %s", e)
         return []
 
@@ -49,7 +56,7 @@ async def _fetch_pipeline_statuses(
         r.raise_for_status()
         pj = r.json() or {}
         return (pj.get("_embedded") or {}).get("statuses") or []
-    except Exception as e:
+    except (httpx.HTTPError, ValueError) as e:
         log.warning("hh-autofill: cannot fetch pipeline %s: %s", pipeline_id, e)
         return []
 
