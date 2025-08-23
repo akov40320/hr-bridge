@@ -150,3 +150,86 @@ def test_webhook_queued(monkeypatch, client):
     r = client.post("/webhooks/hh", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": True, "queued": True, "reason": "reauth_required"}
+
+
+def test_webhook_enrich_error(monkeypatch, client):
+    async def fake_check(key):
+        return True
+
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
+    monkeypatch.setattr(hh_incoming, "parse_hh_payload", lambda raw: _payload())
+
+    async def boom(payload, http_client):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(_webhook_common, "enrich_applicant", boom)
+
+    r = client.post("/webhooks/hh", data=b"{}")
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "error": "internal_error"}
+
+
+def test_webhook_create_lead_error(monkeypatch, client):
+    async def fake_check(key):
+        return True
+
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
+    monkeypatch.setattr(hh_incoming, "parse_hh_payload", lambda raw: _payload())
+
+    async def fake_enrich(payload, http_client):
+        return payload
+
+    monkeypatch.setattr(_webhook_common, "enrich_applicant", fake_enrich)
+
+    async def fake_amo_create(cls, client):
+        return object()
+
+    monkeypatch.setattr(_webhook_common.AmoClient, "create", classmethod(fake_amo_create))
+
+    async def boom(payload, amo):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(_webhook_common, "create_lead", boom)
+
+    r = client.post("/webhooks/hh", data=b"{}")
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "error": "internal_error"}
+
+
+def test_webhook_tag_error(monkeypatch, client):
+    async def fake_check(key):
+        return True
+
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
+    monkeypatch.setattr(hh_incoming, "parse_hh_payload", lambda raw: _payload())
+
+    async def fake_enrich(payload, http_client):
+        return payload
+
+    monkeypatch.setattr(_webhook_common, "enrich_applicant", fake_enrich)
+
+    async def fake_amo_create(cls, client):
+        return object()
+
+    monkeypatch.setattr(_webhook_common.AmoClient, "create", classmethod(fake_amo_create))
+
+    async def fake_create_lead(payload, amo):
+        return 123, "kind"
+
+    monkeypatch.setattr(_webhook_common, "create_lead", fake_create_lead)
+
+    called = {}
+
+    async def fake_send_invite(payload, lead_id):
+        called["invite"] = lead_id
+
+    async def boom(lead_id, kind, amo):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
+    monkeypatch.setattr(_webhook_common, "tag_lead", boom)
+
+    r = client.post("/webhooks/hh", data=b"{}")
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "error": "internal_error"}
+    assert called["invite"] == 123
