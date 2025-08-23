@@ -1,4 +1,4 @@
-from app.api import hh_incoming
+from app.api import hh_incoming, _webhook_common
 from app.models import IncomingPayload, Applicant
 
 
@@ -10,18 +10,22 @@ def test_webhook_success(monkeypatch, client):
     async def fake_check(key):
         return True
 
-    monkeypatch.setattr(hh_incoming, "check_and_store", fake_check)
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
     monkeypatch.setattr(hh_incoming, "parse_hh_payload", lambda raw: _payload())
 
     async def fake_enrich(payload, http_client):
         return payload
 
-    monkeypatch.setattr(hh_incoming, "enrich_applicant", fake_enrich)
+    monkeypatch.setattr(_webhook_common, "enrich_applicant", fake_enrich)
 
     async def fake_create_lead(payload, amo):
         return 777, "kind"
 
-    monkeypatch.setattr(hh_incoming, "create_lead", fake_create_lead)
+    monkeypatch.setattr(_webhook_common, "create_lead", fake_create_lead)
+
+    async def fake_amo_create(cls, client):
+        return object()
+    monkeypatch.setattr(_webhook_common.AmoClient, "create", classmethod(fake_amo_create))
 
     called = {}
 
@@ -31,8 +35,8 @@ def test_webhook_success(monkeypatch, client):
     async def fake_tag_lead(lead_id, kind, amo):
         called["tag"] = kind
 
-    monkeypatch.setattr(hh_incoming, "send_invite", fake_send_invite)
-    monkeypatch.setattr(hh_incoming, "tag_lead", fake_tag_lead)
+    monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
+    monkeypatch.setattr(_webhook_common, "tag_lead", fake_tag_lead)
 
     r = client.post("/webhooks/hh", data=b"{}")
     assert r.status_code == 200
@@ -45,7 +49,7 @@ def test_webhook_duplicate(monkeypatch, client):
     async def fake_check(key):
         return False
 
-    monkeypatch.setattr(hh_incoming, "check_and_store", fake_check)
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
 
     called = False
 
@@ -66,7 +70,7 @@ def test_webhook_bad_payload(monkeypatch, client):
     async def fake_check(key):
         return True
 
-    monkeypatch.setattr(hh_incoming, "check_and_store", fake_check)
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
 
     def fake_parse(raw):
         raise ValueError("bad")
@@ -82,18 +86,22 @@ def test_webhook_ignored(monkeypatch, client):
     async def fake_check(key):
         return True
 
-    monkeypatch.setattr(hh_incoming, "check_and_store", fake_check)
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
     monkeypatch.setattr(hh_incoming, "parse_hh_payload", lambda raw: _payload())
 
     async def fake_enrich(payload, http_client):
         return payload
 
-    monkeypatch.setattr(hh_incoming, "enrich_applicant", fake_enrich)
+    monkeypatch.setattr(_webhook_common, "enrich_applicant", fake_enrich)
 
     async def fake_create_lead(payload, amo):
         return None, "ignore"
 
-    monkeypatch.setattr(hh_incoming, "create_lead", fake_create_lead)
+    monkeypatch.setattr(_webhook_common, "create_lead", fake_create_lead)
+
+    async def fake_amo_create(cls, client):
+        return object()
+    monkeypatch.setattr(_webhook_common.AmoClient, "create", classmethod(fake_amo_create))
 
     async def fake_send_invite(*args, **kwargs):
         raise AssertionError("send_invite should not be called")
@@ -101,8 +109,8 @@ def test_webhook_ignored(monkeypatch, client):
     async def fake_tag_lead(*args, **kwargs):
         raise AssertionError("tag_lead should not be called")
 
-    monkeypatch.setattr(hh_incoming, "send_invite", fake_send_invite)
-    monkeypatch.setattr(hh_incoming, "tag_lead", fake_tag_lead)
+    monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
+    monkeypatch.setattr(_webhook_common, "tag_lead", fake_tag_lead)
 
     r = client.post("/webhooks/hh", data=b"{}")
     assert r.status_code == 200
@@ -113,18 +121,22 @@ def test_webhook_queued(monkeypatch, client):
     async def fake_check(key):
         return True
 
-    monkeypatch.setattr(hh_incoming, "check_and_store", fake_check)
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
     monkeypatch.setattr(hh_incoming, "parse_hh_payload", lambda raw: _payload())
 
     async def fake_enrich(payload, http_client):
         return payload
 
-    monkeypatch.setattr(hh_incoming, "enrich_applicant", fake_enrich)
+    monkeypatch.setattr(_webhook_common, "enrich_applicant", fake_enrich)
 
     async def fake_create_lead(payload, amo):
         return None, "master"
 
-    monkeypatch.setattr(hh_incoming, "create_lead", fake_create_lead)
+    monkeypatch.setattr(_webhook_common, "create_lead", fake_create_lead)
+
+    async def fake_amo_create(cls, client):
+        return object()
+    monkeypatch.setattr(_webhook_common.AmoClient, "create", classmethod(fake_amo_create))
 
     async def fake_send_invite(*args, **kwargs):
         raise AssertionError("send_invite should not be called")
@@ -132,8 +144,8 @@ def test_webhook_queued(monkeypatch, client):
     async def fake_tag_lead(*args, **kwargs):
         raise AssertionError("tag_lead should not be called")
 
-    monkeypatch.setattr(hh_incoming, "send_invite", fake_send_invite)
-    monkeypatch.setattr(hh_incoming, "tag_lead", fake_tag_lead)
+    monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
+    monkeypatch.setattr(_webhook_common, "tag_lead", fake_tag_lead)
 
     r = client.post("/webhooks/hh", data=b"{}")
     assert r.status_code == 200
