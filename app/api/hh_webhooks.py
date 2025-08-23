@@ -1,5 +1,9 @@
+"""Ensure HH webhook subscriptions are configured as expected."""
+
 import logging
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.db.token_store import DbTokenStore
 from app.core.config import get_settings
 
@@ -21,6 +25,8 @@ def _events() -> list[str]:
 
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
+    """Create or update HH webhook subscription using ``client``."""
+
     url = _target_url()
     if not url:
         log.info("HH webhook: HH_WEBHOOK_URL пуст — пропускаю регистрацию")
@@ -28,7 +34,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
 
     try:
         tok = await DbTokenStore("hh").load()
-    except Exception:
+    except (RuntimeError, SQLAlchemyError):
         log.info("HH webhook: нет токена работодателя — пропускаю регистрацию")
         return
 
@@ -78,6 +84,8 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
             log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_events))
 
     except httpx.HTTPStatusError as e:
-        log.exception("HH webhook: HTTP error (%s): %s", e.response.status_code, e.response.text)
-    except Exception:
-        log.exception("HH webhook: unexpected error")
+        log.exception(
+            "HH webhook: HTTP error (%s): %s", e.response.status_code, e.response.text
+        )
+    except (httpx.HTTPError, ValueError) as e:
+        log.exception("HH webhook: unexpected error: %s", e)
