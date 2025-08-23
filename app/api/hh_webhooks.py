@@ -56,7 +56,7 @@ def _events() -> list[str]:
 
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
-    """Create or update HH webhook subscription using ``client``."""
+    """Создать или обновить подписку HH вебхуков, используя первого доступного работодателя."""
 
     url = _target_url()
     if not url:
@@ -64,7 +64,11 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         return
 
     try:
-        tok = await DbTokenStore("hh").load()
+        owners = await DbTokenStore.list_owners("hh")
+        employer_id = owners[0] if owners else None
+        if not employer_id:
+            raise RuntimeError("нет работодателей")
+        tok = await DbTokenStore("hh", employer_id).load()
     except (RuntimeError, SQLAlchemyError):
         log.info("HH webhook: нет токена работодателя — пропускаю регистрацию")
         return
@@ -78,15 +82,14 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
 
     try:
         r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
+        if r.status_code in (401, 403, 404):
+            log.warning("HH webhook: %s — нет прав/токен/фича недоступна", r.status_code)
+            return
         r.raise_for_status()
         js = r.json()
         items = js if isinstance(js, list) else js.get("items", [])
 
-        current = None
-        for it in items:
-            if str(it.get("url", "")).strip() == url:
-                current = it
-                break
+        current = next((it for it in items if str(it.get("url", "")).strip() == url), None)
 
         if not current:
             body = {"url": url, "events": want_events}
@@ -115,8 +118,6 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
             log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_events))
 
     except httpx.HTTPStatusError as e:
-        log.exception(
-            "HH webhook: HTTP error (%s): %s", e.response.status_code, e.response.text
-        )
+        log.exception("HH webhook: HTTP ошибка (%s): %s", e.response.status_code, e.response.text)
     except (httpx.HTTPError, ValueError) as e:
-        log.exception("HH webhook: unexpected error: %s", e)
+        log.exception("HH webhook: непредвиденная ошибка: %s", e)
