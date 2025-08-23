@@ -10,6 +10,9 @@ from app.core.config import get_settings
 log = logging.getLogger(__name__)
 HH_SUBS_URL = "https://api.hh.ru/webhook/subscriptions"
 
+# Supported webhook events from HeadHunter API.
+ALLOWED_ACTIONS = {"negotiation_created"}
+
 
 def _target_url() -> str:
     s = get_settings()
@@ -19,9 +22,16 @@ def _target_url() -> str:
 def _events() -> list[str]:
     s = get_settings()
     raw = (getattr(s, "HH_WEBHOOK_EVENTS", "") or "").strip()
-    if raw:
-        return [e.strip() for e in raw.split(",") if e.strip()]
-    return ["negotiation_created"]
+    events = (
+        [e.strip() for e in raw.split(",") if e.strip()]
+        if raw
+        else ["negotiation_created"]
+    )
+    allowed = [e for e in events if e in ALLOWED_ACTIONS]
+    invalid = [e for e in events if e not in ALLOWED_ACTIONS]
+    if invalid:
+        log.warning("HH webhook: unsupported events ignored: %s", ",".join(invalid))
+    return allowed
 
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
@@ -48,6 +58,9 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         "Content-Type": "application/json",
     }
     want_actions = _events()  # список строк событий
+    if not want_actions:
+        log.warning("HH webhook: no valid events specified — skipping registration")
+        return
 
     try:
         r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
