@@ -190,12 +190,19 @@ class RabbitMQClient:
                                 try:
                                     attempts = int(obj.get("attempts") or 0)
                                 except (TypeError, ValueError):
-                                    logger.warning("Invalid attempts value: %s", obj.get("attempts"))
+                                    logger.warning(
+                                        "Invalid attempts value: %s",
+                                        obj.get("attempts"),
+                                    )
                                     attempts = 0
 
                                 await handler(payload, attempts)
                                 await message.ack()
-                            except (json.JSONDecodeError, aio_exc.AMQPError, RuntimeError) as e:  # pragma: no cover - mostly network
+                            except (
+                                json.JSONDecodeError,
+                                aio_exc.AMQPError,
+                                RuntimeError,
+                            ) as e:  # pragma: no cover - mostly network
                                 await message.ack()
                                 try:
                                     cur_attempts = attempts + 1
