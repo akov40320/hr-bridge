@@ -48,6 +48,33 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
     return events
 
 
+async def _fetch_refusal_reason(
+    lead_id: int, client: httpx.AsyncClient, field_id: int
+) -> str | None:
+    """Retrieve refusal reason text for the given lead."""
+    try:
+        amo = await AmoClient.create(client)
+        lead = await amo.get_lead(lead_id)
+    except httpx.HTTPError as exc:  # pragma: no cover - network failure
+        logger.exception("Failed to fetch lead %s: %s", lead_id, exc)
+        return None
+
+    cfv = lead.get("custom_fields_values") or []
+    field = next(
+        (f for f in cfv if int(f.get("field_id") or 0) == int(field_id)),
+        None,
+    )
+    if not field:
+        return ""
+    values = field.get("values") or []
+    if not values:
+        return ""
+    value = values[0].get("value")
+    if isinstance(value, dict):
+        return value.get("value") or value.get("text") or ""
+    return value or ""
+
+
 async def handle_hh_event(
     lead_id: int,
     status_id: int,
@@ -55,6 +82,7 @@ async def handle_hh_event(
     http_client: httpx.AsyncClient,
     queue_client: RabbitMQClient = rabbitmq,
 ):
+    """Update state in HH based on AmoCRM status change."""
     s = get_settings()
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
@@ -64,34 +92,22 @@ async def handle_hh_event(
 
     final_state = state
     if is_refusal_code(state) and s.AMO_CF_REFUSAL_REASON_ID:
-        try:
-            amo = await AmoClient.create(http_client)
-            lead = await amo.get_lead(lead_id)
-            cfv = lead.get("custom_fields_values") or []
-            reason_text = None
-            for f in cfv:
-                if int(f.get("field_id") or 0) == int(s.AMO_CF_REFUSAL_REASON_ID):
-                    vals = f.get("values") or []
-                    if vals:
-                        v = vals[0].get("value")
-                        if isinstance(v, dict):
-                            reason_text = v.get("value") or v.get("text") or ""
-                        else:
-                            reason_text = v or ""
-                    break
+        reason_text = await _fetch_refusal_reason(
+            lead_id, http_client, s.AMO_CF_REFUSAL_REASON_ID
+        )
+        if reason_text is not None:
             mapped = REFUSAL_TEXT_TO_HH.get(norm_reason(reason_text))
             if mapped:
                 final_state = mapped
-            elif reason_text is None or not reason_text.strip():
+            elif not reason_text.strip():
                 try:
                     pretty = refusal_text(state) or state
+                    amo = await AmoClient.create(http_client)
                     await amo.update_lead_custom_fields(
                         lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
                     )
-                except Exception:
+                except httpx.HTTPError:
                     logger.warning("Failed to copy refusal text")
-        except Exception:
-            logger.exception("Failed to map refusal reason")
 
     await queue_client.publish_task(
         {
@@ -105,8 +121,12 @@ async def handle_hh_event(
 
 
 async def handle_avito_event(
-    lead_id: int, status_id: int, link: dict, queue_client: RabbitMQClient = rabbitmq
+    _lead_id: int,
+    _status_id: int,
+    link: dict,
+    queue_client: RabbitMQClient = rabbitmq,
 ):
+    """Mark Avito thread as read for the given lead."""
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
     await queue_client.publish_task(
@@ -125,6 +145,7 @@ async def amo_webhook(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
+    """Process AmoCRM webhook and sync lead statuses to external platforms."""
     raw = await request.body()
     key = calc_key("amo", raw)
     if not await check_and_store(key):
