@@ -33,7 +33,11 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         return
 
     try:
-        tok = await DbTokenStore("hh").load()
+        owners = await DbTokenStore.list_owners("hh")
+        if not owners:
+            raise RuntimeError("no employers")
+        employer_id = owners[0]
+        tok = await DbTokenStore("hh", employer_id).load()
     except (RuntimeError, SQLAlchemyError):
         log.info("HH webhook: нет токена работодателя — пропускаю регистрацию")
         return
