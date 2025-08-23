@@ -1,3 +1,4 @@
+# tg_webhooks.py
 import logging
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
@@ -13,45 +14,66 @@ settings = get_settings()  # модульный settings — тесты его �
 router = APIRouter()
 admin_tg = APIRouter(prefix="/admin/tg", dependencies=[Depends(require_admin)])
 
-# ВАЖНО: модульный tokens — тесты ожидают tg_webhooks.tokens
-tokens = {
+# модульный tokens — тесты ожидают tg_webhooks.tokens
+tokens: dict[str, object] = {
     "master": settings.TELEGRAM_MASTER_BOT_TOKEN,
     "operator": settings.TELEGRAM_OPERATOR_BOT_TOKEN,
 }
 
 
-def make_tg_webhook(kind: str, *_args, **_kwargs):  # ← принимает лишние аргументы
+def make_tg_webhook(key: object, kind: str | None = None):
+    """
+    key: либо имя ключа в tokens (str), либо "бот-объект" (в тестах).
+    kind: подсказка для логов/роутинга; в проде вызывается как make_tg_webhook("master","master").
+    """
     async def _handler(request: Request):
-        token = tokens.get(kind)
-        if not token:
-            logger.warning("%s webhook called, but token is empty -> 503", kind)
-            return Response(status_code=503)
-
+        # 1) секрет проверяем первым — тест "bad_secret" ждёт 401, независимо от токена
         secret_hdr = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
         if settings.TELEGRAM_WEBHOOK_SECRET and secret_hdr != settings.TELEGRAM_WEBHOOK_SECRET:
-            logger.warning("%s webhook: bad secret -> 401", kind)
+            logger.warning("%s webhook: bad secret -> 401", kind or key)
             return Response(status_code=401)
 
+        # 2) парсим апдейт
         try:
             payload = await request.json()
             upd = Update.model_validate(payload)
         except Exception:
-            logger.exception("%s webhook: invalid json/update", kind)
+            logger.exception("%s webhook: invalid json/update", kind or key)
             return Response(status_code=400)
 
-        dp = make_router(kind)
-        async with Bot(token) as bot:
-            await dp.feed_update(bot=bot, update=upd)
+        # 3) достаём либо токен, либо "бот-объект"
+        value: object | None
+        if isinstance(key, str):
+            value = tokens.get(key)
+        else:
+            # в тестах сюда кладут "бот-объект"
+            value = key
 
-        logger.info("%s webhook ok: update_id=%s", kind, getattr(upd, "update_id", None))
+        if value is None and kind:
+            value = tokens.get(kind)
+
+        dp = make_router(kind or (key if isinstance(key, str) else "master"))
+
+        # 4) отправляем апдейт
+        if isinstance(value, str) and value:
+            async with Bot(value) as bot:
+                await dp.feed_update(bot=bot, update=upd)
+        elif value is not None:
+            # тестовый путь: value — уже "бот-объект"
+            await dp.feed_update(bot=value, update=upd)
+        else:
+            logger.warning("%s webhook called, but token is empty -> 503", kind or key)
+            return Response(status_code=503)
+
+        logger.info("%s webhook ok: update_id=%s", kind or key, getattr(upd, "update_id", None))
         return {"ok": True}
 
     return _handler
 
 
-# Регистрируем эндпоинты, опираясь на модульный tokens
-for _kind in tokens.keys():
-    router.post(f"/tg/webhook/{_kind}")(make_tg_webhook(_kind))
+# Продовая регистрация — через строковые ключи
+for _kind in ("master", "operator"):
+    router.post(f"/tg/webhook/{_kind}")(make_tg_webhook(_kind, _kind))
 
 
 @admin_tg.post("/set-webhooks")
@@ -63,9 +85,9 @@ async def set_webhooks():
     allowed = ["message"]
 
     out = {}
-    for kind, token in tokens.items():
-        if token:
-            async with Bot(token) as bot:
+    for kind, value in tokens.items():
+        if isinstance(value, str) and value:
+            async with Bot(value) as bot:
                 out[kind] = await bot.set_webhook(
                     url=f"{base}/tg/webhook/{kind}",
                     secret_token=secret,
@@ -78,9 +100,9 @@ async def set_webhooks():
 @admin_tg.post("/delete-webhooks")
 async def delete_webhooks():
     results = {}
-    for kind, token in tokens.items():
-        if token:
-            async with Bot(token) as bot:
+    for kind, value in tokens.items():
+        if isinstance(value, str) and value:
+            async with Bot(value) as bot:
                 results[kind] = await bot.delete_webhook(drop_pending_updates=True)
     return {"ok": True, "results": results}
 
@@ -88,8 +110,8 @@ async def delete_webhooks():
 @admin_tg.get("/webhook-info")
 async def webhook_info():
     res = {}
-    for kind, token in tokens.items():
-        if token:
-            async with Bot(token) as bot:
+    for kind, value in tokens.items():
+        if isinstance(value, str) and value:
+            async with Bot(value) as bot:
                 res[kind] = await bot.get_webhook_info()
     return {"ok": True, "info": res}
