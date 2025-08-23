@@ -1,14 +1,17 @@
-import httpx
+"""Utilities for interacting with the HeadHunter API."""
+
 from typing import Optional
 
+import httpx
+
+from app.api.oauth2 import OAuth2Config, ensure_fresh_access
 from app.core.config import get_settings
-from app.api.oauth2 import ensure_fresh_access, OAuth2Config
 from app.core.retry import with_retry
 from ._requests import request_with_retry
 
 
 class HHError(Exception):
-    ...
+    """Base exception for HeadHunter related errors."""
 
 
 async def set_employer_state(
@@ -17,7 +20,7 @@ async def set_employer_state(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
-    """Меняет статус отклика (response/negotiation) у конкретного работодателя."""
+    """Set the negotiation state for a given employer."""
     s = get_settings()
     config = OAuth2Config(
         service="hh",
@@ -56,17 +59,20 @@ async def send_message(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
+    """Send a message to an applicant within a negotiation."""
     s = get_settings()
-    config = OAuth2Config(
-        service="hh",
-        token_url=s.HH_TOKEN_URL,
-        client_id=s.HH_CLIENT_ID,
-        client_secret=s.HH_CLIENT_SECRET,
-        redirect_uri=s.HH_REDIRECT_URI,
-        use_basic_auth=False,
-        owner_id=employer_id,
+    access = await ensure_fresh_access(
+        config=OAuth2Config(
+            service="hh",
+            token_url=s.HH_TOKEN_URL,
+            client_id=s.HH_CLIENT_ID,
+            client_secret=s.HH_CLIENT_SECRET,
+            redirect_uri=s.HH_REDIRECT_URI,
+            use_basic_auth=False,
+            owner_id=employer_id,
+        ),
+        http_client=client,
     )
-    access = await ensure_fresh_access(config=config, http_client=client)
     url = s.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
     payload = {"message": {"text": text}}
 
@@ -92,49 +98,54 @@ async def fetch_applicant_details(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> dict:
+    """Fetch basic applicant information such as name, city and phone."""
     s = get_settings()
-    config = OAuth2Config(
-        service="hh",
-        token_url=s.HH_TOKEN_URL,
-        client_id=s.HH_CLIENT_ID,
-        client_secret=s.HH_CLIENT_SECRET,
-        redirect_uri=s.HH_REDIRECT_URI,
-        use_basic_auth=False,
-        owner_id=employer_id,
+    access = await ensure_fresh_access(
+        config=OAuth2Config(
+            service="hh",
+            token_url=s.HH_TOKEN_URL,
+            client_id=s.HH_CLIENT_ID,
+            client_secret=s.HH_CLIENT_SECRET,
+            redirect_uri=s.HH_REDIRECT_URI,
+            use_basic_auth=False,
+            owner_id=employer_id,
+        ),
+        http_client=client,
     )
-    access = await ensure_fresh_access(config=config, http_client=client)
 
-    h = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
-    base = s.HH_API_BASE.rstrip("/")
+    headers = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
+    base_url = s.HH_API_BASE.rstrip("/")
 
     # 1) negotiation -> resume id
-    r1 = await client.get(f"{base}/negotiations/{response_id}", headers=h, timeout=30)
-    if r1.status_code >= 400:
+    negotiation = await client.get(
+        f"{base_url}/negotiations/{response_id}", headers=headers, timeout=30
+    )
+    if negotiation.status_code >= 400:
         return {}
-    js1 = r1.json()
-    resume_id = (js1.get("resume") or {}).get("id")
+    resume_id = (negotiation.json().get("resume") or {}).get("id")
     if not resume_id:
         return {}
 
     # 2) resume -> phone, city, full name
-    r2 = await client.get(f"{base}/resumes/{resume_id}", headers=h, timeout=30)
-    if r2.status_code >= 400:
+    resume_resp = await client.get(
+        f"{base_url}/resumes/{resume_id}", headers=headers, timeout=30
+    )
+    if resume_resp.status_code >= 400:
         return {}
 
-    j = r2.json()
-    city = ((j.get("area") or {}).get("name")) or None
-    # В разных схемах контакт может отличаться, разбираем безопасно:
+    data = resume_resp.json()
+    city = (data.get("area") or {}).get("name")
+    phones = (data.get("contact") or {}).get("phones") or (
+        (data.get("contact") or {}).get("phone") or []
+    )
     phone = None
-    contact = j.get("contact") or {}
-    phones = contact.get("phones") or contact.get("phone") or []
     if isinstance(phones, list) and phones:
-        phone = (phones[0].get("formatted") or phones[0].get("value") or None)
+        phone = phones[0].get("formatted") or phones[0].get("value")
     elif isinstance(phones, dict):
-        phone = phones.get("formatted") or phones.get("value") or None
+        phone = phones.get("formatted") or phones.get("value")
 
-    name = " ".join([
-        (j.get("first_name") or "").strip(),
-        (j.get("last_name") or "").strip()
-    ]).strip() or (j.get("title") or None)
+    name = " ".join(
+        [(data.get("first_name") or "").strip(), (data.get("last_name") or "").strip()]
+    ).strip() or data.get("title")
 
     return {"name": name, "city": city, "phone": phone}
