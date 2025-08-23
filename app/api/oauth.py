@@ -7,8 +7,10 @@ import time
 from urllib.parse import urlencode
 
 import httpx
+from aio_pika import exceptions as aio_exc
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
@@ -22,6 +24,8 @@ router = APIRouter()
 # ---------- HH OAuth ----------
 @router.get("/oauth/hh/start")
 def hh_start(s=Depends(get_settings)):
+    """Redirect to HeadHunter for OAuth authorization."""
+
     params = {
         "response_type": "code",
         "client_id": s.HH_CLIENT_ID,
@@ -38,9 +42,12 @@ async def hh_callback(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
+    """Handle HH OAuth callback and persist tokens."""
+
     if not code:
         return {"ok": False, "error": "no code"}
 
+    error_response: dict[str, object] = {"ok": False, "provider": "hh"}
     data = {
         "grant_type": "authorization_code",
         "code": code,
@@ -48,6 +55,7 @@ async def hh_callback(
         "client_secret": s.HH_CLIENT_SECRET,
         "redirect_uri": s.HH_REDIRECT_URI,
     }
+
     try:
         r = await http_client.post(
             "https://api.hh.ru/token",
@@ -55,65 +63,55 @@ async def hh_callback(
             headers={"Accept": "application/json"},
             timeout=30,
         )
+    except httpx.HTTPError as e:
+        error_response.update({"step": "token-exchange-exception", "error": str(e)})
+    else:
         if r.status_code >= 400:
-            return {
-                "ok": False,
-                "provider": "hh",
-                "step": "token",
-                "status": r.status_code,
-                "body": r.text,
-            }
-        d = r.json()
-    except Exception as e:
-        return {
-            "ok": False,
-            "provider": "hh",
-            "step": "token-exchange-exception",
-            "error": str(e),
-        }
-
-    # employer_id
-    try:
-        me = await http_client.get(
-            "https://api.hh.ru/me",
-            headers={"Authorization": f"Bearer {d['access_token']}"},
-            timeout=15,
-        )
-        me.raise_for_status()
-        employer_id = str(me.json().get("employer", {}).get("id") or "")
-        if not employer_id:
-            return {
-                "ok": False,
-                "provider": "hh",
-                "step": "me",
-                "error": "no employer.id",
-            }
-    except Exception as e:
-        return {"ok": False, "provider": "hh", "step": "me", "error": str(e)}
-
-    try:
-        expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
-        await DbTokenStore("hh", employer_id).save(
-            TokenData(
-                access_token=d["access_token"],
-                refresh_token=d.get("refresh_token", ""),
-                expires_at=expires_at,
+            error_response.update(
+                {
+                    "step": "token",
+                    "status": r.status_code,
+                    "body": r.text,
+                }
             )
-        )
-    except Exception as e:
-        return {
-            "ok": False,
-            "provider": "hh",
-            "step": "save-token",
-            "error": str(e),
-        }
+        else:
+            d = r.json()
+            try:
+                me = await http_client.get(
+                    "https://api.hh.ru/me",
+                    headers={"Authorization": f"Bearer {d['access_token']}"},
+                    timeout=15,
+                )
+                me.raise_for_status()
+                employer_id = str(me.json().get("employer", {}).get("id") or "")
+            except httpx.HTTPError as e:
+                error_response.update({"step": "me", "error": str(e)})
+            else:
+                if not employer_id:
+                    error_response.update({"step": "me", "error": "no employer.id"})
+                else:
+                    try:
+                        expires_at = int(time.time()) + int(d.get("expires_in", 3600)) - 120
+                        await DbTokenStore("hh", employer_id).save(
+                            TokenData(
+                                access_token=d["access_token"],
+                                refresh_token=d.get("refresh_token", ""),
+                                expires_at=expires_at,
+                            )
+                        )
+                    except SQLAlchemyError as e:
+                        error_response.update({"step": "save-token", "error": str(e)})
+                    else:
+                        return {"ok": True, "employer_id": employer_id}
 
-    return {"ok": True, "employer_id": employer_id}
+    return error_response
 
 
 # ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
 def avito_start(s=Depends(get_settings)):
+    """Redirect to Avito OAuth authorization endpoint."""
+
     if not (
         s.AVITO_CLIENT_ID
         and s.AVITO_REDIRECT_URI
@@ -145,6 +143,8 @@ async def avito_callback(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
+    """Handle Avito OAuth callback and persist tokens."""
+
     if not code:
         return {"ok": False, "error": "no code"}
     if not (
@@ -154,6 +154,7 @@ async def avito_callback(
     ):
         return {"ok": False, "error": "avito token env not set"}
 
+    error_response: dict[str, object] = {"ok": False, "provider": "avito"}
     data = {
         "grant_type": "authorization_code",
         "code": code,
@@ -167,72 +168,55 @@ async def avito_callback(
             auth=auth,
             timeout=30,
         )
+    except httpx.HTTPError as e:
+        error_response.update({"step": "token-exchange-exception", "error": str(e)})
+    else:
         if r.status_code >= 400:
-            return {
-                "ok": False,
-                "provider": "avito",
-                "step": "token",
-                "status": r.status_code,
-                "body": r.text,
-            }
-        tok = r.json()
-    except Exception as e:
-        return {
-            "ok": False,
-            "provider": "avito",
-            "step": "token-exchange-exception",
-            "error": str(e),
-        }
-
-    access = tok.get("access_token", "")
-    if not access:
-        return {
-            "ok": False,
-            "provider": "avito",
-            "step": "token",
-            "error": "no access_token",
-        }
-
-    # 👉 автоматически узнаём account_id
-    try:
-        me = await http_client.get(
-            "https://api.avito.ru/core/v1/accounts/self",
-            headers={
-                "Authorization": f"Bearer {access}",
-                "Accept": "application/json",
-            },
-            timeout=15,
-        )
-        me.raise_for_status()
-        account_id = str(me.json().get("id") or "")
-        if not account_id:
-            return {
-                "ok": False,
-                "provider": "avito",
-                "step": "self",
-                "error": "no account id",
-            }
-    except Exception as e:
-        return {"ok": False, "provider": "avito", "step": "self", "error": str(e)}
-
-    try:
-        expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
-        await DbTokenStore("avito", account_id).save(
-            TokenData(
-                access_token=access,
-                refresh_token=tok.get("refresh_token", ""),
-                expires_at=expires_at,
+            error_response.update(
+                {
+                    "step": "token",
+                    "status": r.status_code,
+                    "body": r.text,
+                }
             )
-        )
-    except Exception as e:
-        return {
-            "ok": False,
-            "provider": "avito",
-            "step": "save-token",
-            "error": str(e),
-        }
+        else:
+            tok = r.json()
+            access = tok.get("access_token", "")
+            if not access:
+                error_response.update({"step": "token", "error": "no access_token"})
+            else:
+                try:
+                    me = await http_client.get(
+                        "https://api.avito.ru/core/v1/accounts/self",
+                        headers={
+                            "Authorization": f"Bearer {access}",
+                            "Accept": "application/json",
+                        },
+                        timeout=15,
+                    )
+                    me.raise_for_status()
+                    account_id = str(me.json().get("id") or "")
+                except httpx.HTTPError as e:
+                    error_response.update({"step": "self", "error": str(e)})
+                else:
+                    if not account_id:
+                        error_response.update({"step": "self", "error": "no account id"})
+                    else:
+                        try:
+                            expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
+                            await DbTokenStore("avito", account_id).save(
+                                TokenData(
+                                    access_token=access,
+                                    refresh_token=tok.get("refresh_token", ""),
+                                    expires_at=expires_at,
+                                )
+                            )
+                        except SQLAlchemyError as e:
+                            error_response.update({"step": "save-token", "error": str(e)})
+                        else:
+                            return {"ok": True, "account_id": account_id}
 
-    return {"ok": True, "account_id": account_id}
+    return error_response
 
 
 # ---------- AmoCRM OAuth ----------
@@ -258,6 +242,8 @@ async def amo_callback(
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
     s=Depends(get_settings),
 ):
+    """Process AmoCRM OAuth callback and store tokens."""
+
     if not code:
         return {"ok": False, "provider": "amo", "step": "callback", "error": "no code"}
 
@@ -286,7 +272,7 @@ async def amo_callback(
                 "body": r.text,
             }
         d = r.json()
-    except Exception as e:
+    except httpx.HTTPError as e:
         return {
             "ok": False,
             "provider": "amo",
@@ -312,10 +298,10 @@ async def amo_callback(
         try:
             await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
             logger.info("Queued hh_autofill after amo oauth")
-        except Exception:
+        except aio_exc.AMQPError:
             logger.exception("Failed to queue hh_autofill after amo oauth")
 
-    except Exception as e:
+    except SQLAlchemyError as e:
         return {
             "ok": False,
             "provider": "amo",
