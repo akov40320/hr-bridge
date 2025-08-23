@@ -5,7 +5,6 @@ from app.core.config import get_settings
 from app.db.token_store import TokenData, DbTokenStore
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 class ReauthRequired(Exception):
@@ -14,7 +13,8 @@ class ReauthRequired(Exception):
 
 class AmoClient:
     def __init__(self, tokens: TokenData, store: DbTokenStore, client: httpx.AsyncClient):
-        self.base = settings.AMO_BASE_URL.rstrip("/")
+        self._s = get_settings()
+        self.base = self._s.AMO_BASE_URL.rstrip("/")
         self.store = store
         self._access = tokens["access_token"]
         self._refresh = tokens["refresh_token"]
@@ -34,11 +34,11 @@ class AmoClient:
     async def _refresh_token(self) -> None:
         url = f"{self.base}/oauth2/access_token"
         payload = {
-            "client_id": settings.AMO_CLIENT_ID,
-            "client_secret": settings.AMO_CLIENT_SECRET,
+            "client_id": self._s.AMO_CLIENT_ID,
+            "client_secret": self._s.AMO_CLIENT_SECRET,
             "grant_type": "refresh_token",
             "refresh_token": self._refresh,
-            "redirect_uri": settings.AMO_REDIRECT_URI,
+            "redirect_uri": self._s.AMO_REDIRECT_URI,
         }
         r = await self.client.post(url, json=payload, timeout=30)
         if r.status_code in (400, 401) and "invalid_grant" in (r.text or "").lower():
