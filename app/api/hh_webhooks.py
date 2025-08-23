@@ -8,7 +8,7 @@ from app.db.token_store import DbTokenStore
 from app.core.config import get_settings
 
 log = logging.getLogger(__name__)
-HH_SUBS_URL = "https://api.hh.ru/webhook-subscriptions"
+HH_SUBS_URL = "https://api.hh.ru/webhook/subscriptions"
 
 
 def _target_url() -> str:
