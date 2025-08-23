@@ -1,7 +1,10 @@
+"""Service utilities for handling leads and applicants."""
+
+import json
 import logging
 import time
+
 import httpx
-import json
 
 from app.adapters import hh as hh_adapt
 from app.adapters.amo_client import ReauthRequired
@@ -50,18 +53,17 @@ async def create_lead(
     """Create lead in AmoCRM and return (lead_id, kind)."""
     s = get_settings()
 
-    title = payload.vacancy_title or ""
-    desc = payload.vacancy_desc or ""
-    raw = payload.raw_text or ""
-    kind = route_kind(desc=desc, raw=raw)
+    kind = route_kind(
+        desc=payload.vacancy_desc or "",
+        raw=payload.raw_text or "",
+    )
     payload.kind = kind
 
-    phone = payload.applicant.phone
-    city = payload.applicant.city
-    name = payload.applicant.name
-
     if kind == "ignore":
-        logger.info("routing: ignore (no hashtags) title=%r", title)
+        logger.info(
+            "routing: ignore (no hashtags) title=%r",
+            payload.vacancy_title or "",
+        )
         return None, kind
 
     if kind == "master":
@@ -71,7 +73,9 @@ async def create_lead(
         pipeline_id = s.AMO_PIPELINE_ID_OPERATOR
         stage_id = s.AMO_STAGE_ID_OPERATOR_NEW
 
-    lead_name = f"{title} — {name or 'кандидат'}".strip(" —")
+    lead_name = (
+        f"{payload.vacancy_title or ''} — {payload.applicant.name or 'кандидат'}"
+    ).strip(" —")
 
     logger.info(
         "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
@@ -100,9 +104,9 @@ async def create_lead(
     await amo_lead_enrichment.enrich_lead(
         client,
         lead_id,
-        applicant_name=name,
-        phone=phone,
-        city=city,
+        applicant_name=payload.applicant.name,
+        phone=payload.applicant.phone,
+        city=payload.applicant.city,
         vacancy_title=payload.vacancy_title,
     )
 
