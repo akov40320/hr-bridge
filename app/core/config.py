@@ -1,11 +1,16 @@
+"""Configuration models and helpers for application settings."""
+
 from functools import lru_cache
 from typing import Optional
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     # RMQ
     RABBITMQ_URL: str = "amqp://guest:guest@localhost/"
@@ -120,11 +125,26 @@ class Settings(BaseSettings):
             ("AMO_STAGE_ID_OPERATOR_NEW", self.AMO_STAGE_ID_OPERATOR_NEW),
             ("ADMIN_TOKEN", self.ADMIN_TOKEN),
             # AmoChats — если включено автоподключение/использование
-            ("AMO_CHATS_SCOPE_ID", self.AMO_CHATS_SCOPE_ID if self.AMOCHATS_ENABLED else "ok"),
-            ("AMO_CHATS_SECRET", self.AMO_CHATS_SECRET if self.AMOCHATS_ENABLED else "ok"),
-            ("AMO_CHATS_CHANNEL_ID", self.AMO_CHATS_CHANNEL_ID if self.AMOCHATS_ENABLED else "ok"),
-            ("AMO_CHATS_ACCOUNT_ID", self.AMO_CHATS_ACCOUNT_ID if self.AMOCHATS_ENABLED else "ok"),
-            ("AMO_CHATS_SENDER_USER_AMOJO_ID", self.AMO_CHATS_SENDER_USER_AMOJO_ID if self.AMOCHATS_ENABLED else "ok"),
+            (
+                "AMO_CHATS_SCOPE_ID",
+                self.AMO_CHATS_SCOPE_ID if self.AMOCHATS_ENABLED else "ok",
+            ),
+            (
+                "AMO_CHATS_SECRET",
+                self.AMO_CHATS_SECRET if self.AMOCHATS_ENABLED else "ok",
+            ),
+            (
+                "AMO_CHATS_CHANNEL_ID",
+                self.AMO_CHATS_CHANNEL_ID if self.AMOCHATS_ENABLED else "ok",
+            ),
+            (
+                "AMO_CHATS_ACCOUNT_ID",
+                self.AMO_CHATS_ACCOUNT_ID if self.AMOCHATS_ENABLED else "ok",
+            ),
+            (
+                "AMO_CHATS_SENDER_USER_AMOJO_ID",
+                self.AMO_CHATS_SENDER_USER_AMOJO_ID if self.AMOCHATS_ENABLED else "ok",
+            ),
         ]
         missing = [k for k, v in required if not v]
         if missing:
@@ -133,4 +153,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return cached application settings instance."""
+
     return Settings()
