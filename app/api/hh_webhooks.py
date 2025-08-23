@@ -51,6 +51,11 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
 
     try:
         r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
+        if r.status_code in (401, 403, 404):
+            log.warning(
+                "HH webhook: %s — нет прав/токен/фича недоступна", r.status_code
+                )
+            return
         r.raise_for_status()
         js = r.json()
         items = js if isinstance(js, list) else js.get("items", [])
