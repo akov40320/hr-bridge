@@ -15,9 +15,13 @@ from app.db.token_store import DbTokenStore
 
 router = APIRouter()
 admin = APIRouter()
-settings = get_settings()
+
 
 logger = logging.getLogger(__name__)
+
+
+def _s():
+    return get_settings()
 
 
 @router.get("/health")
@@ -65,6 +69,7 @@ async def dedup_clean(hours: int = 72):
 async def hh_states(
     owner_id: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
+    s=Depends(get_settings),
 ):
     try:
         tok = await DbTokenStore("hh", owner_id).load()
@@ -72,7 +77,7 @@ async def hh_states(
         return {"ok": False, "error": f"no hh token: {e}"}
 
     r = await http_client.get(
-        f"{settings.HH_API_BASE.rstrip('/')}/dictionaries",
+        f"{s.HH_API_BASE.rstrip('/')}/dictionaries",
         headers={
             "Authorization": f"Bearer {tok['access_token']}",
             "Accept": "application/json",
