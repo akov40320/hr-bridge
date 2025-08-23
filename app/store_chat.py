@@ -6,6 +6,12 @@ from app.db.models import TgLink
 
 
 async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:
+    """Create or update mapping between a Telegram user and lead.
+
+    Ensures that the `TgLink` entry reflects the specified `lead_id` for
+    the given user and bot kind, refreshing the ``updated_at`` timestamp.
+    """
+
     async with get_session() as s:
         current_lead = (
             await s.execute(
@@ -31,6 +37,8 @@ async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:
 
 
 async def set_conversation(user_id: int, bot_kind: str, conversation_id: str) -> None:
+    """Persist conversation identifier for a user and bot kind."""
+
     async with get_session() as s:
         await s.execute(
             update(TgLink)
@@ -41,6 +49,8 @@ async def set_conversation(user_id: int, bot_kind: str, conversation_id: str) ->
 
 
 async def get_by_lead(lead_id: int) -> list[TgLink]:
+    """Return all chat links associated with the given lead."""
+
     async with get_session() as s:
         return (await s.execute(
             select(TgLink).where(TgLink.lead_id == lead_id)
@@ -48,6 +58,8 @@ async def get_by_lead(lead_id: int) -> list[TgLink]:
 
 
 async def get_by_user(user_id: int, bot_kind: str) -> Optional[TgLink]:
+    """Fetch chat link for a user and bot kind if present."""
+
     async with get_session() as s:
         return (await s.execute(
             select(TgLink).where(TgLink.user_id == user_id, TgLink.bot_kind == bot_kind)
@@ -55,6 +67,8 @@ async def get_by_user(user_id: int, bot_kind: str) -> Optional[TgLink]:
 
 
 async def get_by_conversation(conversation_id: str) -> list[TgLink]:
+    """Return chat links sharing the specified conversation identifier."""
+
     async with get_session() as s:
         return (await s.execute(
             select(TgLink).where(TgLink.conversation_id == conversation_id)
