@@ -1,8 +1,15 @@
-# tg_webhooks.py
+"""Telegram webhook endpoints.
+
+This module exposes FastAPI handlers used by Telegram bots to deliver
+webhook updates.  The same handlers are also utilised in tests where bot
+instances are provided directly.
+"""
+
 import logging
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
 from aiogram.types import Update
+from pydantic import ValidationError
 
 from app.core.config import get_settings
 from app.core.guards import require_admin
@@ -38,7 +45,7 @@ def make_tg_webhook(key: object, kind: str | None = None):
         try:
             payload = await request.json()
             upd = Update.model_validate(payload)
-        except Exception:
+        except (ValueError, ValidationError):
             logger.exception("%s webhook: invalid json/update", kind or key)
             return Response(status_code=400)
 
@@ -75,6 +82,7 @@ for _kind in ("master", "operator"):
 
 @admin_tg.post("/set-webhooks")
 async def set_webhooks():
+    """Register webhooks for all configured bots."""
     base = (settings.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
     if not base:
         return {"ok": False, "error": "TELEGRAM_WEBHOOK_BASE is empty"}
@@ -96,6 +104,7 @@ async def set_webhooks():
 
 @admin_tg.post("/delete-webhooks")
 async def delete_webhooks():
+    """Remove webhooks for all configured bots."""
     results = {}
     for kind, value in tokens.items():
         if isinstance(value, str) and value:
@@ -106,6 +115,7 @@ async def delete_webhooks():
 
 @admin_tg.get("/webhook-info")
 async def webhook_info():
+    """Fetch webhook information for all configured bots."""
     res = {}
     for kind, value in tokens.items():
         if isinstance(value, str) and value:
