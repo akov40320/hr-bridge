@@ -1,6 +1,9 @@
 from typing import Optional
-from sqlalchemy import select, update, func
+
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.sql.functions import now
+
 from app.db import get_session
 from app.db.models import TgLink
 
@@ -26,10 +29,15 @@ async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:
 
         stmt = (
             pg_insert(TgLink)
-            .values(user_id=user_id, bot_kind=bot_kind, lead_id=lead_id, updated_at=func.now())
+            .values(
+                user_id=user_id,
+                bot_kind=bot_kind,
+                lead_id=lead_id,
+                updated_at=now(),
+            )
             .on_conflict_do_update(
                 index_elements=[TgLink.user_id, TgLink.bot_kind],
-                set_={"lead_id": lead_id, "updated_at": func.now()}
+                set_={"lead_id": lead_id, "updated_at": now()},
             )
         )
         await s.execute(stmt)
@@ -43,7 +51,7 @@ async def set_conversation(user_id: int, bot_kind: str, conversation_id: str) ->
         await s.execute(
             update(TgLink)
             .where(TgLink.user_id == user_id, TgLink.bot_kind == bot_kind)
-            .values(conversation_id=conversation_id, updated_at=func.now())
+            .values(conversation_id=conversation_id, updated_at=now())
         )
         await s.commit()
 
