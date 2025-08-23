@@ -97,7 +97,7 @@ async def connect_channel(client: httpx.AsyncClient) -> dict[str, Any]:
             "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
         }
     )
-    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
+    headers = _build_headers(ac.secret, "POST", path, body)
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"connect failed {r.status_code}: {r.text}")
