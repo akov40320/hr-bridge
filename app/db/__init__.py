@@ -1,5 +1,5 @@
+from .base import Base
 from .db import (
-    Base,
     get_engine,
     get_session,
     get_sessionmaker,
