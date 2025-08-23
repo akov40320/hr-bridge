@@ -6,11 +6,12 @@ instances are provided directly.
 """
 
 import logging
+from typing import cast  
+
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
 from aiogram.types import Update
 from pydantic import ValidationError
-from typing import cast
 
 from app.core.config import get_settings
 from app.core.guards import require_admin
