@@ -14,6 +14,7 @@ router = APIRouter()
 async def webhook_avito(
     request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
 ):
+    """Handle incoming Avito webhook requests."""
     raw = await request.body()
 
     def parse(raw_bytes: bytes):
