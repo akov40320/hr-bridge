@@ -1,5 +1,6 @@
 """Utilities for interacting with the AmoChats API."""
 
+from typing import Any
 import hashlib
 import hmac
 import json
@@ -25,7 +26,7 @@ class AmoChatsError(Exception):
 class AmoChatsClient:  # pylint: disable=too-few-public-methods
     """Helper validating required AmoChats settings once."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         req = {
             "AMO_CHATS_SCOPE_ID": getattr(settings, "AMO_CHATS_SCOPE_ID", None),
             "AMO_CHATS_SECRET": getattr(settings, "AMO_CHATS_SECRET", None),
@@ -39,11 +40,11 @@ class AmoChatsClient:  # pylint: disable=too-few-public-methods
         if missing:
             joined = "/".join(missing)
             raise AmoChatsError(f"AmoChats env not configured ({joined})")
-        self.scope_id = req["AMO_CHATS_SCOPE_ID"]
-        self.secret = req["AMO_CHATS_SECRET"]
-        self.account_id = req["AMO_CHATS_ACCOUNT_ID"]
-        self.channel_id = req["AMO_CHATS_CHANNEL_ID"]
-        self.sender_user_amojo_id = req["AMO_CHATS_SENDER_USER_AMOJO_ID"]
+        self.scope_id: str = req["AMO_CHATS_SCOPE_ID"]
+        self.secret: str = req["AMO_CHATS_SECRET"]
+        self.account_id: str = req["AMO_CHATS_ACCOUNT_ID"]
+        self.channel_id: str = req["AMO_CHATS_CHANNEL_ID"]
+        self.sender_user_amojo_id: str = req["AMO_CHATS_SENDER_USER_AMOJO_ID"]
 
 
 @lru_cache(maxsize=1)
@@ -56,7 +57,7 @@ def _base() -> str:
     return "https://amojo.amocrm.ru"
 
 
-def _dump(obj: dict) -> bytes:
+def _dump(obj: dict[str, Any]) -> bytes:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
@@ -66,7 +67,7 @@ def _build_headers(
     path: str,
     body: bytes,
     account_id: str | None,
-) -> dict:
+) -> dict[str, str]:
     """Construct request headers for AmoChats API call."""
     date = formatdate(usegmt=True)
     ctype = "application/json"
@@ -75,7 +76,7 @@ def _build_headers(
     sig = hmac.new(  # nosec B324
         secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha256
     ).hexdigest().lower()
-    headers = {
+    headers: dict[str, str] = {
         "Date": date,
         "Content-Type": ctype,
         "Content-MD5": md5,
@@ -86,17 +87,19 @@ def _build_headers(
     return headers
 
 
-async def connect_channel(client: httpx.AsyncClient) -> dict:
+async def connect_channel(client: httpx.AsyncClient) -> dict[str, Any]:
     """Connect AmoChats channel once, safe to call multiple times."""
     ac = _get_client()
 
     path = f"/v2/origin/custom/{ac.channel_id}/connect"
-    url = f"https://amojo.amocrm.ru{path}"
-    body = _dump({
-        "account_id": ac.account_id,
-        "hook_api_version": "v2",
-        "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
-    })
+    url = f"{_base()}{path}"
+    body = _dump(
+        {
+            "account_id": ac.account_id,
+            "hook_api_version": "v2",
+            "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
+        }
+    )
     headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
@@ -104,7 +107,7 @@ async def connect_channel(client: httpx.AsyncClient) -> dict:
     return r.json() if r.content else {}
 
 
-async def ensure_amo_chats_connected(log, client: httpx.AsyncClient) -> None:
+async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncClient) -> None:
     """Ensure AmoChats channel is connected when autoconnect is enabled."""
     if not getattr(settings, "AMO_CHATS_AUTOCONNECT", False):
         log.info("AmoChats autoconnect disabled")
@@ -135,9 +138,7 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
 
-    from typing import Any
-
-    def _payload(with_ref: bool):
+    def _payload(with_ref: bool) -> dict[str, Any]:
         base: dict[str, Any] = {
             "event_type": "new_message",
             "payload": {
@@ -158,7 +159,7 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-
             payload["conversation_id"] = conversation_id
         return base
 
-    async def _post(payload: dict, route: str):
+    async def _post(payload: dict[str, Any], route: str) -> httpx.Response:
         body = _dump(payload)
         headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
         logger.debug("send_from_client POST %s -> %s bytes", route, len(body))
@@ -212,11 +213,11 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-
                 )
             r = r2
 
-    data = r.json() if r.content else {}
+    data: dict[str, Any] = r.json() if r.content else {}
     conv = (data.get("conversation") or {})
     cid = conv.get("uuid") or conv.get("id")
     logger.info("send_from_client: ok conv_id=%s text_len=%d", cid, len(text))
-    return cid
+    return cid  # может быть None, если API не вернул id/uuid
 
 
 async def send_text_from_manager(  # pylint: disable=too-many-arguments
@@ -240,7 +241,7 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
 
-    payload = {
+    payload: dict[str, Any] = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
@@ -284,7 +285,7 @@ async def ensure_chat_created(  # pylint: disable=too-many-locals
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
 
-    payload = {
+    payload: dict[str, Any] = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
@@ -306,7 +307,7 @@ async def ensure_chat_created(  # pylint: disable=too-many-locals
 
     logger.info("ensure_chat_created: lead=%s tg=%s (%s)", lead_id, tg_user_id, tg_user_name or "-")
 
-    data = r.json() if r.content else {}
+    data: dict[str, Any] = r.json() if r.content else {}
     conv = (data.get("conversation") or {})
     cid = conv.get("uuid") or conv.get("id")
     if not cid:
