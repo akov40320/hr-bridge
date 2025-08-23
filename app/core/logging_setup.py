@@ -24,4 +24,3 @@ def setup_logging(level: str = "INFO") -> None:
     )
     handler.setFormatter(formatter)
     root.handlers = [handler]
-
