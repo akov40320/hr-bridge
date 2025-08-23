@@ -1,10 +1,10 @@
 import logging
 import httpx
 from app.db.token_store import DbTokenStore
-from app.core.config import settings
+from app.core.config import get_settings
 
 log = logging.getLogger(__name__)
-
+settings = get_settings()
 HH_SUBS_URL = "https://api.hh.ru/webhook-subscriptions"
 
 

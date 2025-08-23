@@ -1,7 +1,9 @@
 from aiogram.types import Message
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
+
+settings = get_settings()
 
 
 def parse_start_arg(text: str) -> int | None:

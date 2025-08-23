@@ -5,7 +5,7 @@ import json
 
 from app.adapters import hh as hh_adapt
 from app.adapters.amo_client import ReauthRequired
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.store import save_link
 from app.api.utils import route_kind
@@ -13,7 +13,7 @@ from app.services import amo_lead_enrichment
 from app.models import IncomingPayload
 
 logger = logging.getLogger(__name__)
-
+settings = get_settings()
 
 async def enrich_applicant(
     payload: IncomingPayload, http_client: httpx.AsyncClient

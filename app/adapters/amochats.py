@@ -1,10 +1,11 @@
 import hashlib, hmac, json, time, uuid
 from email.utils import formatdate
 import httpx
-from app.core.config import settings
+from app.core.config import get_settings
 import logging
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class AmoChatsError(Exception): ...

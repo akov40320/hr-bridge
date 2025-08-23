@@ -1,9 +1,10 @@
 import types
 import pytest
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.survey_service import SurveyService
 
+settings = get_settings()
 
 @pytest.mark.asyncio
 async def test_start(monkeypatch, queue_mock):

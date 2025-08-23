@@ -1,7 +1,9 @@
 import pytest
 
 from app.services import amo_lead_enrichment
-from app.core.config import settings
+from app.core.config import get_settings
+
+settings = get_settings()
 
 
 class DummyAmo:

@@ -2,7 +2,7 @@ import logging
 from aiogram import Bot
 
 from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.dedup import check_and_store, calc_key
 from app.store_chat import set_conversation
 from app.services import tg_send_with_retry
@@ -11,7 +11,7 @@ from app.http_client import get_http_client
 from app.adapters.amo_client import AmoClient
 
 logger = logging.getLogger(__name__)
-
+settings = get_settings()
 master_bot = Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) if settings.TELEGRAM_MASTER_BOT_TOKEN else None
 operator_bot = Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) if settings.TELEGRAM_OPERATOR_BOT_TOKEN else None
 

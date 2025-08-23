@@ -10,13 +10,13 @@ import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.db.token_store import DbTokenStore, TokenData
 from app.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
-
+settings = get_settings()
 router = APIRouter()
 
 

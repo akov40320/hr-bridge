@@ -3,7 +3,7 @@ from aiogram import Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.store_chat import upsert_tg_link, get_by_user
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.services.survey import (
@@ -15,6 +15,7 @@ from app.services.survey import (
 from app.services.survey_service import SurveyService
 
 logger = logging.getLogger("tg.router")
+settings = get_settings()
 
 
 def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:

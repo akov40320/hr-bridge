@@ -1,5 +1,8 @@
 from fastapi import Header, HTTPException, status
-from .config import settings
+from .config import get_settings
+
+
+settings = get_settings()
 
 
 async def require_admin(authorization: str | None = Header(None), x_admin_token: str | None = Header(None)):

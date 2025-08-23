@@ -17,9 +17,10 @@ from typing import Awaitable, Callable
 import aio_pika
 from aio_pika import exceptions as aio_exc
 
-from app.core.config import settings
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _int(name: str, default: int) -> int:

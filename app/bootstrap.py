@@ -1,5 +1,8 @@
 from app.db.token_store import DbTokenStore, TokenData
-from app.core.config import settings
+from app.core.config import get_settings
+
+
+settings = get_settings()
 
 
 async def ensure_tokens():

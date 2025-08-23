@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.adapters.amo_client import AmoClient
-from app.core.config import settings
+from app.core.config import get_settings
 from app.http_client import get_http_client
 from app.services.dedup import calc_key, check_and_store
 from app.services.hh_mapping import get as hh_map_get, load as hh_map_load
@@ -22,7 +22,7 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
-
+settings = get_settings()
 router = APIRouter()
 
 

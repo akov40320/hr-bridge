@@ -7,12 +7,12 @@ from app.http_client import get_http_client
 from app.services.dedup import calc_key, check_and_store
 from app.core.guards import require_admin
 from app.store_chat import get_by_lead, get_by_conversation, set_conversation, get_by_user
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
-
+settings = get_settings()
 
 async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()

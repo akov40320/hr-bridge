@@ -1,5 +1,4 @@
 import time
-import json
 import pytest
 import httpx
 

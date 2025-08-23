@@ -2,9 +2,10 @@ import json
 import types
 import pytest
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.queue import RabbitMQClient
 
+settings = get_settings()
 
 @pytest.mark.asyncio
 async def test_publish_task(monkeypatch):

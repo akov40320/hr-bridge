@@ -2,12 +2,12 @@ import logging
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
 from aiogram.types import Update
-from app.core.config import settings
+from app.core.config import get_settings
 from app.core.guards import require_admin
 from app.tg_router import make_router
 
 logger = logging.getLogger("tg.webhooks")
-
+settings = get_settings()
 router = APIRouter()
 
 

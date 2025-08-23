@@ -1,14 +1,13 @@
-# app/hh_autofill.py
 import re
 import logging
 import httpx
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.token_store import DbTokenStore
 from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 
 log = logging.getLogger(__name__)
-
+settings = get_settings()
 
 def _norm_stage_name(s: str) -> str:
     s = (s or "").strip().lower().replace("ё", "е")

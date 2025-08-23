@@ -1,10 +1,11 @@
 import time
 import logging
 import httpx
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.token_store import TokenData, DbTokenStore
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class ReauthRequired(Exception):

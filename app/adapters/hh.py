@@ -1,9 +1,11 @@
 import httpx
 from typing import Optional
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.api.oauth2 import ensure_fresh_access
 from app.core.retry import with_retry
+
+settings = get_settings()
 
 
 class HHError(Exception): ...

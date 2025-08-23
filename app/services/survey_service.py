@@ -1,4 +1,4 @@
-from app.core.config import settings
+from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.store_survey import (
     start_or_reset_survey,
@@ -8,6 +8,8 @@ from app.store_survey import (
 )
 from app.services.survey import mark_went_to_bot_async
 
+
+settings = get_settings()
 
 class SurveyService:
     def __init__(self, queue_client: RabbitMQClient = rabbitmq) -> None:

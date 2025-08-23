@@ -1,5 +1,3 @@
-import pytest
-
 from app.api import hh_incoming
 from app.models import IncomingPayload, Applicant
 
