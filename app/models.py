@@ -1,3 +1,5 @@
+"""Shared Pydantic models used throughout the service."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, ConfigDict
