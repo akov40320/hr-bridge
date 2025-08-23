@@ -9,8 +9,6 @@ from app.store_survey import (
 from app.services.survey import mark_went_to_bot_async
 
 
-settings = get_settings()
-
 class SurveyService:
     def __init__(self, queue_client: RabbitMQClient = rabbitmq) -> None:
         self.queue_client = queue_client
@@ -27,11 +25,12 @@ class SurveyService:
         return await store_answer_and_advance(user_id, bot_kind, text)
 
     async def finish(self, user_id: int, bot_kind: str, lead_id: int, summary: str) -> None:
+        s = get_settings()
         await self.queue_client.publish_task({
             "platform": "amo",
             "action": "amo_add_tags",
             "lead_id": lead_id,
-            "tags": [settings.AMO_TAG_SURVEY_DONE],
+            "tags": [s.AMO_TAG_SURVEY_DONE],
         })
         await self.queue_client.publish_task({
             "platform": "amo",

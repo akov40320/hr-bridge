@@ -7,7 +7,7 @@ from app.db.token_store import DbTokenStore
 from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 
 log = logging.getLogger(__name__)
-settings = get_settings()
+
 
 def _norm_stage_name(s: str) -> str:
     s = (s or "").strip().lower().replace("ё", "е")
@@ -35,7 +35,8 @@ async def _fetch_pipeline_statuses(
         log.warning("hh-autofill: no amo token: %s", e)
         return []
 
-    url = settings.AMO_BASE_URL.rstrip("/") + f"/api/v4/leads/pipelines/{pipeline_id}"
+    s = get_settings()
+    url = s.AMO_BASE_URL.rstrip("/") + f"/api/v4/leads/pipelines/{pipeline_id}"
     try:
         r = await client.get(
             url,
@@ -61,9 +62,10 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
     existing = hh_map_load().copy()
     result = existing.copy()
 
+    s = get_settings()
     pipelines: list[tuple[str, int | None]] = [
-        ("master", getattr(settings, "AMO_PIPELINE_ID_MASTER", None)),
-        ("operator", getattr(settings, "AMO_PIPELINE_ID_OPERATOR", None)),
+        ("master", getattr(s, "AMO_PIPELINE_ID_MASTER", None)),
+        ("operator", getattr(s, "AMO_PIPELINE_ID_OPERATOR", None)),
     ]
 
     for label, pid in pipelines:

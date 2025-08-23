@@ -6,9 +6,8 @@ from app.api.oauth2 import ensure_fresh_access
 from app.core.retry import with_retry
 
 
-settings = get_settings()
-
-class AvitoError(Exception): ...
+class AvitoError(Exception):
+    ...
 
 
 def _is_retryable(status: int) -> bool:
@@ -16,12 +15,13 @@ def _is_retryable(status: int) -> bool:
 
 
 async def _access_token(owner_id: Optional[str], client: httpx.AsyncClient) -> str:
+    s = get_settings()
     return await ensure_fresh_access(
         service="avito",
-        token_url=settings.AVITO_TOKEN_URL,
-        client_id=settings.AVITO_CLIENT_ID,
-        client_secret=settings.AVITO_CLIENT_SECRET,
-        redirect_uri=settings.AVITO_REDIRECT_URI,
+        token_url=s.AVITO_TOKEN_URL,
+        client_id=s.AVITO_CLIENT_ID,
+        client_secret=s.AVITO_CLIENT_SECRET,
+        redirect_uri=s.AVITO_REDIRECT_URI,
         use_basic_auth=True,
         owner_id=owner_id,
         http_client=client,
@@ -34,8 +34,9 @@ async def send_message(
     owner_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
+    s = get_settings()
     access = await _access_token(owner_id, client)
-    url = settings.AVITO_API_BASE.rstrip("/") + settings.AVITO_SEND_MESSAGE_PATH.format(negotiation_id=negotiation_id)
+    url = s.AVITO_API_BASE.rstrip("/") + s.AVITO_SEND_MESSAGE_PATH.format(negotiation_id=negotiation_id)
     body = {"message": {"text": text}}
 
     async def attempt() -> None:
@@ -65,8 +66,9 @@ async def mark_read(
     owner_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
+    s = get_settings()
     access = await _access_token(owner_id, client)
-    url = settings.AVITO_API_BASE.rstrip("/") + settings.AVITO_MARK_READ_PATH.format(negotiation_id=negotiation_id)
+    url = s.AVITO_API_BASE.rstrip("/") + s.AVITO_MARK_READ_PATH.format(negotiation_id=negotiation_id)
 
     async def attempt() -> None:
         r = await client.post(

@@ -2,7 +2,6 @@ import logging
 
 from app.core.config import get_settings
 
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -16,6 +15,8 @@ async def enrich_lead(
     vacancy_title: str | None,
 ) -> None:
     """Attach extra data to a newly created lead."""
+    s = get_settings()
+
     contact_id = None
     if applicant_name or phone:
         try:
@@ -26,14 +27,14 @@ async def enrich_lead(
             logger.warning("create/link contact failed: %s", e)
 
     cf: dict[int, str] = {}
-    if settings.AMO_CF_LEAD_CITY_ID:
-        cf[settings.AMO_CF_LEAD_CITY_ID] = city or ""
-    if settings.AMO_CF_LEAD_VACANCY_TITLE_ID:
-        cf[settings.AMO_CF_LEAD_VACANCY_TITLE_ID] = vacancy_title or ""
-    if settings.AMO_CF_LEAD_APPLICANT_PHONE_ID:
-        cf[settings.AMO_CF_LEAD_APPLICANT_PHONE_ID] = phone or ""
-    if settings.AMO_CF_LEAD_APPLICANT_NAME_ID:
-        cf[settings.AMO_CF_LEAD_APPLICANT_NAME_ID] = applicant_name or ""
+    if s.AMO_CF_LEAD_CITY_ID:
+        cf[s.AMO_CF_LEAD_CITY_ID] = city or ""
+    if s.AMO_CF_LEAD_VACANCY_TITLE_ID:
+        cf[s.AMO_CF_LEAD_VACANCY_TITLE_ID] = vacancy_title or ""
+    if s.AMO_CF_LEAD_APPLICANT_PHONE_ID:
+        cf[s.AMO_CF_LEAD_APPLICANT_PHONE_ID] = phone or ""
+    if s.AMO_CF_LEAD_APPLICANT_NAME_ID:
+        cf[s.AMO_CF_LEAD_APPLICANT_NAME_ID] = applicant_name or ""
     try:
         await amo.update_lead_custom_fields(lead_id, cf)
     except Exception as e:  # pragma: no cover - log only
@@ -41,10 +42,10 @@ async def enrich_lead(
 
     if not any(
         [
-            settings.AMO_CF_LEAD_CITY_ID,
-            settings.AMO_CF_LEAD_VACANCY_TITLE_ID,
-            settings.AMO_CF_LEAD_APPLICANT_PHONE_ID,
-            settings.AMO_CF_LEAD_APPLICANT_NAME_ID,
+            s.AMO_CF_LEAD_CITY_ID,
+            s.AMO_CF_LEAD_VACANCY_TITLE_ID,
+            s.AMO_CF_LEAD_APPLICANT_PHONE_ID,
+            s.AMO_CF_LEAD_APPLICANT_NAME_ID,
         ]
     ):
         try:
@@ -61,4 +62,3 @@ async def enrich_lead(
 
 
 __all__ = ["enrich_lead"]
-

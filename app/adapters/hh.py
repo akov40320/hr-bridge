@@ -5,10 +5,9 @@ from app.core.config import get_settings
 from app.api.oauth2 import ensure_fresh_access
 from app.core.retry import with_retry
 
-settings = get_settings()
 
-
-class HHError(Exception): ...
+class HHError(Exception):
+    ...
 
 
 def _is_retryable(status: int) -> bool:
@@ -22,18 +21,19 @@ async def set_employer_state(
     client: httpx.AsyncClient,
 ) -> None:
     """Меняет статус отклика (response/negotiation) у конкретного работодателя."""
+    s = get_settings()
     access = await ensure_fresh_access(
         service="hh",
-        token_url=settings.HH_TOKEN_URL,
-        client_id=settings.HH_CLIENT_ID,
-        client_secret=settings.HH_CLIENT_SECRET,
-        redirect_uri=settings.HH_REDIRECT_URI,
+        token_url=s.HH_TOKEN_URL,
+        client_id=s.HH_CLIENT_ID,
+        client_secret=s.HH_CLIENT_SECRET,
+        redirect_uri=s.HH_REDIRECT_URI,
         use_basic_auth=False,
         owner_id=employer_id,
         http_client=client,
     )
 
-    url = settings.HH_API_BASE.rstrip("/") + settings.HH_SET_STATE_PATH.format(response_id=response_id)
+    url = s.HH_API_BASE.rstrip("/") + s.HH_SET_STATE_PATH.format(response_id=response_id)
     payload = {"status": target_state}
 
     async def attempt() -> None:
@@ -64,17 +64,18 @@ async def send_message(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
+    s = get_settings()
     access = await ensure_fresh_access(
         service="hh",
-        token_url=settings.HH_TOKEN_URL,
-        client_id=settings.HH_CLIENT_ID,
-        client_secret=settings.HH_CLIENT_SECRET,
-        redirect_uri=settings.HH_REDIRECT_URI,
+        token_url=s.HH_TOKEN_URL,
+        client_id=s.HH_CLIENT_ID,
+        client_secret=s.HH_CLIENT_SECRET,
+        redirect_uri=s.HH_REDIRECT_URI,
         use_basic_auth=False,
         owner_id=employer_id,
         http_client=client,
     )
-    url = settings.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
+    url = s.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
     payload = {"message": {"text": text}}
 
     async def attempt() -> None:
@@ -104,19 +105,20 @@ async def fetch_applicant_details(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> dict:
+    s = get_settings()
     access = await ensure_fresh_access(
         service="hh",
-        token_url=settings.HH_TOKEN_URL,
-        client_id=settings.HH_CLIENT_ID,
-        client_secret=settings.HH_CLIENT_SECRET,
-        redirect_uri=settings.HH_REDIRECT_URI,
+        token_url=s.HH_TOKEN_URL,
+        client_id=s.HH_CLIENT_ID,
+        client_secret=s.HH_CLIENT_SECRET,
+        redirect_uri=s.HH_REDIRECT_URI,
         use_basic_auth=False,
         owner_id=employer_id,
         http_client=client,
     )
 
     h = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
-    base = settings.HH_API_BASE.rstrip("/")
+    base = s.HH_API_BASE.rstrip("/")
 
     # 1) negotiation -> resume id
     r1 = await client.get(f"{base}/negotiations/{response_id}", headers=h, timeout=30)

@@ -3,8 +3,6 @@ from aiogram.types import Message
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 
-settings = get_settings()
-
 
 def parse_start_arg(text: str) -> int | None:
     parts = (text or "").strip().split(maxsplit=1)
@@ -45,7 +43,9 @@ async def mark_went_to_bot_async(
     identity: str,
     queue_client: RabbitMQClient = rabbitmq,
 ):
-    # переносим на воркер: добавляем заметку и тег через RMQ
+    """Переносим на воркер: добавляем заметку и тег через RMQ."""
+    s = get_settings()
+
     await queue_client.publish_task({
         "platform": "amo",
         "action": "amo_add_note",
@@ -56,6 +56,5 @@ async def mark_went_to_bot_async(
         "platform": "amo",
         "action": "amo_add_tags",
         "lead_id": lead_id,
-        "tags": [settings.AMO_TAG_WENT_TO_BOT],
+        "tags": [s.AMO_TAG_WENT_TO_BOT],
     })
-

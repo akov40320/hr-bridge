@@ -5,22 +5,23 @@ from app.core.config import get_settings
 import logging
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
-class AmoChatsError(Exception): ...
+class AmoChatsError(Exception):
+    ...
 
 
 class AmoChatsClient:
     """Helper validating required AmoChats settings once."""
 
     def __init__(self):
+        self._s = get_settings()
         req = {
-            "AMO_CHATS_SCOPE_ID": getattr(settings, "AMO_CHATS_SCOPE_ID", None),
-            "AMO_CHATS_SECRET": getattr(settings, "AMO_CHATS_SECRET", None),
-            "AMO_CHATS_ACCOUNT_ID": getattr(settings, "AMO_CHATS_ACCOUNT_ID", None),
-            "AMO_CHATS_CHANNEL_ID": getattr(settings, "AMO_CHATS_CHANNEL_ID", None),
-            "AMO_CHATS_SENDER_USER_AMOJO_ID": getattr(settings, "AMO_CHATS_SENDER_USER_AMOJO_ID", None),
+            "AMO_CHATS_SCOPE_ID": getattr(self._s, "AMO_CHATS_SCOPE_ID", None),
+            "AMO_CHATS_SECRET": getattr(self._s, "AMO_CHATS_SECRET", None),
+            "AMO_CHATS_ACCOUNT_ID": getattr(self._s, "AMO_CHATS_ACCOUNT_ID", None),
+            "AMO_CHATS_CHANNEL_ID": getattr(self._s, "AMO_CHATS_CHANNEL_ID", None),
+            "AMO_CHATS_SENDER_USER_AMOJO_ID": getattr(self._s, "AMO_CHATS_SENDER_USER_AMOJO_ID", None),
         }
         missing = [k for k, v in req.items() if not v]
         if missing:
@@ -71,7 +72,7 @@ async def connect_channel(client: httpx.AsyncClient) -> dict:
     body = _dump({
         "account_id": ac.account_id,
         "hook_api_version": "v2",
-        "title": getattr(settings, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
+        "title": getattr(ac._s, "AMOCHATS_INTEGRATION_NAME", "tg-bridge"),
     })
     headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
@@ -81,7 +82,8 @@ async def connect_channel(client: httpx.AsyncClient) -> dict:
 
 
 async def ensure_amo_chats_connected(logger, client: httpx.AsyncClient) -> None:
-    if not settings.AMO_CHATS_AUTOCONNECT:
+    s = get_settings()
+    if not getattr(s, "AMO_CHATS_AUTOCONNECT", False):
         logger.info("AmoChats autoconnect disabled")
         return
     try:
@@ -93,10 +95,13 @@ async def ensure_amo_chats_connected(logger, client: httpx.AsyncClient) -> None:
 
 
 async def send_text_from_client(
-        *, lead_id: int, text: str,
-        tg_user_id: int, tg_user_name: str | None = None,
-        conversation_id: str | None = None,
-        client: httpx.AsyncClient,
+    *,
+    lead_id: int,
+    text: str,
+    tg_user_id: int,
+    tg_user_name: str | None = None,
+    conversation_id: str | None = None,
+    client: httpx.AsyncClient,
 ) -> str | None:
     ac = _get_client()
 
@@ -162,10 +167,13 @@ async def send_text_from_client(
 
 
 async def send_text_from_manager(
-        *, conversation_id: str,  # здесь нужен уже существующий uuid/id чата
-        user_id: int, user_name: str | None, avatar: str | None,
-        text: str,
-        client: httpx.AsyncClient,
+    *,
+    conversation_id: str,  # здесь нужен уже существующий uuid/id чата
+    user_id: int,
+    user_name: str | None,
+    avatar: str | None,
+    text: str,
+    client: httpx.AsyncClient,
 ) -> None:
     """
     Сообщение 'от менеджера' — используем sender.ref_id = AMO_CHATS_SENDER_USER_AMOJO_ID,
@@ -205,11 +213,11 @@ async def send_text_from_manager(
 
 
 async def ensure_chat_created(
-        *,
-        lead_id: int,
-        tg_user_id: int,
-        tg_user_name: str | None,
-        client: httpx.AsyncClient,
+    *,
+    lead_id: int,
+    tg_user_id: int,
+    tg_user_name: str | None,
+    client: httpx.AsyncClient,
 ) -> str:
     """
     Форсирует создание/поиск чата в AmoChats по conversation_ref_id='lead:<id>'.

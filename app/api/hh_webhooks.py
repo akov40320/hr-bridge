@@ -4,17 +4,17 @@ from app.db.token_store import DbTokenStore
 from app.core.config import get_settings
 
 log = logging.getLogger(__name__)
-settings = get_settings()
 HH_SUBS_URL = "https://api.hh.ru/webhook-subscriptions"
 
 
 def _target_url() -> str:
-    # теперь только явная настройка
-    return (getattr(settings, "HH_WEBHOOK_URL", "") or "").strip()
+    s = get_settings()
+    return (getattr(s, "HH_WEBHOOK_URL", "") or "").strip()
 
 
 def _events() -> list[str]:
-    raw = (getattr(settings, "HH_WEBHOOK_EVENTS", "") or "").strip()
+    s = get_settings()
+    raw = (getattr(s, "HH_WEBHOOK_EVENTS", "") or "").strip()
     if raw:
         return [e.strip() for e in raw.split(",") if e.strip()]
     return ["negotiation_created"]

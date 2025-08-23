@@ -13,7 +13,7 @@ from app.services import amo_lead_enrichment
 from app.models import IncomingPayload
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+
 
 async def enrich_applicant(
     payload: IncomingPayload, http_client: httpx.AsyncClient
@@ -48,6 +48,8 @@ async def create_lead(
     queue_client: RabbitMQClient = rabbitmq,
 ) -> tuple[int | None, str]:
     """Create lead in AmoCRM and return (lead_id, kind)."""
+    s = get_settings()
+
     title = payload.vacancy_title or ""
     desc = payload.vacancy_desc or ""
     raw = payload.raw_text or ""
@@ -63,11 +65,11 @@ async def create_lead(
         return None, kind
 
     if kind == "master":
-        pipeline_id = settings.AMO_PIPELINE_ID_MASTER
-        stage_id = settings.AMO_STAGE_ID_MASTER_NEW
+        pipeline_id = s.AMO_PIPELINE_ID_MASTER
+        stage_id = s.AMO_STAGE_ID_MASTER_NEW
     else:
-        pipeline_id = settings.AMO_PIPELINE_ID_OPERATOR
-        stage_id = settings.AMO_STAGE_ID_OPERATOR_NEW
+        pipeline_id = s.AMO_PIPELINE_ID_OPERATOR
+        stage_id = s.AMO_STAGE_ID_OPERATOR_NEW
 
     lead_name = f"{title} — {name or 'кандидат'}".strip(" —")
 
@@ -119,14 +121,16 @@ async def send_invite(
     payload: IncomingPayload, lead_id: int, queue_client: RabbitMQClient = rabbitmq
 ) -> str:
     """Send invite link to applicant via platform-specific channels."""
+    s = get_settings()
+
     kind = payload.kind or route_kind(
         desc=payload.vacancy_desc or "",
         raw=payload.raw_text or "",
     )
     bot_username = (
-        settings.TELEGRAM_MASTER_BOT_USERNAME
+        s.TELEGRAM_MASTER_BOT_USERNAME
         if kind == "master"
-        else settings.TELEGRAM_OPERATOR_BOT_USERNAME
+        else s.TELEGRAM_OPERATOR_BOT_USERNAME
     )
     deep_link = f"https://t.me/{bot_username}?start={lead_id}"
     invite_text = (
@@ -165,8 +169,6 @@ async def tag_lead(lead_id: int, kind: str, amo_client) -> None:
         lead_id,
         [f"type:{'мастер' if kind == 'master' else 'оператор'}"],
     )
-
-
 
 
 __all__ = [

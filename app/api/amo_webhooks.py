@@ -22,7 +22,6 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 router = APIRouter()
 
 
@@ -56,6 +55,7 @@ async def handle_hh_event(
     http_client: httpx.AsyncClient,
     queue_client: RabbitMQClient = rabbitmq,
 ):
+    s = get_settings()
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
     state = hh_map_get(status_id)
@@ -63,14 +63,14 @@ async def handle_hh_event(
         return
 
     final_state = state
-    if is_refusal_code(state) and settings.AMO_CF_REFUSAL_REASON_ID:
+    if is_refusal_code(state) and s.AMO_CF_REFUSAL_REASON_ID:
         try:
             amo = await AmoClient.create(http_client)
             lead = await amo.get_lead(lead_id)
             cfv = lead.get("custom_fields_values") or []
             reason_text = None
             for f in cfv:
-                if int(f.get("field_id") or 0) == int(settings.AMO_CF_REFUSAL_REASON_ID):
+                if int(f.get("field_id") or 0) == int(s.AMO_CF_REFUSAL_REASON_ID):
                     vals = f.get("values") or []
                     if vals:
                         v = vals[0].get("value")
@@ -86,7 +86,7 @@ async def handle_hh_event(
                 try:
                     pretty = refusal_text(state) or state
                     await amo.update_lead_custom_fields(
-                        lead_id, {settings.AMO_CF_REFUSAL_REASON_ID: pretty}
+                        lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
                     )
                 except Exception:
                     logger.warning("Failed to copy refusal text")

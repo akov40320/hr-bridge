@@ -1,6 +1,6 @@
 import logging, hmac, hashlib, secrets
 import httpx
-from fastapi import APIRouter, Request, Response, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 
 from app.adapters.amochats import connect_channel
 from app.http_client import get_http_client
@@ -12,17 +12,18 @@ from app.services.queue import rabbitmq, RabbitMQClient
 
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
-settings = get_settings()
+
 
 async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()
-    secret = settings.AMOCHATS_INCOMING_SECRET or ""
+    s = get_settings()
+    secret = s.AMOCHATS_INCOMING_SECRET or ""
     if secret:
         got = (request.headers.get("X-Signature") or "").lower()
         calc = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest().lower()
         if not (got and secrets.compare_digest(got, calc)):
             logger.warning(
-                "amo‑chats invalid signature: got=%s calc=%s sha256(body)=%s len=%d path=%s",
+                "amo-chats invalid signature: got=%s calc=%s sha256(body)=%s len=%d path=%s",
                 got[:12],
                 calc[:12],
                 hashlib.sha256(raw).hexdigest()[:12],
@@ -30,6 +31,7 @@ async def verify_amochats_signature(request: Request) -> None:
                 request.url.path,
             )
             raise HTTPException(status_code=401, detail="Invalid signature")
+
 
 @router_amo_chats.post(
     "/webhooks/amo-chats/in/{scope_id}",
@@ -102,16 +104,17 @@ async def amochats_in(
             try:
                 tg_uid = int(ext_id.split(":", 1)[1])
             except ValueError:
-                logger.debug("amo-chats bad tg ext_id: %r", ext_id)
                 logger.warning("amo-chats failed to parse tg uid from ext_id %r", ext_id)
                 tg_uid = None
 
         if tg_uid:
             cand = []
             ln1 = await get_by_user(tg_uid, "master")
-            if ln1: cand.append(ln1)
+            if ln1:
+                cand.append(ln1)
             ln2 = await get_by_user(tg_uid, "operator")
-            if ln2: cand.append(ln2)
+            if ln2:
+                cand.append(ln2)
             links = [ln for ln in cand if not ln.conversation_id] or cand
             if links and conv_ref_id:
                 for ln in links:
@@ -138,9 +141,11 @@ async def amochats_in(
     logger.info("amo-chats -> RMQ mirror ok (scope_id=%s, text_len=%d)", scope_id, len(text))
     return {"ok": True}
 
+
 # --- Админ для одноразового /connect ---
 from fastapi import APIRouter as _APIRouter  # avoid shadow
 amo_admin = _APIRouter(prefix="/admin/amo-chats", dependencies=[Depends(require_admin)])
+
 
 @amo_admin.post("/connect")
 async def admin_connect(http_client: httpx.AsyncClient = Depends(get_http_client)):

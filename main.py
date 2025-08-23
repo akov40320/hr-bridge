@@ -1,60 +1,66 @@
 import asyncio
 import contextlib
 import logging
+import time
+
 import uvicorn
 from aiogram import Bot
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, APIRouter
 
 from app.adapters.amochats import ensure_amo_chats_connected
-from app.api import router, admin
-from app.api.tasks import handle_task as _handle_task
+from app.api import oauth, admin as admin_module, hh_incoming, avito_incoming, amo_webhooks
 from app.api.api_amochats import router_amo_chats, amo_admin
-from app.bootstrap import ensure_tokens
-from app.core.config import settings
-from app.db import init_db
-import time
-from app.services.hh_mapping import load
 from app.api.hh_webhooks import ensure_hh_webhook
-from app.services.queue import rabbitmq
-from app.http_client import get_http_client, close_http_client
 from app.api.tg_webhooks import router as tg_wh_router
+from app.api.tasks import handle_task as _handle_task
+from app.bootstrap import ensure_tokens
+from app.core.config import get_settings
+from app.core.guards import require_admin
 from app.core.logging_setup import setup_logging
-from app.db.token_store import DbTokenStore
 from app.core.middleware import LoggingMiddleware, metrics_endpoint
+from app.db import init_db
+from app.http_client import get_http_client, close_http_client
+from app.services.queue import rabbitmq
 
 log = logging.getLogger(__name__)
-
 setup_logging("INFO")
 
 app = FastAPI(title="Recruiting Bridge")
 app.add_middleware(LoggingMiddleware)
 app.add_route("/metrics", metrics_endpoint)
-app.include_router(router)
-app.include_router(admin)
+
+# Собираем публичные роуты тут (без агрегирующего импорта пакета app.api)
+public_router = APIRouter()
+public_router.include_router(oauth.router)
+public_router.include_router(hh_incoming.router)
+public_router.include_router(avito_incoming.router)
+public_router.include_router(amo_webhooks.router)
+public_router.include_router(admin_module.router)
+
+admin_router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
+admin_router.include_router(admin_module.admin)
+
+app.include_router(public_router)
+app.include_router(admin_router)
 app.include_router(router_amo_chats)
 app.include_router(amo_admin)
-
-if settings.TELEGRAM_WEBHOOK_MODE:
-    app.include_router(tg_wh_router)
+app.include_router(tg_wh_router)
 
 
 async def auto_register_telegram_webhooks() -> None:
-    if not settings.TELEGRAM_WEBHOOK_MODE:
-        log.info("TELEGRAM_WEBHOOK_MODE=false — пропускаю установку вебхуков")
-        return
-
-    base = (settings.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
+    s = get_settings()
+    base = (s.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
     if not base:
         log.warning("TELEGRAM_WEBHOOK_BASE пуст — не могу поставить вебхуки")
         return
 
-    secret = settings.TELEGRAM_WEBHOOK_SECRET or None
+    secret = s.TELEGRAM_WEBHOOK_SECRET or None
     allowed = ["message"]
 
     # master
-    if settings.TELEGRAM_MASTER_BOT_TOKEN:
+    if s.TELEGRAM_MASTER_BOT_TOKEN:
         try:
-            async with Bot(settings.TELEGRAM_MASTER_BOT_TOKEN) as m_bot:
+            async with Bot(s.TELEGRAM_MASTER_BOT_TOKEN) as m_bot:
                 await m_bot.set_webhook(
                     url=f"{base}/tg/webhook/master",
                     secret_token=secret,
@@ -67,9 +73,9 @@ async def auto_register_telegram_webhooks() -> None:
             log.exception("Failed to set master webhook")
 
     # operator
-    if settings.TELEGRAM_OPERATOR_BOT_TOKEN:
+    if s.TELEGRAM_OPERATOR_BOT_TOKEN:
         try:
-            async with Bot(settings.TELEGRAM_OPERATOR_BOT_TOKEN) as o_bot:
+            async with Bot(s.TELEGRAM_OPERATOR_BOT_TOKEN) as o_bot:
                 await o_bot.set_webhook(
                     url=f"{base}/tg/webhook/operator",
                     secret_token=secret,
@@ -84,10 +90,13 @@ async def auto_register_telegram_webhooks() -> None:
 
 @app.on_event("startup")
 async def on_startup():
-    settings.validate_required()
+    s = get_settings()
+    s.validate_required()
+
     await init_db()
     await ensure_tokens()
     await rabbitmq.connect()
+
     try:
         from app.db.token_store import DbTokenStore
         from app.services.hh_mapping import load as load_hh_mapping
@@ -100,7 +109,7 @@ async def on_startup():
     except Exception:
         log.info("Amo token not ready on startup — hh_autofill will be queued after OAuth")
 
-        # стартуем RMQ consumer
+    # стартуем RMQ consumer
     try:
         app.state.rmq_task = asyncio.create_task(rabbitmq.consume(_handle_task, max_attempts=10))
         log.info("RMQ consumer started")
@@ -125,11 +134,11 @@ async def on_shutdown():
 
 
 @app.get("/")
-async def root():
+async def root(s = Depends(get_settings)):
     return {
         "ok": True,
         "service": "Recruiting Bridge",
-        "mode": "webhook" if settings.TELEGRAM_WEBHOOK_MODE else "polling"
+        "mode": "webhook" if s.TELEGRAM_WEBHOOK_MODE else "polling",
     }
 
 

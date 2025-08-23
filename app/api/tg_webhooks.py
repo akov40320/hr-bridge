@@ -2,26 +2,35 @@ import logging
 from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
 from aiogram.types import Update
+
 from app.core.config import get_settings
 from app.core.guards import require_admin
 from app.tg_router import make_router
 
 logger = logging.getLogger("tg.webhooks")
-settings = get_settings()
+
 router = APIRouter()
+admin_tg = APIRouter(prefix="/admin/tg", dependencies=[Depends(require_admin)])
 
 
-def make_tg_webhook(bot: Bot | None, kind: str):
-    """Фабрика обработчиков Telegram вебхуков."""
-    dp = make_router(kind) if bot else None
-
+def make_tg_webhook(kind: str):
+    """Фабрика обработчиков Telegram вебхуков с ленивой инициализацией Bot и настроек."""
     async def _handler(request: Request):
-        if not bot or not dp:
-            logger.warning("%s webhook called, but bot or dp is None -> 503", kind)
+        s = get_settings()
+        if kind == "master":
+            token = s.TELEGRAM_MASTER_BOT_TOKEN
+        elif kind == "operator":
+            token = s.TELEGRAM_OPERATOR_BOT_TOKEN
+        else:
+            token = None
+
+        if not token:
+            logger.warning("%s webhook called, but token is empty -> 503", kind)
             return Response(status_code=503)
 
-        if settings.TELEGRAM_WEBHOOK_SECRET and \
-           request.headers.get("X-Telegram-Bot-Api-Secret-Token") != settings.TELEGRAM_WEBHOOK_SECRET:
+        # Секрет проверяем из настроек на каждый запрос
+        secret_hdr = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if s.TELEGRAM_WEBHOOK_SECRET and secret_hdr != s.TELEGRAM_WEBHOOK_SECRET:
             logger.warning("%s webhook: bad secret -> 401", kind)
             return Response(status_code=401)
 
@@ -32,36 +41,35 @@ def make_tg_webhook(bot: Bot | None, kind: str):
             logger.exception("%s webhook: invalid json/update", kind)
             return Response(status_code=400)
 
-        await dp.feed_update(bot=bot, update=upd)
+        dp = make_router(kind)
+        async with Bot(token) as bot:
+            await dp.feed_update(bot=bot, update=upd)
+
         logger.info("%s webhook ok: update_id=%s", kind, getattr(upd, "update_id", None))
         return {"ok": True}
 
     return _handler
 
 
-tokens = {
-    "master": settings.TELEGRAM_MASTER_BOT_TOKEN,
-    "operator": settings.TELEGRAM_OPERATOR_BOT_TOKEN,
-}
-
-bots = {k: Bot(t) if t else None for k, t in tokens.items()}
-
-for kind, bot in bots.items():
-    router.post(f"/tg/webhook/{kind}")(make_tg_webhook(bot, kind))
-
-
-admin_tg = APIRouter(prefix="/admin/tg", dependencies=[Depends(require_admin)])
+# Регистрация эндпоинтов (без чтения настроек на уровне модуля)
+for _kind in ("master", "operator"):
+    router.post(f"/tg/webhook/{_kind}")(make_tg_webhook(_kind))
 
 
 @admin_tg.post("/set-webhooks")
 async def set_webhooks():
-    base = (settings.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
+    s = get_settings()
+    base = (s.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
     if not base:
         return {"ok": False, "error": "TELEGRAM_WEBHOOK_BASE is empty"}
-    secret = settings.TELEGRAM_WEBHOOK_SECRET or None
+    secret = s.TELEGRAM_WEBHOOK_SECRET or None
     allowed = ["message"]
-    out = {}
 
+    out = {}
+    tokens = {
+        "master": s.TELEGRAM_MASTER_BOT_TOKEN,
+        "operator": s.TELEGRAM_OPERATOR_BOT_TOKEN,
+    }
     for kind, token in tokens.items():
         if token:
             async with Bot(token) as bot:
@@ -77,6 +85,12 @@ async def set_webhooks():
 
 @admin_tg.post("/delete-webhooks")
 async def delete_webhooks():
+    s = get_settings()
+    tokens = {
+        "master": s.TELEGRAM_MASTER_BOT_TOKEN,
+        "operator": s.TELEGRAM_OPERATOR_BOT_TOKEN,
+    }
+
     results = {}
     for kind, token in tokens.items():
         if token:
@@ -87,6 +101,12 @@ async def delete_webhooks():
 
 @admin_tg.get("/webhook-info")
 async def webhook_info():
+    s = get_settings()
+    tokens = {
+        "master": s.TELEGRAM_MASTER_BOT_TOKEN,
+        "operator": s.TELEGRAM_OPERATOR_BOT_TOKEN,
+    }
+
     res = {}
     for kind, token in tokens.items():
         if token:
