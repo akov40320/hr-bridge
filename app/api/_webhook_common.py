@@ -38,20 +38,24 @@ async def process_job_board_webhook(
         logger.warning("%s webhook: %s; payload=%s", platform, exc, raw)
         return {"ok": True, "skipped": True}
 
-    payload = await enrich_applicant(payload, http_client)
+    try:
+        payload = await enrich_applicant(payload, http_client)
 
-    amo = await AmoClient.create(http_client)
-    lead_id, kind = await create_lead(payload, amo)
+        amo = await AmoClient.create(http_client)
+        lead_id, kind = await create_lead(payload, amo)
 
-    if not lead_id:
-        if kind == "ignore":
-            return {"ok": True, "ignored": True, "reason": "no-keywords"}
-        return {"ok": True, "queued": True, "reason": "reauth_required"}
+        if not lead_id:
+            if kind == "ignore":
+                return {"ok": True, "ignored": True, "reason": "no-keywords"}
+            return {"ok": True, "queued": True, "reason": "reauth_required"}
 
-    await send_invite(payload, lead_id)
-    await tag_lead(lead_id, kind, amo)
+        await send_invite(payload, lead_id)
+        await tag_lead(lead_id, kind, amo)
 
-    return {"ok": True, "lead_id": lead_id}
+        return {"ok": True, "lead_id": lead_id}
+    except Exception:
+        logger.exception("%s webhook: internal error", platform)
+        return {"ok": False, "error": "internal_error"}
 
 
 __all__ = ["process_job_board_webhook"]
