@@ -1,3 +1,5 @@
+"""Persistence helpers for mapping Telegram chats to leads and conversations."""
+
 from typing import Optional
 
 from sqlalchemy import select, update
