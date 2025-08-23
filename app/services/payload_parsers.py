@@ -40,13 +40,24 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
         obj.get("id")
         or data.get("response_id")
         or obj.get("negotiation_id")
+        or obj.get("topic_id")
+        or obj.get("chat_id")
+        or obj.get("resume_id")
         or ""
     )
 
     vacancy = obj.get("vacancy") or {}
     applicant = obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {}
 
-    vacancy_id = str(vacancy.get("id") or data.get("vacancy_id") or "") or None
+    vacancy_id = (
+        str(
+            vacancy.get("id")
+            or data.get("vacancy_id")
+            or obj.get("vacancy_id")
+            or ""
+        )
+        or None
+    )
     vacancy_title = vacancy.get("name") or data.get("vacancy_title") or ""
     vacancy_desc = vacancy.get("description") or data.get("vacancy_description") or ""
     applicant_name = (
@@ -57,6 +68,7 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
         str(
             data.get("employer", {}).get("id")
             or obj.get("employer", {}).get("id")
+            or obj.get("employer_id")
             or ""
         )
         or None
