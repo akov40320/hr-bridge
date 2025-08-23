@@ -14,6 +14,11 @@ router = APIRouter()
 async def webhook_hh(
     request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
 ):
+    """Handle HeadHunter webhook events.
+
+    Fetches the raw request body and passes it to the generic job board
+    webhook processor along with the HeadHunter payload parser.
+    """
     raw = await request.body()
     return await process_job_board_webhook("hh", raw, http_client, parse_hh_payload)
 
