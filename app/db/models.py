@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, Text, Integer, TIMESTAMP, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from .db import Base
+from .base import Base
 
 
 class Token(Base):

@@ -6,7 +6,7 @@ adapter calls.  They are intentionally similar to the respective HH handlers in
 order to keep the behaviour consistent across job boards.
 """
 
-# pylint: disable=duplicate-code,cyclic-import
+# pylint: disable=duplicate-code
 
 import logging
 

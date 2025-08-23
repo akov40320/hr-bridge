@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
+from .base import Base
 
 
 @dataclass
@@ -31,10 +31,6 @@ class _DBState:
 
 
 _STATE = _DBState()
-
-
-class Base(DeclarativeBase):  # pylint: disable=too-few-public-methods
-    """Base class for all SQLAlchemy models."""
 
 
 def _is_sqlite_memory_url(url: str) -> bool:
