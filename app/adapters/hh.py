@@ -4,14 +4,11 @@ from typing import Optional
 from app.core.config import get_settings
 from app.api.oauth2 import ensure_fresh_access
 from app.core.retry import with_retry
+from ._requests import request_with_retry
 
 
 class HHError(Exception):
     ...
-
-
-def _is_retryable(status: int) -> bool:
-    return status == 429 or 500 <= status < 600
 
 
 async def set_employer_state(
@@ -36,26 +33,21 @@ async def set_employer_state(
     url = s.HH_API_BASE.rstrip("/") + s.HH_SET_STATE_PATH.format(response_id=response_id)
     payload = {"status": target_state}
 
-    async def attempt() -> None:
-        r = await client.post(
-            url,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {access}",
-                "Accept": "application/json",
-            },
-            timeout=30,
-        )
-        r.raise_for_status()
-
-    try:
-        await with_retry(
-            attempt,
-            attempts=5,
-            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
-        )
-    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
-        raise HHError(f"HH set_state failed {e.response.status_code}: {e.response.text}") from e
+    await request_with_retry(
+        client,
+        "POST",
+        url,
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {access}",
+            "Accept": "application/json",
+        },
+        timeout=30,
+        error_cls=HHError,
+        service="HH",
+        action="set_state",
+        retry_func=with_retry,
+    )
 
 
 async def send_message(
@@ -78,26 +70,21 @@ async def send_message(
     url = s.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
     payload = {"message": {"text": text}}
 
-    async def attempt() -> None:
-        r = await client.post(
-            url,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {access}",
-                "Accept": "application/json",
-            },
-            timeout=30,
-        )
-        r.raise_for_status()
-
-    try:
-        await with_retry(
-            attempt,
-            attempts=5,
-            is_retryable=lambda e: isinstance(e, httpx.HTTPStatusError) and _is_retryable(e.response.status_code),
-        )
-    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
-        raise HHError(f"HH send_message failed {e.response.status_code}: {e.response.text}") from e
+    await request_with_retry(
+        client,
+        "POST",
+        url,
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {access}",
+            "Accept": "application/json",
+        },
+        timeout=30,
+        error_cls=HHError,
+        service="HH",
+        action="send_message",
+        retry_func=with_retry,
+    )
 
 
 async def fetch_applicant_details(
