@@ -28,6 +28,9 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
         m: Message, text: str, lead_id: int, conv_id: str | None
     ) -> None:
         """Reply to user and mirror message to the CRM queue."""
+        user = m.from_user
+        if user is None:
+            return
         await m.answer(text)
         msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
         await queue_client.publish_task(
@@ -35,8 +38,8 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                 "platform": "mirror",
                 "action": "bot_to_amo",
                 "text": text,
-                "user_id": m.from_user.id,
-                "user_name": m.from_user.username,
+                "user_id": user.id,
+                "user_name": user.username,
                 "conversation_id": conv_id,
                 "lead_id": lead_id,
                 "msg_key": msg_key,
@@ -46,6 +49,9 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
     @dp.message(CommandStart())
     async def on_start(m: Message) -> None:
         """Handle /start command to register user and start survey."""
+        user = m.from_user
+        if user is None:
+            return
         lead_id = parse_start_arg(m.text or "")
         if not lead_id:
             await m.answer(
@@ -54,10 +60,8 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
             )
             return
 
-        await upsert_tg_link(m.from_user.id, bot_kind, lead_id)
-        await svc.start(
-            m.from_user.id, bot_kind, lead_id, pretty_tg_identity(m)
-        )
+        await upsert_tg_link(user.id, bot_kind, lead_id)
+        await svc.start(user.id, bot_kind, lead_id, pretty_tg_identity(m))
 
         greeting = (
             "Здравствуйте! Нужны пару уточнений по заявке.\n\n"
@@ -68,22 +72,25 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
         logger.info(
             "[%s] /start user_id=%s lead_id=%s",
             bot_kind,
-            m.from_user.id,
+            user.id,
             lead_id,
         )
 
     @dp.message(F.text)
     async def on_text(m: Message) -> None:
         """Process text messages, mirror to CRM, and advance survey."""
+        user = m.from_user
+        if user is None:
+            return
         text = m.text or ""
-        survey = await svc.get(m.from_user.id, bot_kind)
+        survey = await svc.get(user.id, bot_kind)
 
         lead_id: int | None = None
         conv_id: str | None = None
         if survey:
             lead_id = survey.lead_id
         else:
-            link = await get_by_user(m.from_user.id, bot_kind)
+            link = await get_by_user(user.id, bot_kind)
             if link:
                 lead_id = link.lead_id
                 conv_id = link.conversation_id
@@ -102,8 +109,8 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                 "action": "tg_to_amo",
                 "lead_id": lead_id,
                 "text": text,
-                "tg_user_id": m.from_user.id,
-                "tg_user_name": m.from_user.username,
+                "tg_user_id": user.id,
+                "tg_user_name": user.username,
                 "conversation_id": conv_id,
                 "bot_kind": bot_kind,
                 "msg_key": msg_key,
@@ -111,9 +118,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
         )
 
         if survey:
-            survey = await svc.store_answer(
-                m.from_user.id, bot_kind, text
-            )
+            survey = await svc.store_answer(user.id, bot_kind, text)
             if not survey:
                 await _answer_and_mirror(
                     m,
@@ -134,9 +139,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                 summary = survey_summary(
                     survey.city, survey.experience, survey.time_pref
                 )
-                await svc.finish(
-                    m.from_user.id, bot_kind, lead_id, summary
-                )
+                await svc.finish(user.id, bot_kind, lead_id, summary)
                 await _answer_and_mirror(
                     m,
                     "Спасибо! Мы передали информацию рекрутеру. "
@@ -147,7 +150,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                 logger.info(
                     "[%s] survey finished user_id=%s lead_id=%s",
                     bot_kind,
-                    m.from_user.id,
+                    user.id,
                     lead_id,
                 )
 

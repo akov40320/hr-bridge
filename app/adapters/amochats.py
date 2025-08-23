@@ -135,8 +135,10 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
 
+    from typing import Any
+
     def _payload(with_ref: bool):
-        base = {
+        base: dict[str, Any] = {
             "event_type": "new_message",
             "payload": {
                 "msgid": str(uuid.uuid4()),
@@ -149,10 +151,11 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-
                 "message": {"type": "text", "text": text},
             },
         }
+        payload: dict[str, Any] = base["payload"]
         if with_ref:
-            base["payload"]["conversation_ref_id"] = f"lead:{lead_id}"
+            payload["conversation_ref_id"] = f"lead:{lead_id}"
         else:
-            base["payload"]["conversation_id"] = conversation_id
+            payload["conversation_id"] = conversation_id
         return base
 
     async def _post(payload: dict, route: str):

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, Response, Depends
 from aiogram import Bot
 from aiogram.types import Update
 from pydantic import ValidationError
+from typing import cast
 
 from app.core.config import get_settings
 from app.core.guards import require_admin
@@ -57,7 +58,7 @@ def make_tg_webhook(key: object, kind: str | None = None):
             if key is None:
                 logger.warning("%s webhook called, but bot is None -> 503", kind or "unknown")
                 return Response(status_code=503)
-            await dp.feed_update(bot=key, update=upd)
+            await dp.feed_update(bot=cast(Bot, key), update=upd)
         else:
             # Продовый путь по токену
             token = tokens.get(key)

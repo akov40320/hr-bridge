@@ -52,7 +52,10 @@ def survey_summary(city: str | None, experience: str | None, time_pref: str | No
 def pretty_tg_identity(m: Message) -> str:
     """Return a human friendly representation of the Telegram user."""
 
-    return f"@{m.from_user.username}" if m.from_user.username else f"id:{m.from_user.id}"
+    user = m.from_user
+    if not user:
+        return "id:unknown"
+    return f"@{user.username}" if user.username else f"id:{user.id}"
 
 
 async def mark_went_to_bot_async(
