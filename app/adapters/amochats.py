@@ -65,26 +65,23 @@ def _build_headers(
     secret: str,
     method: str,
     path: str,
-    body: bytes,
-    account_id: str | None,
+    body: bytes | None,
 ) -> dict[str, str]:
-    """Construct request headers for AmoChats API call."""
-    date = formatdate(usegmt=True)
+    date_hdr = formatdate(usegmt=True)                
     ctype = "application/json"
-    md5 = hashlib.md5(body).hexdigest().lower()
-    to_sign = "\n".join([method.upper(), md5, ctype, date, path])
-    sig = hmac.new(  # nosec B324
-        secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha256
-    ).hexdigest().lower()
-    headers: dict[str, str] = {
-        "Date": date,
+    b = body or b""
+    md5_hex = hashlib.md5(b).hexdigest().lower()     
+    string_to_sign = "\n".join([method.upper(), md5_hex, ctype, date_hdr, path])
+    sig = hmac.new(secret.encode("utf-8"),
+                   string_to_sign.encode("utf-8"),
+                   hashlib.sha1).hexdigest().lower()
+
+    return {
+        "Date": date_hdr,
         "Content-Type": ctype,
-        "Content-MD5": md5,
+        "Content-MD5": md5_hex,
         "X-Signature": sig,
     }
-    if account_id:
-        headers["X-Client-Id"] = account_id
-    return headers
 
 
 async def connect_channel(client: httpx.AsyncClient) -> dict[str, Any]:
