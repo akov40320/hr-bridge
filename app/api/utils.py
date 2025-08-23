@@ -4,7 +4,7 @@ import re
 from typing import Mapping
 
 
-HASHTAG_RE = re.compile(r"(?i)(?<!\w)#\s*(?:мастер|оператор)\b")
+HASHTAG_RE = re.compile(r"(?i)(?:^|\s)#(?:мастер|оператор)\b")
 
 
 def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
