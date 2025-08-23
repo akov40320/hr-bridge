@@ -3,7 +3,6 @@ from aiogram import Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from app.core.config import get_settings
 from app.store_chat import upsert_tg_link, get_by_user
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.services.survey import (
@@ -15,7 +14,6 @@ from app.services.survey import (
 from app.services.survey_service import SurveyService
 
 logger = logging.getLogger("tg.router")
-settings = get_settings()
 
 
 def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:
@@ -23,9 +21,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
     svc = SurveyService(queue_client)
 
     async def _answer_and_mirror(m: Message, text: str, bot_kind: str, lead_id: int, conv_id: str | None):
-        # 1) отвечаем в TG
         await m.answer(text)
-        # 2) отправляем в AmoChats через RMQ (воркер создаст чат при необходимости)
         msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
         await queue_client.publish_task({
             "platform": "mirror",
@@ -58,7 +54,6 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
         text = m.text or ""
         survey = await svc.get(m.from_user.id, bot_kind)
 
-        # найдём привязку даже если опрос завершён
         lead_id: int | None = None
         conv_id: str | None = None
         if survey:
@@ -73,7 +68,6 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
             await m.answer("Нажмите /start по ссылке из сообщения, чтобы привязать диалог к заявке.")
             return
 
-        # TG -> Amo (заметка + AmoChats) целиком через воркер
         msg_key = f"tg:{m.chat.id}:{m.message_id}"
         await queue_client.publish_task({
             "platform": "mirror",
@@ -87,7 +81,6 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
             "msg_key": msg_key,
         })
 
-        # опрос
         if survey:
             survey = await svc.store_answer(m.from_user.id, bot_kind, text)
             if not survey:
@@ -105,8 +98,5 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                     bot_kind, lead_id, conv_id
                 )
                 logger.info("[%s] survey finished user_id=%s lead_id=%s", bot_kind, m.from_user.id, lead_id)
-        else:
-            # обычный чат после опроса — зеркалирование уже отправили выше
-            pass
 
     return dp

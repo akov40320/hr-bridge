@@ -1,50 +1,59 @@
+from functools import lru_cache
+from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # RMQ
     RABBITMQ_URL: str = "amqp://guest:guest@localhost/"
     RMQ_EXCHANGE: str = "bridge"
     RMQ_TASK_QUEUE: str = "bridge.tasks"
     RMQ_RETRY_QUEUE: str = "bridge.tasks.retry"
-    RMQ_RETRY_TTL_MS: int = 5000
+    RMQ_DLQ_QUEUE: str = "bridge.tasks.dlq"
+    RMQ_RETRY_TTL_MS: int = 5_000
     RMQ_ENABLE_CONSUMER: bool = True
-    RMQ_CONSUMERS: int = 1
-    # DB
-    DATABASE_URL: str = "postgresql+asyncpg://hr:hr@localhost:5432/hr"
+    RMQ_CONSUMERS: int = 1  # тестовый дефолт
 
-    # AmoCRM
-    AMO_BASE_URL: str
-    AMO_CLIENT_ID: str
-    AMO_CLIENT_SECRET: str
-    AMO_REDIRECT_URI: str
+    # DB (в тестах безопаснее sqlite in-memory)
+    DATABASE_URL: str = "sqlite+aiosqlite:///:memory:"
+
+    # AmoCRM OAuth/база (дефолты пустые → не валимся в тестах)
+    AMO_BASE_URL: str = ""
+    AMO_CLIENT_ID: str = ""
+    AMO_CLIENT_SECRET: str = ""
+    AMO_REDIRECT_URI: str = ""
 
     AMO_ACCESS_TOKEN: str = ""
     AMO_REFRESH_TOKEN: str = ""
     AMO_EXPIRES_AT: int = 0
 
-    AMO_PIPELINE_ID_MASTER: int
-    AMO_STAGE_ID_MASTER_NEW: int
-    AMO_PIPELINE_ID_OPERATOR: int
-    AMO_STAGE_ID_OPERATOR_NEW: int
+    # IDшники воронок/стадий — как Optional[int]
+    AMO_PIPELINE_ID_MASTER: Optional[int] = None
+    AMO_STAGE_ID_MASTER_NEW: Optional[int] = None
+    AMO_PIPELINE_ID_OPERATOR: Optional[int] = None
+    AMO_STAGE_ID_OPERATOR_NEW: Optional[int] = None
 
+    # Теги/роутинг
     AMO_TAG_WENT_TO_BOT: str = "Перешел в бота"
     AMO_TAG_SURVEY_DONE: str = "Опрос пройден"
-
     ROUTING_KEYWORD_MASTER: str = "мастер"
     ROUTING_KEYWORD_OPERATOR: str = "оператор"
 
-    # HH OAuth
+    # HH
     HH_CLIENT_ID: str = ""
     HH_CLIENT_SECRET: str = ""
     HH_REDIRECT_URI: str = ""
-
     HH_ACCESS_TOKEN: str = ""
     HH_REFRESH_TOKEN: str = ""
     HH_EXPIRES_AT: int = 0
+    HH_API_BASE: str = "https://api.hh.ru"
+    HH_SET_STATE_PATH: str = "/negotiations/{response_id}/status"
+    HH_TOKEN_URL: str = "https://api.hh.ru/oauth/token"  # унифицировали
 
-    # Avito OAuth
+    # Avito
     AVITO_CLIENT_ID: str = ""
     AVITO_CLIENT_SECRET: str = ""
     AVITO_REDIRECT_URI: str = ""
@@ -54,71 +63,72 @@ class Settings(BaseSettings):
     AVITO_AUTHORIZE_URL: str = "https://avito.ru/oauth"
     AVITO_TOKEN_URL: str = "https://api.avito.ru/token"
     AVITO_SCOPE: str = ""
-
-    # поведение
-    HH_SYNC_ENABLED: bool = False
-    AVITO_SYNC_ENABLED: bool = False
-    AVITO_MARK_READ_ON_STAGE_CHANGE: bool = True
-
-    TELEGRAM_MASTER_BOT_TOKEN: str = ""
-    TELEGRAM_MASTER_BOT_USERNAME: str = ""
-    TELEGRAM_OPERATOR_BOT_TOKEN: str = ""
-    TELEGRAM_OPERATOR_BOT_USERNAME: str = ""
-
-    TELEGRAM_WEBHOOK_MODE: bool = False
-    TELEGRAM_WEBHOOK_SECRET: str = ""  # для проверки X-Telegram-Bot-Api-Secret-Token
-    TELEGRAM_WEBHOOK_BASE: str = ""  # например, https://hr-bridge.onrender.com
-
-    ADMIN_TOKEN: str = Field(..., min_length=1)
-
-    HH_API_BASE: str = "https://api.hh.ru"
-    HH_SET_STATE_PATH: str = "/negotiations/{response_id}/status"
-    HH_TOKEN_URL: str = "https://api.hh.ru/token"
-
     AVITO_API_BASE: str = "https://api.avito.ru"
     AVITO_SEND_MESSAGE_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/messages"
     AVITO_MARK_READ_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/read"
 
-    # --- AmoChats (amojo) ---
-    AMO_CHATS_BASE: str = Field("https://amojo.amocrm.ru", min_length=1)
-    AMO_CHATS_SCOPE_ID: str = Field(..., min_length=1)  # cf188c..._83c08...
-    AMO_CHATS_SECRET: str = Field(..., min_length=1)  # cf2032...
-    AMO_CHATS_CHANNEL_ID: str = Field(..., min_length=1)  # cf188c...
-    AMO_CHATS_ACCOUNT_ID: str = Field(..., min_length=1)  # 83c0858...
-    AMO_CHATS_SENDER_USER_AMOJO_ID: str = Field(..., min_length=1)  # e71231...
-    AMOCHATS_ENABLED: bool = True
-    AMO_CHATS_SENDER_NAME: str = Field("tg-bridge", min_length=1)
-    AMO_CHATS_AUTOCONNECT: bool = True
+    # Поведение
+    HH_SYNC_ENABLED: bool = False
+    AVITO_SYNC_ENABLED: bool = False
+    AVITO_MARK_READ_ON_STAGE_CHANGE: bool = True
 
-    # входящие из AmoChats → наш вебхук. Если Amo даёт подпись — сюда (HMAC-SHA256).
+    # Telegram
+    TELEGRAM_MASTER_BOT_TOKEN: str = ""
+    TELEGRAM_MASTER_BOT_USERNAME: str = ""
+    TELEGRAM_OPERATOR_BOT_TOKEN: str = ""
+    TELEGRAM_OPERATOR_BOT_USERNAME: str = ""
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+    TELEGRAM_WEBHOOK_BASE: str = ""
+    TELEGRAM_WEBHOOK_MODE: bool = True
+
+    # Админ
+    ADMIN_TOKEN: str = ""  # не обязателен для тестов; проверим в validate_required()
+
+    # --- AmoChats (amojo) ---
+    AMO_CHATS_BASE: str = "https://amojo.amocrm.ru"
+    AMO_CHATS_SCOPE_ID: str = ""
+    AMO_CHATS_SECRET: str = ""
+    AMO_CHATS_CHANNEL_ID: str = ""
+    AMO_CHATS_ACCOUNT_ID: str = ""
+    AMO_CHATS_SENDER_USER_AMOJO_ID: str = ""
+    AMOCHATS_ENABLED: bool = True
+    AMO_CHATS_SENDER_NAME: str = "tg-bridge"
+    AMO_CHATS_AUTOCONNECT: bool = True
     AMOCHATS_INCOMING_SECRET: str = ""
 
+    # HH webhooks
     HH_WEBHOOK_URL: str = ""
     HH_WEBHOOK_EVENTS: str = ""
 
+    # Amo кастомные поля (0 = нет)
     AMO_CF_LEAD_CITY_ID: int = 0
     AMO_CF_LEAD_VACANCY_TITLE_ID: int = 0
     AMO_CF_LEAD_APPLICANT_PHONE_ID: int = 0
     AMO_CF_LEAD_APPLICANT_NAME_ID: int = 0
-
     AMO_CF_REFUSAL_REASON_ID: int = 0
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    RMQ_DLQ_QUEUE: str = "bridge.tasks.dlq"
-
     def validate_required(self) -> None:
+        """Жёсткая проверка для прод/старта сервиса (НЕ для тестов)."""
         required = [
-            "ADMIN_TOKEN",
-            "AMO_CHATS_SCOPE_ID",
-            "AMO_CHATS_SECRET",
-            "AMO_CHATS_CHANNEL_ID",
-            "AMO_CHATS_ACCOUNT_ID",
-            "AMO_CHATS_SENDER_USER_AMOJO_ID",
+            ("AMO_BASE_URL", self.AMO_BASE_URL),
+            ("AMO_CLIENT_ID", self.AMO_CLIENT_ID),
+            ("AMO_CLIENT_SECRET", self.AMO_CLIENT_SECRET),
+            ("AMO_REDIRECT_URI", self.AMO_REDIRECT_URI),
+            ("AMO_PIPELINE_ID_MASTER", self.AMO_PIPELINE_ID_MASTER),
+            ("AMO_STAGE_ID_MASTER_NEW", self.AMO_STAGE_ID_MASTER_NEW),
+            ("AMO_PIPELINE_ID_OPERATOR", self.AMO_PIPELINE_ID_OPERATOR),
+            ("AMO_STAGE_ID_OPERATOR_NEW", self.AMO_STAGE_ID_OPERATOR_NEW),
+            ("ADMIN_TOKEN", self.ADMIN_TOKEN),
+            # AmoChats — если включено автоподключение/использование
+            ("AMO_CHATS_SCOPE_ID", self.AMO_CHATS_SCOPE_ID if self.AMOCHATS_ENABLED else "ok"),
+            ("AMO_CHATS_SECRET", self.AMO_CHATS_SECRET if self.AMOCHATS_ENABLED else "ok"),
+            ("AMO_CHATS_CHANNEL_ID", self.AMO_CHATS_CHANNEL_ID if self.AMOCHATS_ENABLED else "ok"),
+            ("AMO_CHATS_ACCOUNT_ID", self.AMO_CHATS_ACCOUNT_ID if self.AMOCHATS_ENABLED else "ok"),
+            ("AMO_CHATS_SENDER_USER_AMOJO_ID", self.AMO_CHATS_SENDER_USER_AMOJO_ID if self.AMOCHATS_ENABLED else "ok"),
         ]
-        missing = [name for name in required if not getattr(self, name, None)]
+        missing = [k for k, v in required if not v]
         if missing:
-            raise ValueError(f"Missing required settings: {', '.join(missing)}")
+            raise RuntimeError(f"Missing required settings: {', '.join(missing)}")
 
 
 @lru_cache
