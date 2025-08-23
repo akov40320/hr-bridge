@@ -20,7 +20,7 @@ from aio_pika import exceptions as aio_exc
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+
 
 
 def _int(name: str, default: int) -> int:
@@ -40,35 +40,42 @@ class RabbitMQClient:
         self._conn: aio_pika.RobustConnection | None = None
         self._chan: aio_pika.Channel | None = None
         self._exch: aio_pika.Exchange | None = None
+        self._settings = None
+
+    def _s(self):
+        if self._settings is None:
+            self._settings = get_settings()
+        return self._settings
 
     async def _ensure(self) -> None:
         if self._conn and not self._conn.is_closed and self._chan and not self._chan.is_closed:
             return
 
-        self._conn = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        s = self._s()
+        self._conn = await aio_pika.connect_robust(s.RABBITMQ_URL)
         self._chan = await self._conn.channel(publisher_confirms=True)
         await self._chan.set_qos(prefetch_count=RMQ_PREFETCH)
 
         self._exch = await self._chan.declare_exchange(
-            settings.RMQ_EXCHANGE, aio_pika.ExchangeType.DIRECT, durable=True
+            s.RMQ_EXCHANGE, aio_pika.ExchangeType.DIRECT, durable=True
         )
 
-        await self._chan.declare_queue(settings.RMQ_TASK_QUEUE, durable=True)
+        await self._chan.declare_queue(s.RMQ_TASK_QUEUE, durable=True)
         await self._chan.declare_queue(
-            settings.RMQ_RETRY_QUEUE,
+            s.RMQ_RETRY_QUEUE,
             durable=True,
             arguments={
-                "x-message-ttl": settings.RMQ_RETRY_TTL_MS,
-                "x-dead-letter-exchange": settings.RMQ_EXCHANGE,
+                "x-message-ttl": s.RMQ_RETRY_TTL_MS,
+                "x-dead-letter-exchange": s.RMQ_EXCHANGE,
                 "x-dead-letter-routing-key": "tasks",
             },
         )
-        await self._chan.declare_queue(settings.RMQ_DLQ_QUEUE, durable=True)
+        await self._chan.declare_queue(s.RMQ_DLQ_QUEUE, durable=True)
 
-        q_main = await self._chan.get_queue(settings.RMQ_TASK_QUEUE)
+        q_main = await self._chan.get_queue(s.RMQ_TASK_QUEUE)
         await q_main.bind(self._exch, routing_key="tasks")
 
-        q_dlq = await self._chan.get_queue(settings.RMQ_DLQ_QUEUE)
+        q_dlq = await self._chan.get_queue(s.RMQ_DLQ_QUEUE)
         await q_dlq.bind(self._exch, routing_key="tasks.dlq")
 
     async def connect(self) -> None:
@@ -99,18 +106,20 @@ class RabbitMQClient:
     async def publish_retry(self, payload: dict, attempts: int) -> None:
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
+
+        s = self._s()
         body = json.dumps({"payload": payload, "attempts": attempts}, ensure_ascii=False).encode()
         msg = aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
         try:
             assert self._chan is not None
             await self._chan.default_exchange.publish(
-                msg, routing_key=settings.RMQ_RETRY_QUEUE
+                msg, routing_key=s.RMQ_RETRY_QUEUE
             )
         except aio_exc.AMQPError:
             await self._ensure()
             assert self._chan is not None
             await self._chan.default_exchange.publish(
-                msg, routing_key=settings.RMQ_RETRY_QUEUE
+                msg, routing_key=s.RMQ_RETRY_QUEUE
             )
 
     async def publish_dlq(
@@ -134,6 +143,7 @@ class RabbitMQClient:
     ) -> None:
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
+        s = self._s()
 
         async def _worker() -> None:
             while True:
@@ -146,7 +156,7 @@ class RabbitMQClient:
                     ):
                         await self._ensure()
 
-                    q = await self._chan.get_queue(settings.RMQ_TASK_QUEUE)
+                    q = await self._chan.get_queue(s.RMQ_TASK_QUEUE)
                     async with q.iterator() as it:
                         async for message in it:
                             obj = None
@@ -185,7 +195,7 @@ class RabbitMQClient:
                     await asyncio.sleep(1)
                     await self._ensure()
 
-        workers = settings.RMQ_CONSUMERS
+        workers = s.RMQ_CONSUMERS
         async with asyncio.TaskGroup() as tg:
             for _ in range(workers):
                 tg.create_task(_worker())
