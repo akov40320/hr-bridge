@@ -1,7 +1,11 @@
-"""Обеспечивает корректную регистрацию вебхуков HH (идемпотентно)."""
+"""Обеспечивает корректную и идемпотентную регистрацию вебхуков HH."""
+
+from __future__ import annotations
 
 import logging
 import re
+from typing import Any
+
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -12,39 +16,56 @@ log = logging.getLogger(__name__)
 
 HH_SUBS_URL = "https://api.hh.ru/webhook/subscriptions"
 
-# Нормализатор названий событий из ENV: ".", "-", пробелы -> "_", lower
+
 def _norm(s: str) -> str:
+    """Нормализация названий событий: '.', '-', пробелы -> '_', lower."""
     return re.sub(r"[.\-\s]+", "_", s.strip().lower())
 
-# Поддерживаемые события (ключи — НОРМАЛИЗОВАННЫЕ):
-# По докам HH доступны события по переговорам; сообщения через webhooks не гарантируются.
-EVENT_MAP = {
+
+# Поддерживаемые события (ключи — НОРМАЛИЗОВАННЫЕ)
+EVENT_MAP: dict[str, str] = {
     "negotiation_created": "NEW_NEGOTIATION_VACANCY",
     "negotiation_status_changed": "NEGOTIATION_EMPLOYER_STATE_CHANGE",
-    # "message_created": "NEW_NEGOTIATION_MESSAGE",  # если включишь — проверь в доках/кабинете
+    # Если в дальнейшем понадобятся сообщения — добавьте сюда:
+    # "message_created": "NEW_NEGOTIATION_MESSAGE",
 }
+
 
 def _target_url() -> str:
     s = get_settings()
     return (getattr(s, "HH_WEBHOOK_URL", "") or "").strip()
 
+
+def _canon(u: str) -> str:
+    """Канонизация URL для сравнения."""
+    return (u or "").strip().rstrip("/")
+
+
+def _keyify_action(x: dict) -> tuple:
+    """Ключ для сравнения action (тип + settings)."""
+    return (x.get("type"), tuple(sorted((x.get("settings") or {}).items())))
+
+
+def _same_actions(a_list: list[dict], b_list: list[dict]) -> bool:
+    """Равенство множеств actions без учёта порядка."""
+    return set(map(_keyify_action, a_list)) == set(map(_keyify_action, b_list))
+
+
 def _actions() -> list[dict]:
-    """
-    Собирает actions из ENV HH_WEBHOOK_EVENTS.
-    Пример ENV: HH_WEBHOOK_EVENTS=negotiation.created,negotiation.status_changed
-    """
+    """Собирает actions из ENV HH_WEBHOOK_EVENTS."""
     s = get_settings()
     raw = (getattr(s, "HH_WEBHOOK_EVENTS", "") or "").strip()
     tokens = [t for t in (x.strip() for x in raw.split(",")) if t] or ["negotiation.created"]
 
-    actions, invalid = [], []
+    actions: list[dict] = []
+    invalid: list[str] = []
+
     for token in tokens:
         key = _norm(token)
         type_name = EVENT_MAP.get(key)
         if not type_name:
             invalid.append(token)
             continue
-        # Для NEW_NEGOTIATION_VACANCY допустима настройка фильтра вакансий
         if type_name == "NEW_NEGOTIATION_VACANCY":
             actions.append({"type": type_name, "settings": {"vacancies_only_mine": False}})
         else:
@@ -54,106 +75,147 @@ def _actions() -> list[dict]:
         log.warning("HH webhook: проигнорированы неподдерживаемые события: %s", ",".join(invalid))
     return actions
 
-def _same_action(a: dict, b: dict) -> bool:
-    """Сравнение action по типу и настройкам (а не только по типу)."""
-    return a.get("type") == b.get("type") and (a.get("settings") or {}) == (b.get("settings") or {})
+
+async def _list_all_subs(client: httpx.AsyncClient, headers: dict[str, str]) -> list[dict]:
+    """Возвращает все подписки с учётом пагинации (если она есть)."""
+    subs: list[dict] = []
+    page = 0
+    per_page = 100
+    while True:
+        r = await client.get(
+            HH_SUBS_URL,
+            headers=headers,
+            params={"page": page, "per_page": per_page},
+            timeout=20,
+        )
+        r.raise_for_status()
+        js: Any = r.json()
+        items = js if isinstance(js, list) else js.get("items", [])
+        subs.extend(items)
+        if isinstance(js, list):
+            break
+        pages = js.get("pages")
+        if not isinstance(pages, int) or page + 1 >= pages:
+            break
+        page += 1
+    return subs
+
+
+async def _find_sub_by_url(client: httpx.AsyncClient, headers: dict[str, str], url: str) -> dict | None:
+    """Ищет подписку по точному URL (с канонизацией)."""
+    cu = _canon(url)
+    for it in await _list_all_subs(client, headers):
+        if _canon(str(it.get("url", ""))) == cu:
+            return it
+    return None
+
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
-    """Создать/обновить подписку HH, идемпотентно."""
+    """Создать/обновить подписку HH, идемпотентно (POST/PUT/DELETE при необходимости)."""
     url = _target_url()
     if not url:
         log.info("HH webhook: HH_WEBHOOK_URL пуст — пропускаю регистрацию")
         return
 
-    # 1) токен работодателя
     try:
         owners = await DbTokenStore.list_owners("hh")
-        employer_id = owners[0] if owners else None
-        if not employer_id:
+        if not owners:
             raise RuntimeError("нет работодателей")
-        tok = await DbTokenStore("hh", employer_id).load()
     except (RuntimeError, SQLAlchemyError):
         log.info("HH webhook: нет токена работодателя — пропускаю регистрацию")
         return
-
-    headers = {
-        "Authorization": f"Bearer {tok['access_token']}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "HH-User-Agent": "hr-bridge/1.0 (+https://hr-bridge.onrender.com; ops@hr-bridge.onrender.com)",
-    }
 
     desired = _actions()
     if not desired:
         log.warning("HH webhook: нет валидных событий — пропускаю регистрацию")
         return
 
-    # 2) читаем текущие подписки и ищем по URL (без учёта завершающего слэша)
-    def _canon(u: str) -> str:
-        return u.rstrip("/").strip()
+    for employer_id in owners:
+        try:
+            tok = await DbTokenStore("hh", employer_id).load()
+        except SQLAlchemyError:
+            continue
 
-    try:
-        r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
-        if r.status_code in (401, 403, 404):
-            log.warning("HH webhook: %s — нет прав/токен/фича недоступна", r.status_code)
-            return
-        r.raise_for_status()
-        js = r.json()
-        items = js if isinstance(js, list) else js.get("items", [])
-        current = next((it for it in items if _canon(str(it.get("url", ""))) == _canon(url)), None)
+        headers = {
+            "Authorization": f"Bearer {tok['access_token']}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "HH-User-Agent": "hr-bridge/1.0 (+https://hr-bridge.onrender.com; ops@hr-bridge.onrender.com)",
+        }
 
-        # helper: сравнить списки actions
-        def _same_actions(a_list: list[dict], b_list: list[dict]) -> bool:
-            if len(a_list) != len(b_list):
-                return False
-            # сравнение по множеству (тип+настройки)
-            def keyify(x: dict) -> tuple:
-                return (x.get("type"), tuple(sorted((x.get("settings") or {}).items())))
-            return set(map(keyify, a_list)) == set(map(keyify, b_list))
+        try:
+            # 1) ищем подписку с нашим URL среди всех страниц
+            current = await _find_sub_by_url(client, headers, url)
 
-        if current is None:
-            # 3) создаём; если вернётся 400 already_exist — обрабатываем как "уже есть"
-            cr = await client.post(HH_SUBS_URL, json={"url": url, "actions": desired}, headers=headers, timeout=20)
-            if cr.status_code == 400:
-                try:
-                    err = cr.json()
+            # 2) если нет — пробуем создать
+            if current is None:
+                cr = await client.post(HH_SUBS_URL, json={"url": url, "actions": desired}, headers=headers, timeout=20)
+                if cr.status_code == 400:
+                    # 2a) если "already_exist" — в аккаунте уже есть подписка, нужно обновить существующую
+                    try:
+                        err = cr.json()
+                    except Exception:  # noqa: BLE001
+                        err = {}
                     if any(e.get("value") == "already_exist" for e in err.get("errors", [])):
-                        log.info("HH webhook: подписка уже существует — пробую обновить")
-                        # перечитываем и обновляем по URL
-                        r2 = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
-                        r2.raise_for_status()
-                        items2 = r2.json() if isinstance(r2.json(), list) else r2.json().get("items", [])
-                        current = next((it for it in items2 if _canon(str(it.get("url", ""))) == _canon(url)), None)
-                    else:
-                        cr.raise_for_status()
-                except Exception:  # noqa: BLE001
+                        log.info("HH webhook: подписка уже существует — пробую обновить существующую")
+                        # Берём любую существующую подписку и пробуем заменить url+actions через PUT,
+                        # если нельзя — удаляем и создаём заново.
+                        all_subs = await _list_all_subs(client, headers)
+                        if not all_subs:
+                            log.warning("HH webhook: already_exist, но список подписок пуст — проверь права")
+                            continue
+                        victim = all_subs[0]
+                        sub_id = victim.get("id") or victim.get("subscription_id")
+                        if not sub_id:
+                            log.warning("HH webhook: не удалось определить id существующей подписки")
+                            continue
+                        # Пытаемся PUT url+actions
+                        pu = await client.put(
+                            f"{HH_SUBS_URL}/{sub_id}",
+                            json={"url": url, "actions": desired},
+                            headers=headers,
+                            timeout=20,
+                        )
+                        if pu.status_code in (400, 422):
+                            # Если нельзя менять url — удаляем и создаём заново
+                            await client.delete(f"{HH_SUBS_URL}/{sub_id}", headers=headers, timeout=20)
+                            cr2 = await client.post(
+                                HH_SUBS_URL, json={"url": url, "actions": desired}, headers=headers, timeout=20
+                            )
+                            cr2.raise_for_status()
+                            log.info("HH webhook: заменено удалением -> %s [%s]", url, ",".join(a["type"] for a in desired))
+                        else:
+                            pu.raise_for_status()
+                            log.info("HH webhook: обновлено (PUT) -> %s [%s]", url, ",".join(a["type"] for a in desired))
+                        return
                     cr.raise_for_status()
-            else:
-                cr.raise_for_status()
-                log.info("HH webhook: создано -> %s [%s]", url, ",".join(a["type"] for a in desired))
-                return
+                else:
+                    cr.raise_for_status()
+                    log.info("HH webhook: создано -> %s [%s]", url, ",".join(a["type"] for a in desired))
+                    return
 
-        if current is None:
-            # ничего не нашли даже после already_exist — считаем настроенным и выходим
-            log.info("HH webhook: подписка существует (по ответу HH), но не найдена в списке — пропускаю")
+            # 3) если подписка с нашим URL уже есть — сверяем actions и обновляем при необходимости
+            curr_actions = current.get("actions", [])
+            if not _same_actions(curr_actions, desired):
+                sub_id = current.get("id") or current.get("subscription_id")
+                if not sub_id:
+                    log.warning("HH webhook: не удалось определить id подписки для обновления")
+                    continue
+                pu = await client.put(
+                    f"{HH_SUBS_URL}/{sub_id}",
+                    json={"actions": desired},
+                    headers=headers,
+                    timeout=20,
+                )
+                pu.raise_for_status()
+                log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(a["type"] for a in desired))
+            else:
+                log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(a["type"] for a in desired))
             return
 
-        # 4) обновляем, если конфигурации различаются (PUT вместо delete+post)
-        curr_actions = current.get("actions", [])
-        if not _same_actions(curr_actions, desired):
-            sub_id = current.get("id") or current.get("subscription_id")
-            if not sub_id:
-                log.warning("HH webhook: не удалось определить id подписки для обновления")
-                return
-            pu = await client.put(f"{HH_SUBS_URL}/{sub_id}", json={"actions": desired}, headers=headers, timeout=20)
-            pu.raise_for_status()
-            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(a["type"] for a in desired))
-        else:
-            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(a["type"] for a in desired))
+        except httpx.HTTPStatusError as e:
+            log.exception("HH webhook: HTTP ошибка (%s): %s", e.response.status_code, e.response.text)
+        except (httpx.HTTPError, ValueError) as e:
+            log.exception("HH webhook: непредвиденная ошибка: %s", e)
 
-    except httpx.HTTPStatusError as e:
-        # полезно видеть request_id HH для тикетов
-        body = e.response.text
-        log.exception("HH webhook: HTTP ошибка (%s): %s", e.response.status_code, body)
-    except (httpx.HTTPError, ValueError) as e:
-        log.exception("HH webhook: непредвиденная ошибка: %s", e)
+    log.info("HH webhook: подходящая подписка не найдена/не создана для известных владельцев — проверь токены/права")
