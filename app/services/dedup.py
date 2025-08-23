@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Any, cast 
 
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
-from typing import cast, Any
 
 from app.db import get_session
 from app.db.models import EventDedup
