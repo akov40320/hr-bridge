@@ -1,3 +1,5 @@
+"""Utilities for parsing webhook payloads from external job platforms."""
+
 import json
 import logging
 
@@ -136,4 +138,3 @@ def parse_avito_payload(payload: AvitoPayload) -> IncomingPayload:
 
 
 __all__ = ["parse_hh_payload", "extract_avito_payload", "parse_avito_payload"]
-
