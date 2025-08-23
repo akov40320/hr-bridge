@@ -1,18 +1,24 @@
 from __future__ import annotations
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Text, Integer, JSON, TIMESTAMP, UniqueConstraint
+from sqlalchemy import BigInteger, Text, Integer, TIMESTAMP, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from .db import Base
 
 
 class Token(Base):
+    """OAuth tokens for external services."""
+
     __tablename__ = "tokens"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    service: Mapped[str] = mapped_column(Text, nullable=False, index=True)      # "hh" | "avito" | "amo" ...
-    owner_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)  # HH: employer_id; Avito: account_id
+    service: Mapped[str] = mapped_column(
+        Text, nullable=False, index=True
+    )  # "hh" | "avito" | "amo" ...
+    owner_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True
+    )  # HH: employer_id; Avito: account_id
 
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
     refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
@@ -30,11 +36,15 @@ class Token(Base):
 
 
 class LeadLink(Base):
+    """Associates internal leads with external platform records."""
+
     __tablename__ = "lead_links"
 
     lead_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     platform: Mapped[str] = mapped_column(Text, nullable=False)  # "hh" | "avito"
-    owner_id: Mapped[str | None] = mapped_column(Text, nullable=True)  # HH employer_id / Avito account_id
+    owner_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # HH employer_id / Avito account_id
 
     vacancy_id: Mapped[str] = mapped_column(Text, nullable=False)
     external_id: Mapped[str | None] = mapped_column(Text)
@@ -46,6 +56,8 @@ class LeadLink(Base):
 
 
 class TgLink(Base):
+    """Links Telegram users to leads and conversations."""
+
     __tablename__ = "tg_links"
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -64,6 +76,8 @@ class TgLink(Base):
 
 
 class TgSurvey(Base):
+    """Stores survey responses collected via Telegram bots."""
+
     __tablename__ = "tg_surveys"
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -87,6 +101,8 @@ class TgSurvey(Base):
 
 
 class EventDedup(Base):
+    """Tracks processed events to avoid duplicates."""
+
     __tablename__ = "events_dedup"
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
