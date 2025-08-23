@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, cast 
+from typing import Any, cast
 
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
