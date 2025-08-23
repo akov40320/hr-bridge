@@ -2,7 +2,7 @@ import httpx
 from typing import Optional
 
 from app.core.config import get_settings
-from app.api.oauth2 import ensure_fresh_access
+from app.api.oauth2 import ensure_fresh_access, OAuth2Config
 from app.core.retry import with_retry
 from ._requests import request_with_retry
 
@@ -19,7 +19,7 @@ async def set_employer_state(
 ) -> None:
     """Меняет статус отклика (response/negotiation) у конкретного работодателя."""
     s = get_settings()
-    access = await ensure_fresh_access(
+    config = OAuth2Config(
         service="hh",
         token_url=s.HH_TOKEN_URL,
         client_id=s.HH_CLIENT_ID,
@@ -27,8 +27,8 @@ async def set_employer_state(
         redirect_uri=s.HH_REDIRECT_URI,
         use_basic_auth=False,
         owner_id=employer_id,
-        http_client=client,
     )
+    access = await ensure_fresh_access(config=config, http_client=client)
 
     url = s.HH_API_BASE.rstrip("/") + s.HH_SET_STATE_PATH.format(response_id=response_id)
     payload = {"status": target_state}
@@ -57,7 +57,7 @@ async def send_message(
     client: httpx.AsyncClient,
 ) -> None:
     s = get_settings()
-    access = await ensure_fresh_access(
+    config = OAuth2Config(
         service="hh",
         token_url=s.HH_TOKEN_URL,
         client_id=s.HH_CLIENT_ID,
@@ -65,8 +65,8 @@ async def send_message(
         redirect_uri=s.HH_REDIRECT_URI,
         use_basic_auth=False,
         owner_id=employer_id,
-        http_client=client,
     )
+    access = await ensure_fresh_access(config=config, http_client=client)
     url = s.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
     payload = {"message": {"text": text}}
 
@@ -93,7 +93,7 @@ async def fetch_applicant_details(
     client: httpx.AsyncClient,
 ) -> dict:
     s = get_settings()
-    access = await ensure_fresh_access(
+    config = OAuth2Config(
         service="hh",
         token_url=s.HH_TOKEN_URL,
         client_id=s.HH_CLIENT_ID,
@@ -101,8 +101,8 @@ async def fetch_applicant_details(
         redirect_uri=s.HH_REDIRECT_URI,
         use_basic_auth=False,
         owner_id=employer_id,
-        http_client=client,
     )
+    access = await ensure_fresh_access(config=config, http_client=client)
 
     h = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
     base = s.HH_API_BASE.rstrip("/")
