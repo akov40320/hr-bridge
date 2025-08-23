@@ -10,18 +10,12 @@ from app.core.config import get_settings
 log = logging.getLogger(__name__)
 HH_SUBS_URL = "https://api.hh.ru/webhook/subscriptions"
 
-ALLOWED_ACTIONS: set[str] = {
-    "negotiation_created",         # создание отклика/переписки
-    "message_created",             # появление нового сообщения
-    "negotiation_status_changed",  # изменение статуса отклика
-}
-
-# Словарь для явного сопоставления форматов из документации (точки) к
-# формату с подчёркиваниями, который ожидает API.
-EVENT_ALIASES: dict[str, str] = {
-    "negotiation.created": "negotiation_created",
-    "message.created": "message_created",
-    "negotiation.status_changed": "negotiation_status_changed",
+# Карта поддерживаемых событий HH
+# Список соответствует документации Webhook API (https://github.com/hhru/api)
+EVENT_MAPPING = {
+    "negotiation.created": "NEW_NEGOTIATION_VACANCY",
+    "negotiation.status_changed": "CHANGE_NEGOTIATION_STATUS",
+    "message.created": "NEW_NEGOTIATION_MESSAGE",
 }
 
 
@@ -30,29 +24,32 @@ def _target_url() -> str:
     return (getattr(s, "HH_WEBHOOK_URL", "") or "").strip()
 
 
-def _events() -> list[str]:
-    """Вернуть нормализованный список разрешённых событий HH."""
+def _actions() -> list[dict]:
+    """
+    Построить список словарей для передачи в actions.
+    Читает HH_WEBHOOK_EVENTS (через запятую). Если переменная пуста,
+    используется ['negotiation.created'] по умолчанию.
+    """
     s = get_settings()
     raw = (getattr(s, "HH_WEBHOOK_EVENTS", "") or "").strip()
-    tokens = [t.strip() for t in raw.split(",") if t.strip()] if raw else []
-    if not tokens:
-        tokens = ["negotiation_created"]
-    normalised: list[str] = []
+    tokens = [t.strip() for t in raw.split(",") if t.strip()] if raw else ["negotiation.created"]
+
+    actions: list[dict] = []
+    invalid: list[str] = []
     for token in tokens:
-        # если в переменной окружения указаны названия через точку — заменяем
-        alias = EVENT_ALIASES.get(token) or EVENT_ALIASES.get(token.lower())
-        # иначе заменяем точки и дефисы на подчёркивания
-        if not alias:
-            alias = token.lower().replace(".", "_").replace("-", "_")
-        normalised.append(alias)
-    # удалить дубликаты, сохранить порядок
-    seen = set()
-    unique = [e for e in normalised if not (e in seen or seen.add(e))]
-    allowed = [e for e in unique if e in ALLOWED_ACTIONS]
-    invalid = [e for e in unique if e not in ALLOWED_ACTIONS]
+        key = token.lower().replace(" ", "")
+        if key in EVENT_MAPPING:
+            type_name = EVENT_MAPPING[key]
+            if type_name == "NEW_NEGOTIATION_VACANCY":
+                actions.append({"type": type_name, "settings": {"vacancies_only_mine": False}})
+            else:
+                actions.append({"type": type_name})
+        else:
+            invalid.append(token)
+
     if invalid:
         log.warning("HH webhook: unsupported events ignored: %s", ",".join(invalid))
-    return allowed
+    return actions
 
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
@@ -77,8 +74,13 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         "Authorization": f"Bearer {tok['access_token']}",
         "Accept": "application/json",
         "Content-Type": "application/json",
+        "HH-User-Agent": "hr-bridge/1.0 (+https://hr-bridge.onrender.com; ops@hr-bridge.onrender.com)",
     }
-    want_events = _events()
+
+    actions = _actions()
+    if not actions:
+        log.warning("HH webhook: no valid actions specified — skipping registration")
+        return
 
     try:
         r = await client.get(HH_SUBS_URL, headers=headers, timeout=20)
@@ -92,30 +94,24 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         current = next((it for it in items if str(it.get("url", "")).strip() == url), None)
 
         if not current:
-            body = {"url": url, "events": want_events}
+            body = {"url": url, "actions": actions}
             cr = await client.post(HH_SUBS_URL, json=body, headers=headers, timeout=20)
-            if cr.status_code in (401, 403, 404):
-                log.warning("HH webhook: %s — нет прав/токен/фича недоступна", cr.status_code)
-                return
             cr.raise_for_status()
-            log.info("HH webhook: создано -> %s [%s]", url, ",".join(want_events))
+            log.info("HH webhook: создано -> %s [%s]", url, ",".join([a["type"] for a in actions]))
             return
 
-        have_events = sorted([e.strip() for e in current.get("events", [])])
-        if sorted(want_events) != have_events:
+        current_types = sorted([a.get("type", "") for a in current.get("actions", [])])
+        want_types = sorted([a["type"] for a in actions])
+        if want_types != current_types:
             del_id = current.get("id") or current.get("subscription_id")
             if del_id:
                 await client.delete(f"{HH_SUBS_URL}/{del_id}", headers=headers, timeout=20)
-            cr = await client.post(
-                HH_SUBS_URL,
-                json={"url": url, "events": want_events},
-                headers=headers,
-                timeout=20,
-            )
+            cr = await client.post(HH_SUBS_URL, json={"url": url, "actions": actions},
+                                   headers=headers, timeout=20)
             cr.raise_for_status()
-            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join(want_events))
+            log.info("HH webhook: обновлено -> %s [%s]", url, ",".join([a["type"] for a in actions]))
         else:
-            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join(want_events))
+            log.info("HH webhook: уже настроено -> %s [%s]", url, ",".join([a["type"] for a in actions]))
 
     except httpx.HTTPStatusError as e:
         log.exception("HH webhook: HTTP ошибка (%s): %s", e.response.status_code, e.response.text)
