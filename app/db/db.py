@@ -1,110 +1,131 @@
+"""Database utilities for asynchronous SQLAlchemy engine and sessions."""
+
 from __future__ import annotations
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
+
 import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import AsyncIterator, Optional
 
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 
-_engine: Optional[AsyncEngine] = None
-_SessionLocal: Optional[async_sessionmaker[AsyncSession]] = None
 
-# ---- только для in-memory sqlite в тестах ----
-_SQLITE_MEMORY: bool = False
-_TABLES_READY: bool = False
-_LOOP_ID: Optional[int] = None
-# ---------------------------------------------
+@dataclass
+class _DBState:
+    """Holds cached DB engine/sessionmaker and SQLite test flags."""
 
-class Base(DeclarativeBase):
-    pass
+    engine: Optional[AsyncEngine] = None
+    session_maker: Optional[async_sessionmaker[AsyncSession]] = None
+    sqlite_memory: bool = False
+    tables_ready: bool = False
+    loop_id: Optional[int] = None
+
+
+_STATE = _DBState()
+
+
+class Base(DeclarativeBase):  # pylint: disable=too-few-public-methods
+    """Base class for all SQLAlchemy models."""
 
 
 def _is_sqlite_memory_url(url: str) -> bool:
+    """Return ``True`` if the URL points to an in-memory SQLite database."""
+
     return url.startswith("sqlite+aiosqlite:///:memory:") or "file::memory:" in url
 
 
 def get_engine() -> AsyncEngine:
-    global _engine, _SQLITE_MEMORY
-    if _engine is None:
-        s = get_settings()
-        url = s.DATABASE_URL
-        kwargs = dict(echo=False, pool_pre_ping=True)
+    """Return a cached :class:`~sqlalchemy.ext.asyncio.AsyncEngine` instance."""
+
+    if _STATE.engine is None:
+        settings = get_settings()
+        url = settings.DATABASE_URL
+        kwargs = {"echo": False, "pool_pre_ping": True}
         if _is_sqlite_memory_url(url):
-            _SQLITE_MEMORY = True
-            kwargs.update(
-                poolclass=StaticPool,
-                # connect_args={"check_same_thread": False},  # не обязательно для aiosqlite
-            )
-        _engine = create_async_engine(url, **kwargs)
-    return _engine
+            _STATE.sqlite_memory = True
+            kwargs.update(poolclass=StaticPool)
+        _STATE.engine = create_async_engine(url, **kwargs)
+    return _STATE.engine
 
 
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
-    global _SessionLocal
-    if _SessionLocal is None:
-        _SessionLocal = async_sessionmaker(get_engine(), expire_on_commit=False, class_=AsyncSession)
-    return _SessionLocal
+    """Return a cached async session factory."""
+
+    if _STATE.session_maker is None:
+        _STATE.session_maker = async_sessionmaker(
+            get_engine(), expire_on_commit=False, class_=AsyncSession
+        )
+    return _STATE.session_maker
 
 
 async def _ensure_tables_created_once() -> None:
-    """Для sqlite :memory: — создаём чистую схему на каждый новый event loop (каждый тест)."""
-    global _TABLES_READY, _LOOP_ID
+    """Create tables for in-memory SQLite on each new event loop."""
 
-    if not _SQLITE_MEMORY:
+    if not _STATE.sqlite_memory:
         # не тестовый ин-мемори — ничего не делаем
         return
 
     loop_id = id(asyncio.get_running_loop())
 
     # новый тест (новый event loop) → снести и пересоздать схему
-    if _LOOP_ID != loop_id:
-        from . import models  # noqa: F401
+    if _STATE.loop_id != loop_id:
+        from . import models  # pylint: disable=unused-import, import-outside-toplevel
+
         async with get_engine().begin() as conn:
             # если схемы не было — drop_all просто ничего не сделает
             await conn.run_sync(Base.metadata.drop_all)
             await conn.run_sync(Base.metadata.create_all)
-        _TABLES_READY = True
-        _LOOP_ID = loop_id
+        _STATE.tables_ready = True
+        _STATE.loop_id = loop_id
         return
 
     # тот же тест, но ещё не создавали таблицы
-    if not _TABLES_READY:
-        from . import models  # noqa: F401
+    if not _STATE.tables_ready:
+        from . import models  # pylint: disable=unused-import, import-outside-toplevel
+
         async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        _TABLES_READY = True
+        _STATE.tables_ready = True
 
 
 @asynccontextmanager
 async def get_session() -> AsyncIterator[AsyncSession]:
+    """Provide a single :class:`AsyncSession` instance."""
+
     # важно: сначала инициализируем движок (определится _SQLITE_MEMORY), затем — схема
     get_engine()
     await _ensure_tables_created_once()
 
-    SessionLocal = get_sessionmaker()
-    async with SessionLocal() as s:
-        yield s
+    session_local = get_sessionmaker()
+    async with session_local() as session:
+        yield session
 
 
 async def init_db() -> None:
-    """Только для dev/локального. В проде — Alembic."""
-    from . import models  # noqa: F401
+    """Initialize database schema (development only; production uses Alembic)."""
+
+    from . import models  # pylint: disable=unused-import, import-outside-toplevel
+
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
 async def dispose_engine() -> None:
-    """Полный сброс глобалов — пригодится фикстурам."""
-    global _engine, _SessionLocal, _TABLES_READY, _SQLITE_MEMORY, _LOOP_ID
-    if _engine is not None:
-        await _engine.dispose()
-    _engine = None
-    _SessionLocal = None
-    _TABLES_READY = False
-    _SQLITE_MEMORY = False
-    _LOOP_ID = None
+    """Reset cached state and dispose the engine (used in tests)."""
+
+    if _STATE.engine is not None:
+        await _STATE.engine.dispose()
+    _STATE.engine = None
+    _STATE.session_maker = None
+    _STATE.tables_ready = False
+    _STATE.sqlite_memory = False
+    _STATE.loop_id = None
