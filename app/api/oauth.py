@@ -38,7 +38,7 @@ def hh_start(s=Depends(get_settings)):
 @router.get("/oauth/hh/callback")
 async def hh_callback(
     code: str | None = None,
-    state: str | None = None,
+    _state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
@@ -136,10 +136,82 @@ def avito_start(s=Depends(get_settings)):
     return RedirectResponse(f"{s.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
 
+async def _exchange_avito_code(http_client: httpx.AsyncClient, s, code: str):
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": s.AVITO_REDIRECT_URI,
+    }
+    auth = httpx.BasicAuth(s.AVITO_CLIENT_ID, s.AVITO_CLIENT_SECRET)
+    try:
+        r = await http_client.post(
+            s.AVITO_TOKEN_URL,
+            data=data,
+            auth=auth,
+            timeout=30,
+        )
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return None, {
+            "step": "token",
+            "status": e.response.status_code,
+            "body": e.response.text,
+        }
+    except httpx.HTTPError as e:  # pragma: no cover - network errors
+        return None, {"step": "token-exchange-exception", "error": str(e)}
+
+    tok = r.json()
+    access = tok.get("access_token", "")
+    if not access:
+        return None, {"step": "token", "error": "no access_token"}
+    return (tok, access), None
+
+
+async def _fetch_avito_account(http_client: httpx.AsyncClient, access: str):
+    try:
+        me = await http_client.get(
+            "https://api.avito.ru/core/v1/accounts/self",
+            headers={
+                "Authorization": f"Bearer {access}",
+                "Accept": "application/json",
+            },
+            timeout=15,
+        )
+        me.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return None, {
+            "step": "self",
+            "status": e.response.status_code,
+            "body": e.response.text,
+        }
+    except httpx.HTTPError as e:  # pragma: no cover - network errors
+        return None, {"step": "self", "error": str(e)}
+
+    account_id = str(me.json().get("id") or "")
+    if not account_id:
+        return None, {"step": "self", "error": "no account id"}
+    return account_id, None
+
+
+async def _save_avito_tokens(account_id: str, tok: dict, access: str):
+    try:
+        expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
+        await DbTokenStore("avito", account_id).save(
+            TokenData(
+                access_token=access,
+                refresh_token=tok.get("refresh_token", ""),
+                expires_at=expires_at,
+            )
+        )
+    except SQLAlchemyError as e:
+        return {"step": "save-token", "error": str(e)}
+    return None
+
+
 @router.get("/oauth/avito/callback")
 async def avito_callback(
     code: str | None = None,
-    state: str | None = None,
+    _state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
@@ -154,69 +226,20 @@ async def avito_callback(
     ):
         return {"ok": False, "error": "avito token env not set"}
 
-    error_response: dict[str, object] = {"ok": False, "provider": "avito"}
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": s.AVITO_REDIRECT_URI,
-    }
-    try:
-        auth = httpx.BasicAuth(s.AVITO_CLIENT_ID, s.AVITO_CLIENT_SECRET)
-        r = await http_client.post(
-            s.AVITO_TOKEN_URL,
-            data=data,
-            auth=auth,
-            timeout=30,
-        )
-    except httpx.HTTPError as e:
-        error_response.update({"step": "token-exchange-exception", "error": str(e)})
-    else:
-        if r.status_code >= 400:
-            error_response.update(
-                {
-                    "step": "token",
-                    "status": r.status_code,
-                    "body": r.text,
-                }
-            )
-        else:
-            tok = r.json()
-            access = tok.get("access_token", "")
-            if not access:
-                error_response.update({"step": "token", "error": "no access_token"})
-            else:
-                try:
-                    me = await http_client.get(
-                        "https://api.avito.ru/core/v1/accounts/self",
-                        headers={
-                            "Authorization": f"Bearer {access}",
-                            "Accept": "application/json",
-                        },
-                        timeout=15,
-                    )
-                    me.raise_for_status()
-                    account_id = str(me.json().get("id") or "")
-                except httpx.HTTPError as e:
-                    error_response.update({"step": "self", "error": str(e)})
-                else:
-                    if not account_id:
-                        error_response.update({"step": "self", "error": "no account id"})
-                    else:
-                        try:
-                            expires_at = int(time.time()) + int(tok.get("expires_in", 86400)) - 120
-                            await DbTokenStore("avito", account_id).save(
-                                TokenData(
-                                    access_token=access,
-                                    refresh_token=tok.get("refresh_token", ""),
-                                    expires_at=expires_at,
-                                )
-                            )
-                        except SQLAlchemyError as e:
-                            error_response.update({"step": "save-token", "error": str(e)})
-                        else:
-                            return {"ok": True, "account_id": account_id}
+    token_result, error = await _exchange_avito_code(http_client, s, code)
+    if error:
+        return {"ok": False, "provider": "avito", **error}
+    tok, access = token_result
 
-    return error_response
+    account_id, error = await _fetch_avito_account(http_client, access)
+    if error:
+        return {"ok": False, "provider": "avito", **error}
+
+    error = await _save_avito_tokens(account_id, tok, access)
+    if error:
+        return {"ok": False, "provider": "avito", **error}
+
+    return {"ok": True, "account_id": account_id}
 
 
 # ---------- AmoCRM OAuth ----------
@@ -237,7 +260,7 @@ def amo_start(s=Depends(get_settings)):
 @router.get("/oauth/amo/callback")
 async def amo_callback(
     code: str | None = None,
-    state: str | None = None,
+    _state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
     s=Depends(get_settings),
