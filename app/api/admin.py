@@ -5,8 +5,9 @@ import time
 
 import httpx
 from fastapi import APIRouter, Depends
-from app.http_client import get_http_client
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.http_client import get_http_client
 from app.core.config import get_settings
 from app.services.dedup import cleanup_older_than
 from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
@@ -25,7 +26,9 @@ def _s():
 
 
 @router.get("/health")
-async def health():
+async def health() -> dict[str, object]:
+    """Return service health information."""
+
     info: dict[str, object] = {"ok": True}
     try:
         amo = await DbTokenStore("amo").load()
@@ -33,18 +36,22 @@ async def health():
             "status": "ok",
             "expires_in": max(0, amo["expires_at"] - int(time.time())),
         }
-    except Exception as e:
-        info["amo"] = {"status": "missing", "error": str(e)}
+    except (RuntimeError, SQLAlchemyError) as exc:
+        info["amo"] = {"status": "missing", "error": str(exc)}
     return info
 
 
 @admin.get("/hh-mapping")
-async def get_hh_mapping():
+async def get_hh_mapping() -> dict:
+    """Return the current HeadHunter mapping."""
+
     return {"ok": True, "mapping": hh_map_load()}
 
 
 @admin.put("/hh-mapping")
-async def put_hh_mapping(payload: dict):
+async def put_hh_mapping(payload: dict) -> dict:
+    """Replace the HeadHunter mapping with ``payload``."""
+
     return {"ok": True, "mapping": hh_map_set(payload)}
 
 
@@ -53,13 +60,17 @@ async def rmq_test(
     payload: dict | None = None,
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
+    """Publish a test message to RabbitMQ."""
+
     msg = (payload or {}).get("msg", "hi")
     await queue_client.publish_task({"platform": "debug", "action": "echo", "msg": msg})
     return {"ok": True}
 
 
 @admin.post("/dedup-clean")
-async def dedup_clean(hours: int = 72):
+async def dedup_clean(hours: int = 72) -> dict:
+    """Clean deduplication entries older than ``hours``."""
+
     deleted = await cleanup_older_than(hours * 3600)
     logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
@@ -71,10 +82,12 @@ async def hh_states(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
+    """Return the HeadHunter negotiation states."""
+
     try:
         tok = await DbTokenStore("hh", owner_id).load()
-    except Exception as e:
-        return {"ok": False, "error": f"no hh token: {e}"}
+    except (RuntimeError, SQLAlchemyError) as exc:
+        return {"ok": False, "error": f"no hh token: {exc}"}
 
     r = await http_client.get(
         f"{s.HH_API_BASE.rstrip('/')}/dictionaries",
@@ -98,9 +111,10 @@ async def hh_states(
 async def hh_autofill_admin(
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
+    """Queue a task that triggers HH autofill."""
+
     await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
     return {"ok": True, "queued": True}
 
 
 __all__ = ["router", "admin"]
-
