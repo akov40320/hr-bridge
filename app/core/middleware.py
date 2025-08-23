@@ -1,3 +1,5 @@
+"""Middleware for request logging and Prometheus metrics collection."""
+
 import logging
 import time
 
@@ -15,7 +17,7 @@ REQUEST_LATENCY = Histogram(
 )
 
 
-class LoggingMiddleware(BaseHTTPMiddleware):
+class LoggingMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
     """ASGI middleware for structured request/response logging and metrics."""
 
     async def dispatch(self, request: Request, call_next):
