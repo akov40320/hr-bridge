@@ -1,3 +1,10 @@
+"""Utilities for performing asynchronous HTTP requests.
+
+This module provides a helper for executing callables with a shared
+HTTP client, allowing callers to reuse the same client across multiple
+requests.
+"""
+
 import typing
 from app.http_client import get_http_client
 
