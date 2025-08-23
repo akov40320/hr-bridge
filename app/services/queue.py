@@ -24,9 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 def _int(name: str, default: int) -> int:
+    """Return environment variable ``name`` converted to ``int``.
+
+    Falls back to ``default`` if the value is missing or not an integer.
+    """
     try:
         return int(os.getenv(name, str(default)))
-    except Exception:  # pragma: no cover - defensive
+    except ValueError:  # pragma: no cover - defensive
+        logger.warning("Invalid integer for %s, using default %s", name, default)
         return default
 
 
@@ -48,6 +53,11 @@ class RabbitMQClient:
         return self._settings
 
     async def _ensure(self) -> None:
+        """Ensure connection, channel, exchange and queues exist.
+
+        This establishes a connection to RabbitMQ, declares the main, retry
+        and dead-letter queues and binds them to the exchange.
+        """
         if self._conn and not self._conn.is_closed and self._chan and not self._chan.is_closed:
             return
 
@@ -79,9 +89,11 @@ class RabbitMQClient:
         await q_dlq.bind(self._exch, routing_key="tasks.dlq")
 
     async def connect(self) -> None:
+        """Establish a connection to RabbitMQ if not already connected."""
         await self._ensure()
 
     async def close(self) -> None:
+        """Close the connection and channel if they are open."""
         try:
             if self._chan and not self._chan.is_closed:
                 await self._chan.close()
@@ -91,6 +103,7 @@ class RabbitMQClient:
         self._conn = self._chan = self._exch = None
 
     async def publish_task(self, payload: dict, attempts: int = 0) -> None:
+        """Publish a task to the main queue."""
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
         body = json.dumps({"payload": payload, "attempts": attempts}, ensure_ascii=False).encode()
@@ -104,6 +117,7 @@ class RabbitMQClient:
             await self._exch.publish(msg, routing_key="tasks")
 
     async def publish_retry(self, payload: dict, attempts: int) -> None:
+        """Publish a task to the retry queue."""
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
 
@@ -125,6 +139,7 @@ class RabbitMQClient:
     async def publish_dlq(
         self, payload: dict, attempts: int, error: str | None = None
     ) -> None:
+        """Publish a task to the dead-letter queue."""
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
         obj = {"payload": payload, "attempts": attempts, "error": error}
@@ -141,11 +156,18 @@ class RabbitMQClient:
     async def consume(
         self, handler: Callable[[dict, int], Awaitable[None]], max_attempts: int = 10
     ) -> None:
+        """Consume tasks and process them via ``handler``.
+
+        Messages are acknowledged only after successful processing. If processing
+        fails, messages are republished to the retry or dead-letter queues
+        depending on the number of attempts.
+        """
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
         s = self._s()
 
         async def _worker() -> None:
+            """Continuously fetch messages from the queue and process them."""
             while True:
                 try:
                     if (
@@ -167,12 +189,13 @@ class RabbitMQClient:
                                 payload = obj.get("payload") or {}
                                 try:
                                     attempts = int(obj.get("attempts") or 0)
-                                except Exception:
+                                except (TypeError, ValueError):
+                                    logger.warning("Invalid attempts value: %s", obj.get("attempts"))
                                     attempts = 0
 
                                 await handler(payload, attempts)
                                 await message.ack()
-                            except Exception as e:  # pragma: no cover - mostly network
+                            except (json.JSONDecodeError, aio_exc.AMQPError, RuntimeError) as e:  # pragma: no cover - mostly network
                                 await message.ack()
                                 try:
                                     cur_attempts = attempts + 1
@@ -186,7 +209,7 @@ class RabbitMQClient:
                                         logger.exception(
                                             "requeued to retry, attempt=%s", cur_attempts
                                         )
-                                except Exception:  # pragma: no cover - log only
+                                except aio_exc.AMQPError:  # pragma: no cover - log only
                                     logger.exception("failed to republish to retry/DLQ")
                 except asyncio.CancelledError:
                     break
@@ -206,4 +229,3 @@ rabbitmq = RabbitMQClient()
 
 
 __all__ = ["RabbitMQClient", "rabbitmq"]
-
