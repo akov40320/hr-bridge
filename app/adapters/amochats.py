@@ -1,6 +1,6 @@
 """Utilities for interacting with the AmoChats API."""
 
-from typing import Any
+from typing import Any, cast
 import hashlib
 import hmac
 import json
@@ -40,11 +40,11 @@ class AmoChatsClient:  # pylint: disable=too-few-public-methods
         if missing:
             joined = "/".join(missing)
             raise AmoChatsError(f"AmoChats env not configured ({joined})")
-        self.scope_id: str = req["AMO_CHATS_SCOPE_ID"]
-        self.secret: str = req["AMO_CHATS_SECRET"]
-        self.account_id: str = req["AMO_CHATS_ACCOUNT_ID"]
-        self.channel_id: str = req["AMO_CHATS_CHANNEL_ID"]
-        self.sender_user_amojo_id: str = req["AMO_CHATS_SENDER_USER_AMOJO_ID"]
+        self.scope_id: str = cast(str, req["AMO_CHATS_SCOPE_ID"])
+        self.secret: str = cast(str, req["AMO_CHATS_SECRET"])
+        self.account_id: str = cast(str, req["AMO_CHATS_ACCOUNT_ID"])
+        self.channel_id: str = cast(str, req["AMO_CHATS_CHANNEL_ID"])
+        self.sender_user_amojo_id: str = cast(str, req["AMO_CHATS_SENDER_USER_AMOJO_ID"])
 
 
 @lru_cache(maxsize=1)
