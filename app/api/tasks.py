@@ -10,6 +10,7 @@ from app.http_client import get_http_client
 
 
 async def handle_task(p: dict):
+    """Process background tasks based on platform and action."""
     if p.get("platform") == "system" and p.get("action") == "hh_autofill":
 
         tok = await DbTokenStore("amo").load()
@@ -34,7 +35,11 @@ async def handle_task(p: dict):
         return
 
     if p["platform"] == "avito" and p["action"] == "mark_read":
-        await avito_adapt.mark_read(p["external_id"], owner_id=p.get("owner_id"), client=get_http_client())
+        await avito_adapt.mark_read(
+            p["external_id"],
+            owner_id=p.get("owner_id"),
+            client=get_http_client(),
+        )
         return
 
     if p["platform"] == "avito" and p["action"] == "send_message":
@@ -55,4 +60,3 @@ async def handle_task(p: dict):
 
 
 __all__ = ["handle_task"]
-
