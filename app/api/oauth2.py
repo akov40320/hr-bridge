@@ -41,7 +41,7 @@ async def refresh_tokens(
     auth = (
         httpx.BasicAuth(config.client_id, config.client_secret)
         if config.use_basic_auth
-        else None
+        else httpx.USE_CLIENT_DEFAULT
     )
     if not config.use_basic_auth:
         data["client_id"] = config.client_id

@@ -50,7 +50,9 @@ _REFUSAL_NAMES = {
 
 def is_refusal_code(code: str | None) -> bool:
     """Return ``True`` if the given code represents a refusal."""
-    return bool(code) and (code.startswith("discard") or code.startswith("reject"))
+    if not code:
+        return False
+    return code.startswith("discard") or code.startswith("reject")
 
 
 def refusal_text(code: str | None) -> str | None:

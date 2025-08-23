@@ -6,6 +6,8 @@ import hashlib
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
+from typing import cast, Any
 
 from app.db import get_session
 from app.db.models import EventDedup
@@ -28,7 +30,7 @@ async def check_and_store(key: str) -> bool:
         )
         res = await s.execute(stmt)
         await s.commit()
-        return res.rowcount == 1
+        return cast(CursorResult[Any], res).rowcount == 1
 
 
 async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
@@ -40,4 +42,4 @@ async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
         )
         res = await s.execute(q, {"sec": seconds})
         await s.commit()
-        return res.rowcount or 0
+        return cast(CursorResult[Any], res).rowcount or 0

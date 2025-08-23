@@ -45,10 +45,10 @@ def get_engine() -> AsyncEngine:
     if _STATE.engine is None:
         settings = get_settings()
         url = settings.DATABASE_URL
-        kwargs = {"echo": False, "pool_pre_ping": True}
+        kwargs: dict[str, object] = {"echo": False, "pool_pre_ping": True}
         if _is_sqlite_memory_url(url):
             _STATE.sqlite_memory = True
-            kwargs.update(poolclass=StaticPool)
+            kwargs["poolclass"] = StaticPool
         _STATE.engine = create_async_engine(url, **kwargs)
     return _STATE.engine
 

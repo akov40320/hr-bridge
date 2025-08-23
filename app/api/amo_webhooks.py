@@ -43,8 +43,10 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
         raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
 
     if not events:
+        from typing import Mapping, cast
+
         form = await request.form()
-        events = events_from_form(form)
+        events = events_from_form(cast(Mapping[str, str], form))
     return events
 
 

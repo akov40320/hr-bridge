@@ -15,6 +15,7 @@ import os
 from typing import Awaitable, Callable
 
 import aio_pika
+import aio_pika.abc as amqp_abc
 from aio_pika import exceptions as aio_exc
 
 from app.core.config import get_settings
@@ -42,9 +43,9 @@ class RabbitMQClient:
     """Maintain state of RMQ connection and provide helper methods."""
 
     def __init__(self) -> None:
-        self._conn: aio_pika.RobustConnection | None = None
-        self._chan: aio_pika.Channel | None = None
-        self._exch: aio_pika.Exchange | None = None
+        self._conn: amqp_abc.AbstractRobustConnection | None = None
+        self._chan: amqp_abc.AbstractChannel | None = None
+        self._exch: amqp_abc.AbstractExchange | None = None
         self._settings = None
 
     def _s(self):
@@ -64,14 +65,18 @@ class RabbitMQClient:
         s = self._s()
         self._conn = await aio_pika.connect_robust(s.RABBITMQ_URL)
         self._chan = await self._conn.channel(publisher_confirms=True)
-        await self._chan.set_qos(prefetch_count=RMQ_PREFETCH)
+        chan = self._chan
+        assert chan is not None
+        await chan.set_qos(prefetch_count=RMQ_PREFETCH)
 
-        self._exch = await self._chan.declare_exchange(
+        self._exch = await chan.declare_exchange(
             s.RMQ_EXCHANGE, aio_pika.ExchangeType.DIRECT, durable=True
         )
+        exch = self._exch
+        assert exch is not None
 
-        await self._chan.declare_queue(s.RMQ_TASK_QUEUE, durable=True)
-        await self._chan.declare_queue(
+        await chan.declare_queue(s.RMQ_TASK_QUEUE, durable=True)
+        await chan.declare_queue(
             s.RMQ_RETRY_QUEUE,
             durable=True,
             arguments={
@@ -80,13 +85,13 @@ class RabbitMQClient:
                 "x-dead-letter-routing-key": "tasks",
             },
         )
-        await self._chan.declare_queue(s.RMQ_DLQ_QUEUE, durable=True)
+        await chan.declare_queue(s.RMQ_DLQ_QUEUE, durable=True)
 
-        q_main = await self._chan.get_queue(s.RMQ_TASK_QUEUE)
-        await q_main.bind(self._exch, routing_key="tasks")
+        q_main = await chan.get_queue(s.RMQ_TASK_QUEUE)
+        await q_main.bind(exch, routing_key="tasks")
 
-        q_dlq = await self._chan.get_queue(s.RMQ_DLQ_QUEUE)
-        await q_dlq.bind(self._exch, routing_key="tasks.dlq")
+        q_dlq = await chan.get_queue(s.RMQ_DLQ_QUEUE)
+        await q_dlq.bind(exch, routing_key="tasks.dlq")
 
     async def connect(self) -> None:
         """Establish a connection to RabbitMQ if not already connected."""
@@ -178,12 +183,13 @@ class RabbitMQClient:
                     ):
                         await self._ensure()
 
+                    assert self._chan is not None
                     q = await self._chan.get_queue(s.RMQ_TASK_QUEUE)
                     async with q.iterator() as it:
                         async for message in it:
                             obj = None
                             attempts = 0
-                            payload = {}
+                            payload: dict[str, object] = {}
                             try:
                                 obj = json.loads(message.body.decode("utf-8"))
                                 payload = obj.get("payload") or {}

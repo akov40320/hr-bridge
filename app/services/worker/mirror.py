@@ -86,7 +86,10 @@ async def handle_mirror_tg_to_amo(payload: dict):
     tg_user_id = int(payload["tg_user_id"])
     tg_user_name = payload.get("tg_user_name")
     conv_id = payload.get("conversation_id")
-    bot_kind = payload.get("bot_kind")
+    bot_kind_val = payload.get("bot_kind")
+    if not isinstance(bot_kind_val, str):
+        raise RuntimeError("bot_kind is required")
+    bot_kind = bot_kind_val
 
     http_client = get_http_client()
     amo = await AmoClient.create(http_client)
@@ -109,7 +112,7 @@ async def handle_mirror_tg_to_amo(payload: dict):
         attempts=6,
         is_retryable=lambda e: True,
     )
-    if new_cid and new_cid != conv_id:
+    if new_cid is not None and new_cid != conv_id:
         await set_conversation(tg_user_id, bot_kind, new_cid)
 
 

@@ -70,6 +70,8 @@ async def handle(
     try:
         plat = payload.get("platform")
         act = payload.get("action")
+        if not isinstance(plat, str) or not isinstance(act, str):
+            raise RuntimeError(f"unknown task: {payload}")
         handler = HANDLERS.get((plat, act))
         if not handler:
             raise RuntimeError(f"unknown task: {payload}")
