@@ -1,7 +1,9 @@
 """Endpoints handling incoming AmoCRM webhooks."""
 
+from typing import Any, Mapping, cast
 import json
 import logging
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -10,9 +12,8 @@ from app.core.config import get_settings
 from app.http_client import get_http_client
 from app.services.dedup import calc_key, check_and_store
 from app.services.hh_mapping import get as hh_map_get, load as hh_map_load
-from app.services.queue import rabbitmq, RabbitMQClient
+from app.services.queue import RabbitMQClient, rabbitmq
 from app.store import find_link
-
 from .utils import (
     REFUSAL_TEXT_TO_HH,
     events_from_form,
@@ -43,10 +44,13 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
         raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
 
     if not events:
-        from typing import Mapping, cast
-
         form = await request.form()
-        events = events_from_form(cast(Mapping[str, str], form))
+        # Превращаем FormData в обычный dict[str, str]
+        data_map: Mapping[str, str] = {
+            k: (v if isinstance(v, str) else getattr(v, "filename", str(v)))
+            for k, v in form.multi_items()
+        }
+        events = events_from_form(cast(Mapping[str, str], data_map))
     return events
 
 
@@ -80,10 +84,10 @@ async def _fetch_refusal_reason(
 async def handle_hh_event(
     lead_id: int,
     status_id: int,
-    link: dict,
+    link: dict[str, Any],
     http_client: httpx.AsyncClient,
     queue_client: RabbitMQClient = rabbitmq,
-):
+) -> None:
     """Update state in HH based on AmoCRM status change."""
     s = get_settings()
     ext_id = link.get("external_id")
@@ -125,9 +129,9 @@ async def handle_hh_event(
 async def handle_avito_event(
     _lead_id: int,
     _status_id: int,
-    link: dict,
+    link: dict[str, Any],
     queue_client: RabbitMQClient = rabbitmq,
-):
+) -> None:
     """Mark Avito thread as read for the given lead."""
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
