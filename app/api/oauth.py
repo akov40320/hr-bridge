@@ -16,17 +16,16 @@ from app.db.token_store import DbTokenStore, TokenData
 from app.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 router = APIRouter()
 
 
 # ---------- HH OAuth ----------
 @router.get("/oauth/hh/start")
-def hh_start():
+def hh_start(s=Depends(get_settings)):
     params = {
         "response_type": "code",
-        "client_id": settings.HH_CLIENT_ID,
-        "redirect_uri": settings.HH_REDIRECT_URI,
+        "client_id": s.HH_CLIENT_ID,
+        "redirect_uri": s.HH_REDIRECT_URI,
         "state": "hh1",
     }
     return RedirectResponse("https://hh.ru/oauth/authorize?" + urlencode(params))
@@ -37,6 +36,7 @@ async def hh_callback(
     code: str | None = None,
     state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
+    s=Depends(get_settings),
 ):
     if not code:
         return {"ok": False, "error": "no code"}
@@ -44,9 +44,9 @@ async def hh_callback(
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "client_id": settings.HH_CLIENT_ID,
-        "client_secret": settings.HH_CLIENT_SECRET,
-        "redirect_uri": settings.HH_REDIRECT_URI,
+        "client_id": s.HH_CLIENT_ID,
+        "client_secret": s.HH_CLIENT_SECRET,
+        "redirect_uri": s.HH_REDIRECT_URI,
     }
     try:
         r = await http_client.post(
@@ -113,29 +113,29 @@ async def hh_callback(
 
 # ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
-def avito_start():
+def avito_start(s=Depends(get_settings)):
     if not (
-        settings.AVITO_CLIENT_ID
-        and settings.AVITO_REDIRECT_URI
-        and settings.AVITO_AUTHORIZE_URL
-        and settings.AVITO_TOKEN_URL
+        s.AVITO_CLIENT_ID
+        and s.AVITO_REDIRECT_URI
+        and s.AVITO_AUTHORIZE_URL
+        and s.AVITO_TOKEN_URL
     ):
         return {"ok": False, "error": "avito env not set"}
 
-    raw_scope = getattr(settings, "AVITO_SCOPE", "") or ""
+    raw_scope = getattr(s, "AVITO_SCOPE", "") or ""
     scope = ",".join([s.strip() for s in re.split(r"[,\s]+", raw_scope) if s.strip()])
 
     state = secrets.token_urlsafe(16)  # CSRF
     params = {
         "response_type": "code",
-        "client_id": settings.AVITO_CLIENT_ID,
-        "redirect_uri": settings.AVITO_REDIRECT_URI,
+        "client_id": s.AVITO_CLIENT_ID,
+        "redirect_uri": s.AVITO_REDIRECT_URI,
         "state": state,
     }
     if scope:
         params["scope"] = scope
 
-    return RedirectResponse(f"{settings.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
+    return RedirectResponse(f"{s.AVITO_AUTHORIZE_URL}?{urlencode(params)}")
 
 
 @router.get("/oauth/avito/callback")
@@ -143,25 +143,26 @@ async def avito_callback(
     code: str | None = None,
     state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
+    s=Depends(get_settings),
 ):
     if not code:
         return {"ok": False, "error": "no code"}
     if not (
-        settings.AVITO_TOKEN_URL
-        and settings.AVITO_CLIENT_ID
-        and settings.AVITO_CLIENT_SECRET
+        s.AVITO_TOKEN_URL
+        and s.AVITO_CLIENT_ID
+        and s.AVITO_CLIENT_SECRET
     ):
         return {"ok": False, "error": "avito token env not set"}
 
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": settings.AVITO_REDIRECT_URI,
+        "redirect_uri": s.AVITO_REDIRECT_URI,
     }
     try:
-        auth = httpx.BasicAuth(settings.AVITO_CLIENT_ID, settings.AVITO_CLIENT_SECRET)
+        auth = httpx.BasicAuth(s.AVITO_CLIENT_ID, s.AVITO_CLIENT_SECRET)
         r = await http_client.post(
-            settings.AVITO_TOKEN_URL,
+            s.AVITO_TOKEN_URL,
             data=data,
             auth=auth,
             timeout=30,
@@ -236,12 +237,12 @@ async def avito_callback(
 
 # ---------- AmoCRM OAuth ----------
 @router.get("/oauth/amo/start")
-def amo_start():
+def amo_start(s=Depends(get_settings)):
     """Start amo OAuth flow and redirect to portal for authorization."""
     state = secrets.token_urlsafe(16)
     params = {
-        "client_id": settings.AMO_CLIENT_ID,
-        "redirect_uri": settings.AMO_REDIRECT_URI,
+        "client_id": s.AMO_CLIENT_ID,
+        "redirect_uri": s.AMO_REDIRECT_URI,
         "response_type": "code",
         "state": state,
         "mode": "post_message",
@@ -255,17 +256,18 @@ async def amo_callback(
     state: str | None = None,
     http_client: httpx.AsyncClient = Depends(get_http_client),
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
+    s=Depends(get_settings),
 ):
     if not code:
         return {"ok": False, "provider": "amo", "step": "callback", "error": "no code"}
 
-    url = settings.AMO_BASE_URL.rstrip("/") + "/oauth2/access_token"
+    url = s.AMO_BASE_URL.rstrip("/") + "/oauth2/access_token"
     payload = {
-        "client_id": settings.AMO_CLIENT_ID,
-        "client_secret": settings.AMO_CLIENT_SECRET,
+        "client_id": s.AMO_CLIENT_ID,
+        "client_secret": s.AMO_CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": settings.AMO_REDIRECT_URI,
+        "redirect_uri": s.AMO_REDIRECT_URI,
     }
 
     try:
