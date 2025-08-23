@@ -127,7 +127,7 @@ async def on_shutdown():
     t = getattr(app.state, "rmq_task", None)
     if t:
         t.cancel()
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(asyncio.CancelledError):
             await t
     await rabbitmq.close()
     await close_http_client()
