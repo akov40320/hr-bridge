@@ -1,3 +1,11 @@
+"""Handlers that mirror messages between AMO CRM and Telegram bots.
+
+This module provides asynchronous worker handlers used to forward messages
+from AMO CRM to Telegram chats, relay Telegram messages back to AMO, and send
+bot-generated messages into AMO chats. All handlers accept a ``payload``
+dictionary with details specific to the direction of the mirror.
+"""
+
 import logging
 from aiogram import Bot
 
@@ -14,6 +22,21 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_mirror_amo_to_tg(payload: dict):
+    """Forward a message from AMO CRM to a Telegram user.
+
+    Args:
+        payload: Mapping containing message details. Expected keys are
+            ``bot_kind`` (``"master"`` or ``"operator"``) to choose a bot,
+            ``user_id`` for the Telegram recipient, ``text`` with the message
+            body and optional ``msg_key`` used for deduplication.
+
+    Behaviour:
+        Uses the appropriate Telegram bot to deliver the text. When ``msg_key``
+        is provided and already processed, the message is skipped.
+
+    Returns:
+        None
+    """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
@@ -35,6 +58,22 @@ async def handle_mirror_amo_to_tg(payload: dict):
 
 
 async def handle_mirror_tg_to_amo(payload: dict):
+    """Mirror a Telegram message into AMO CRM.
+
+    Args:
+        payload: Mapping with message information. Required keys include
+            ``lead_id``, ``text``, ``tg_user_id`` and ``bot_kind``; optional
+            keys are ``tg_user_name``, ``conversation_id`` and ``msg_key`` for
+            deduplication.
+
+    Behaviour:
+        Adds the message as a note in AMO and forwards it through the
+        ``send_text_from_client`` adapter. If a new conversation identifier is
+        returned, it is stored for later use.
+
+    Returns:
+        None
+    """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
@@ -75,6 +114,21 @@ async def handle_mirror_tg_to_amo(payload: dict):
 
 
 async def handle_mirror_bot_to_amo(payload: dict):
+    """Forward a bot-generated message to AMO chat.
+
+    Args:
+        payload: Mapping that contains ``text`` and ``user_id``. Optional keys
+            are ``user_name``, ``conversation_id``, ``lead_id`` and ``msg_key``
+            used for deduplication.
+
+    Behaviour:
+        Ensures an AMO chat conversation exists for the Telegram user and
+        sends the text as a manager message. Duplicate payloads are ignored
+        when ``msg_key`` has already been processed.
+
+    Returns:
+        None
+    """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
