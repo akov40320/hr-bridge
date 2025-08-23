@@ -23,11 +23,12 @@ tokens: dict[str, object] = {
 
 def make_tg_webhook(key: object, kind: str | None = None):
     """
-    key: либо имя ключа в tokens (str), либо "бот-объект" (в тестах).
-    kind: подсказка для логов/роутинга; в проде вызывается как make_tg_webhook("master","master").
+    key:
+      - str -> имя ключа в tokens (прод)
+      - object|None -> явный бот-объект (тесты). Если None — считаем, что бота нет и возвращаем 503.
     """
     async def _handler(request: Request):
-        # 1) секрет проверяем первым — тест "bad_secret" ждёт 401, независимо от токена
+        # 1) секрет проверяем первым
         secret_hdr = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
         if settings.TELEGRAM_WEBHOOK_SECRET and secret_hdr != settings.TELEGRAM_WEBHOOK_SECRET:
             logger.warning("%s webhook: bad secret -> 401", kind or key)
@@ -41,34 +42,30 @@ def make_tg_webhook(key: object, kind: str | None = None):
             logger.exception("%s webhook: invalid json/update", kind or key)
             return Response(status_code=400)
 
-        # 3) достаём либо токен, либо "бот-объект"
-        value: object | None
-        if isinstance(key, str):
-            value = tokens.get(key)
-        else:
-            # в тестах сюда кладут "бот-объект"
-            value = key
-
-        if value is None and kind:
-            value = tokens.get(kind)
-
         dp = make_router(kind or (key if isinstance(key, str) else "master"))
 
-        # 4) отправляем апдейт
-        if isinstance(value, str) and value:
-            async with Bot(value) as bot:
-                await dp.feed_update(bot=bot, update=upd)
-        elif value is not None:
-            # тестовый путь: value — уже "бот-объект"
-            await dp.feed_update(bot=value, update=upd)
+        # 3) режим: явный бот vs токен из settings
+        if not isinstance(key, str):
+            # Явно переданный бот-объект (тестовый путь)
+            if key is None:
+                logger.warning("%s webhook called, but bot is None -> 503", kind or "unknown")
+                return Response(status_code=503)
+            await dp.feed_update(bot=key, update=upd)
         else:
-            logger.warning("%s webhook called, but token is empty -> 503", kind or key)
-            return Response(status_code=503)
+            # Продовый путь по токену
+            token = tokens.get(key)
+            if not isinstance(token, str) or not token:
+                logger.warning("%s webhook called, but token is empty -> 503", key)
+                return Response(status_code=503)
+            async with Bot(token) as bot:
+                await dp.feed_update(bot=bot, update=upd)
 
         logger.info("%s webhook ok: update_id=%s", kind or key, getattr(upd, "update_id", None))
         return {"ok": True}
 
     return _handler
+
+
 
 
 # Продовая регистрация — через строковые ключи
