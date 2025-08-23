@@ -1,11 +1,16 @@
+"""Application API routers."""
+
 from fastapi import APIRouter, Depends
+
 from app.core.guards import require_admin
+from . import admin as admin_module
+from . import amo_webhooks, avito_incoming, hh_incoming, oauth
 
 __all__ = ["build_routers"]
 
 
-def build_routers():
-    from . import oauth, admin as admin_module, hh_incoming, avito_incoming, amo_webhooks
+def build_routers() -> tuple[APIRouter, APIRouter]:
+    """Build and return public and administrative API routers."""
 
     router = APIRouter()
     admin = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
