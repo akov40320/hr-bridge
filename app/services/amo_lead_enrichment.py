@@ -1,3 +1,5 @@
+"""Helpers for enriching AmoCRM leads with applicant data."""
+
 import logging
 
 from app.core.config import get_settings
@@ -5,7 +7,7 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-async def enrich_lead(
+async def enrich_lead(  # pylint: disable=too-many-arguments
     amo,
     lead_id: int,
     *,
@@ -23,7 +25,7 @@ async def enrich_lead(
             cr = await amo.create_contact(applicant_name or "Кандидат", phone)
             contact_id = cr["_embedded"]["contacts"][0]["id"]
             await amo.link_contact_to_lead(lead_id, contact_id)
-        except Exception as e:  # pragma: no cover - log only
+        except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
             logger.warning("create/link contact failed: %s", e)
 
     cf: dict[int, str] = {}
@@ -37,7 +39,7 @@ async def enrich_lead(
         cf[s.AMO_CF_LEAD_APPLICANT_NAME_ID] = applicant_name or ""
     try:
         await amo.update_lead_custom_fields(lead_id, cf)
-    except Exception as e:  # pragma: no cover - log only
+    except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
         logger.warning("update lead CF failed: %s", e)
 
     if not any(
@@ -57,7 +59,7 @@ async def enrich_lead(
                 f"• Вакансия: {vacancy_title or '-'}"
             )
             await amo.add_note(lead_id, note)
-        except Exception as e:  # pragma: no cover - log only
+        except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
             logger.warning("add note (candidate data) error: %s", e)
 
 
