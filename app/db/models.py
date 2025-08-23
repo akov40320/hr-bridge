@@ -1,4 +1,9 @@
+"""Database models for the HR Bridge application."""
+
 from __future__ import annotations
+
+# pylint: disable=too-few-public-methods
+
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Text, Integer, TIMESTAMP, UniqueConstraint
