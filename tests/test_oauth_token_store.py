@@ -37,11 +37,14 @@ async def test_refresh_tokens_saves_to_db(in_memory_db):
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        data = await oauth2.refresh_tokens(
+        config = oauth2.OAuth2Config(
             service="svc",
             token_url="https://example.com/token",
             client_id="id",
             client_secret="secret",
+        )
+        data = await oauth2.refresh_tokens(
+            config=config,
             refresh_token="old_refresh",
             http_client=client,
         )
@@ -81,12 +84,15 @@ async def test_ensure_fresh_access_refreshes_when_expired(in_memory_db):
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        token = await oauth2.ensure_fresh_access(
+        config = oauth2.OAuth2Config(
             service="svc",
             token_url="https://example.com/token",
             client_id="id",
             client_secret="secret",
             owner_id=None,
+        )
+        token = await oauth2.ensure_fresh_access(
+            config=config,
             http_client=client,
         )
 
@@ -121,12 +127,13 @@ async def test_ensure_fresh_access_uses_cached_token(in_memory_db, monkeypatch):
 
     monkeypatch.setattr(oauth2, "refresh_tokens", fake_refresh_tokens)
 
-    token = await oauth2.ensure_fresh_access(
+    config = oauth2.OAuth2Config(
         service="svc",
         token_url="https://example.com/token",
         client_id="id",
         client_secret="secret",
     )
+    token = await oauth2.ensure_fresh_access(config=config)
 
     assert token == "cached"
     assert called is False
