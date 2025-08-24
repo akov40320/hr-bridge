@@ -18,6 +18,7 @@ from app.services.worker.amo import (
 )
 from app.services.worker.avito import handle_avito_mark_read, handle_avito_send_message
 from app.services.worker.hh import handle_hh_send_message, handle_hh_set_state
+from app.services.worker.system import handle_system_hh_autofill
 from app.services.worker.mirror import (
     handle_mirror_amo_to_tg,
     handle_mirror_bot_to_amo,
@@ -56,6 +57,7 @@ HANDLERS = {
     ("amo", "amo_create_lead"): handle_amo_create_lead,
     ("amo", "amo_add_note"): handle_amo_add_note,
     ("amo", "amo_add_tags"): handle_amo_add_tags,
+    ("system", "hh_autofill"): handle_system_hh_autofill,
     ("mirror", "amo_to_tg"): handle_mirror_amo_to_tg,
     ("mirror", "tg_to_amo"): handle_mirror_tg_to_amo,
     ("mirror", "bot_to_amo"): handle_mirror_bot_to_amo,
