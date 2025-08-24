@@ -4,10 +4,16 @@ from typing import Optional
 
 import httpx
 
-from app.api.oauth2 import OAuth2Config, ensure_fresh_access
 from app.core.config import get_settings
 from app.core.retry import with_retry
 from ._requests import request_with_retry
+
+
+async def ensure_fresh_access(*args, **kwargs):
+    """Lazy proxy to OAuth2 token refresh to avoid import cycles."""
+    from app.api.oauth2 import ensure_fresh_access as _ensure
+
+    return await _ensure(*args, **kwargs)
 
 
 class HHError(Exception):
@@ -21,6 +27,8 @@ async def set_employer_state(
     client: httpx.AsyncClient,
 ) -> None:
     """Set the negotiation state for a given employer."""
+    from app.api.oauth2 import OAuth2Config
+
     s = get_settings()
     config = OAuth2Config(
         service="hh",
@@ -60,6 +68,8 @@ async def send_message(
     client: httpx.AsyncClient,
 ) -> None:
     """Send a message to an applicant within a negotiation."""
+    from app.api.oauth2 import OAuth2Config
+
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -99,6 +109,8 @@ async def fetch_applicant_details(
     client: httpx.AsyncClient,
 ) -> dict:
     """Fetch basic applicant information such as name, city, phone and email."""
+    from app.api.oauth2 import OAuth2Config
+
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -156,3 +168,35 @@ async def fetch_applicant_details(
     ).strip() or data.get("title")
 
     return {"name": name, "city": city, "phone": phone, "email": email}
+
+
+async def fetch_vacancy_description(
+    vacancy_id: str,
+    employer_id: Optional[str],
+    client: httpx.AsyncClient,
+) -> str:
+    """Fetch vacancy description text."""
+    from app.api.oauth2 import OAuth2Config
+
+    s = get_settings()
+    access = await ensure_fresh_access(
+        config=OAuth2Config(
+            service="hh",
+            token_url=s.HH_TOKEN_URL,
+            client_id=s.HH_CLIENT_ID,
+            client_secret=s.HH_CLIENT_SECRET,
+            redirect_uri=s.HH_REDIRECT_URI,
+            use_basic_auth=False,
+            owner_id=employer_id,
+        ),
+        http_client=client,
+    )
+
+    resp = await client.get(
+        f"{s.HH_API_BASE.rstrip('/')}/vacancies/{vacancy_id}",
+        headers={"Authorization": f"Bearer {access}", "Accept": "application/json"},
+        timeout=30,
+    )
+    if resp.status_code >= 400:
+        return ""
+    return resp.json().get("description") or ""

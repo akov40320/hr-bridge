@@ -11,7 +11,6 @@ from app.adapters.amo_client import ReauthRequired
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.store import save_link
-from app.api.utils import route_kind
 from app.services import amo_lead_enrichment
 from app.models import IncomingPayload
 
@@ -22,8 +21,8 @@ async def enrich_applicant(
     payload: IncomingPayload, http_client: httpx.AsyncClient
 ) -> IncomingPayload:
     """Enrich applicant data from HeadHunter if possible."""
+    owner_id = payload.owner_id
     if payload.platform == "hh" and payload.applicant.id:
-        owner_id = payload.owner_id
         try:
             extra = await hh_adapt.fetch_applicant_details(
                 payload.applicant.id, owner_id, http_client
@@ -43,6 +42,23 @@ async def enrich_applicant(
                 payload.applicant.id,
                 type(e).__name__,
             )
+    if (
+        payload.platform == "hh"
+        and not payload.vacancy_desc
+        and payload.vacancy_id
+    ):
+        try:
+            desc = await hh_adapt.fetch_vacancy_description(
+                payload.vacancy_id, owner_id, http_client
+            )
+            if desc:
+                payload.vacancy_desc = desc
+        except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover - log only
+            logger.warning(
+                "HH vacancy fetch failed for vacancy %s: %s",
+                payload.vacancy_id,
+                type(e).__name__,
+            )
     return payload
 
 
@@ -53,6 +69,7 @@ async def create_lead(
 ) -> tuple[int | None, str]:
     """Create lead in AmoCRM and return (lead_id, kind)."""
     s = get_settings()
+    from app.api.utils import route_kind
 
     kind = route_kind(
         desc=payload.vacancy_desc or "",
@@ -128,6 +145,7 @@ async def send_invite(
 ) -> str:
     """Send invite link to applicant via platform-specific channels."""
     s = get_settings()
+    from app.api.utils import route_kind
 
     kind = payload.kind or route_kind(
         desc=payload.vacancy_desc or "",

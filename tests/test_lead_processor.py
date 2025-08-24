@@ -30,6 +30,53 @@ async def test_enrich_applicant(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_enrich_applicant_vacancy_desc(monkeypatch):
+    payload = IncomingPayload(
+        platform="hh",
+        owner_id="o1",
+        vacancy_id="vac1",
+        vacancy_desc="",
+        applicant=Applicant(id="1", name="кандидат"),
+    )
+
+    async def fake_fetch_applicant_details(applicant_id, owner_id, http_client):
+        return {}
+
+    async def fake_fetch_vacancy_description(vacancy_id, employer_id, client):
+        return "Test #мастер vacancy"
+
+    monkeypatch.setattr(
+        lead_processor.hh_adapt, "fetch_applicant_details", fake_fetch_applicant_details
+    )
+    monkeypatch.setattr(
+        lead_processor.hh_adapt, "fetch_vacancy_description", fake_fetch_vacancy_description
+    )
+
+    result = await lead_processor.enrich_applicant(payload, None)
+    assert result.vacancy_desc == "Test #мастер vacancy"
+
+    class DummyClient:
+        async def create_leads(self, body):
+            return {"_embedded": {"leads": [{"id": 321}]}}
+
+        async def add_tags(self, *a, **kw):
+            pass
+
+    async def fake_enrich(*args, **kwargs):
+        return None
+
+    async def fake_save_link(**kwargs):
+        return None
+
+    monkeypatch.setattr(lead_processor.amo_lead_enrichment, "enrich_lead", fake_enrich)
+    monkeypatch.setattr(lead_processor, "save_link", fake_save_link)
+
+    lead_id, kind = await lead_processor.create_lead(result, DummyClient())
+    assert lead_id == 321
+    assert kind == "master"
+
+
+@pytest.mark.asyncio
 async def test_create_lead(monkeypatch):
     payload = IncomingPayload(
         platform="hh",
@@ -41,7 +88,7 @@ async def test_create_lead(monkeypatch):
         vacancy_id="vac",
     )
 
-    monkeypatch.setattr(lead_processor, "route_kind", lambda **kw: "master")
+    monkeypatch.setattr("app.api.utils.route_kind", lambda **kw: "master")
 
     class DummyClient:
         async def create_leads(self, body):
