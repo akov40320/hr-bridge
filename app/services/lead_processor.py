@@ -74,13 +74,14 @@ async def create_lead(
     payload.kind = kind
 
     if kind == "ignore":
-    logger.info(
-        "routing: ignore (no hashtags) title=%r desc_len=%d raw_len=%d",
-        payload.vacancy_title or "",
-        len(payload.vacancy_desc or ""),
-        len(payload.raw_text or ""),
+        logger.info(
+            "routing: ignore (no hashtags) title=%r desc_len=%d raw_len=%d",
+            payload.vacancy_title or "",
+            len(payload.vacancy_desc or ""),
+            len(payload.raw_text or ""),
         )
         return None, kind
+
 
     if kind == "master":
         pipeline_id = s.AMO_PIPELINE_ID_MASTER
