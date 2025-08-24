@@ -11,20 +11,15 @@ logger = logging.getLogger(__name__)
 
 
 def parse_hh_payload(raw: bytes) -> IncomingPayload:
-    """Parse raw HeadHunter webhook data into normalized payload.
+    import json, logging
+    from pydantic import ValidationError
+    from app.models import Applicant, IncomingPayload
 
-    Args:
-        raw: Raw HTTP body bytes.
+    logger = logging.getLogger(__name__)
 
-    Returns:
-        Normalized payload dictionary suitable for `_process_incoming`.
-
-    Raises:
-        ValueError: If the JSON is malformed or required identifiers are missing.
-    """
     try:
         data = json.loads(raw.decode() or "{}")
-    except Exception as exc:  # pragma: no cover - log only
+    except Exception as exc:
         logger.warning("HH payload parse error: %s", exc)
         raise ValueError("invalid json") from exc
 
@@ -36,55 +31,52 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
         or {}
     )
 
-    response_id = str(
-        obj.get("id")
-        or data.get("response_id")
+    
+    negotiation_id = str(
+        obj.get("topic_id")
+        or obj.get("id")
         or obj.get("negotiation_id")
-        or obj.get("topic_id")
-        or obj.get("chat_id")
-        or obj.get("resume_id")
+        or data.get("response_id")
         or ""
-    )
+    ).strip() or None
+
+    if not negotiation_id:
+        # лучше уронить с понятной ошибкой, чем продолжить с chat_id/resume_id
+        raise ValueError("missing negotiation_id (topic_id) in HH payload")
 
     vacancy = obj.get("vacancy") or {}
     applicant = obj.get("applicant") or obj.get("resume", {}).get("owner", {}) or {}
 
-    vacancy_id = (
-        str(
-            vacancy.get("id")
-            or data.get("vacancy_id")
-            or obj.get("vacancy_id")
-            or ""
-        )
-        or None
-    )
+    vacancy_id = str(
+        vacancy.get("id")
+        or data.get("vacancy_id")
+        or obj.get("vacancy_id")
+        or ""
+    ).strip() or None
+
     vacancy_title = vacancy.get("name") or data.get("vacancy_title") or ""
-    vacancy_desc = vacancy.get("description") or data.get("vacancy_description") or ""
-    applicant_name = (
-        applicant.get("name") or applicant.get("first_name") or ""
-    ).strip() or "кандидат"
+    vacancy_desc  = vacancy.get("description") or data.get("vacancy_description") or ""
+    applicant_name = (applicant.get("name") or applicant.get("first_name") or "").strip() or "кандидат"
 
-    owner_id = (
-        str(
-            data.get("employer", {}).get("id")
-            or obj.get("employer", {}).get("id")
-            or obj.get("employer_id")
-            or ""
-        )
-        or None
+    owner_id = str(
+        data.get("employer", {}).get("id")
+        or obj.get("employer", {}).get("id")
+        or obj.get("employer_id")
+        or ""
+    ).strip() or None
+
+    # Лог для контроля
+    logger.info("hh: parsed nid=%s vacancy_id=%s", negotiation_id, vacancy_id)
+
+    return IncomingPayload(
+        platform="hh",
+        owner_id=owner_id,
+        vacancy_id=vacancy_id,
+        vacancy_title=vacancy_title,
+        vacancy_desc=vacancy_desc,
+        applicant=Applicant(id=negotiation_id, name=applicant_name),
     )
 
-    try:
-        return IncomingPayload(
-            platform="hh",
-            owner_id=owner_id,
-            vacancy_id=vacancy_id,
-            vacancy_title=vacancy_title,
-            vacancy_desc=vacancy_desc,
-            applicant=Applicant(id=response_id, name=applicant_name),
-        )
-    except ValidationError as exc:
-        raise exc
 
 
 def extract_avito_payload(raw: bytes) -> AvitoPayload:
