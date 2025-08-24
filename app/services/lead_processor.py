@@ -1,4 +1,4 @@
-"""Service utilities for handling leads and applicants."""
+"""Сервисные утилиты для обработки лидов и кандидатов."""
 
 import json
 import logging
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 async def enrich_applicant(
     payload: IncomingPayload, http_client: httpx.AsyncClient
 ) -> IncomingPayload:
-    """Enrich applicant data from HeadHunter if possible."""
+    """Обогатить данные кандидата из HH, если возможно."""
     if payload.platform == "hh" and payload.applicant.id:
         owner_id = payload.owner_id
         try:
@@ -37,12 +37,8 @@ async def enrich_applicant(
                     if payload.applicant.name and payload.applicant.name != "кандидат"
                     else extra.get("name") or payload.applicant.name
                 )
-        except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover - log only
-            logger.warning(
-                "HH enrich failed for applicant %s: %s",
-                payload.applicant.id,
-                type(e).__name__,
-            )
+        except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover
+            logger.warning("HH: обогащение кандидата %s не удалось: %s", payload.applicant.id, type(e).__name__)
         if payload.vacancy_id and not (payload.vacancy_desc or "").strip():
             try:
                 desc = await hh_adapt.fetch_vacancy_description(
@@ -50,12 +46,8 @@ async def enrich_applicant(
                 )
                 if desc:
                     payload.vacancy_desc = desc
-            except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover - log only
-                logger.warning(
-                    "HH enrich vacancy %s failed: %s",
-                    payload.vacancy_id,
-                    type(e).__name__,
-                )
+            except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover
+                logger.warning("HH: описание вакансии %s не получено: %s", payload.vacancy_id, type(e).__name__)
     return payload
 
 
@@ -64,24 +56,23 @@ async def create_lead(
     client,
     queue_client: RabbitMQClient = rabbitmq,
 ) -> tuple[int | None, str]:
-    """Create lead in AmoCRM and return (lead_id, kind)."""
+    """Создать лид в AmoCRM и вернуть (lead_id, kind)."""
     s = get_settings()
 
     kind = route_kind(
-    desc=(payload.vacancy_desc or ""),
-    raw=" ".join([payload.raw_text or "", payload.vacancy_title or ""]).strip(),
+        desc=(payload.vacancy_desc or ""),
+        raw=" ".join([payload.raw_text or "", payload.vacancy_title or ""]).strip(),
     )
     payload.kind = kind
 
     if kind == "ignore":
         logger.info(
-            "routing: ignore (no hashtags) title=%r desc_len=%d raw_len=%d",
+            "маршрутизация: ignore (нет хэштегов) title=%r desc_len=%d raw_len=%d",
             payload.vacancy_title or "",
             len(payload.vacancy_desc or ""),
             len(payload.raw_text or ""),
         )
         return None, kind
-
 
     if kind == "master":
         pipeline_id = s.AMO_PIPELINE_ID_MASTER
@@ -90,9 +81,7 @@ async def create_lead(
         pipeline_id = s.AMO_PIPELINE_ID_OPERATOR
         stage_id = s.AMO_STAGE_ID_OPERATOR_NEW
 
-    lead_name = (
-        f"{payload.vacancy_title or ''} — {payload.applicant.name or 'кандидат'}"
-    ).strip(" —")
+    lead_name = (f"{payload.vacancy_title or ''} — {payload.applicant.name or 'кандидат'}").strip(" —")
 
     logger.info(
         "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
@@ -142,55 +131,54 @@ async def create_lead(
 async def send_invite(
     payload: IncomingPayload, lead_id: int, queue_client: RabbitMQClient = rabbitmq
 ) -> str:
+    """Отправить приглашение кандидату (правильные действия для HH/Avito)."""
     s = get_settings()
 
     kind = payload.kind or route_kind(
         desc=payload.vacancy_desc or "",
         raw=" ".join([payload.raw_text or "", payload.vacancy_title or ""]).strip(),
     )
-    bot_username = (
-        s.TELEGRAM_MASTER_BOT_USERNAME if kind == "master" else s.TELEGRAM_OPERATOR_BOT_USERNAME
-    )
+    bot_username = s.TELEGRAM_MASTER_BOT_USERNAME if kind == "master" else s.TELEGRAM_OPERATOR_BOT_USERNAME
 
     deep_link = f"https://t.me/{bot_username}?start={lead_id}"
 
-    # Avito — можно со ссылкой
     invite_text_avito = (
         "Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос: "
         f"{deep_link}"
     )
-    # HH — без «голой» ссылки: инструкция с ником и /start
+    # HH — без «голой» ссылки
     invite_text_hh = (
         f"Здравствуйте! Откройте Telegram, найдите @{bot_username} "
         f"и отправьте команду: /start {lead_id}"
     )
 
     platform = payload.platform
-    applicant_id = payload.applicant.id
+    # В нашем пайлоаде applicant.id для HH = negotiation_id (nid)
+    negotiation_id = payload.applicant.id
 
-    if platform == "avito" and applicant_id:
+    if platform == "avito" and negotiation_id:
         await queue_client.publish_task({
             "platform": "avito",
             "action": "send_message",
-            "external_id": applicant_id,
+            "external_id": negotiation_id,
             "text": invite_text_avito,
             "owner_id": payload.owner_id,
         })
 
-    if platform == "hh" and applicant_id:
-        # 1) сначала приглашаем (иначе HH не принимает сообщения из state=response)
+    if platform == "hh" and negotiation_id:
+        # 1) Перевод в этап «Первичный контакт» через action
         await queue_client.publish_task({
             "platform": "hh",
             "action": "set_state",
-            "external_id": applicant_id,   # negotiation_id
-            "target_state": "invite",
-            "owner_id": payload.owner_id,  # employer_id
+            "negotiation_id": negotiation_id,
+            "action_id": "phone_interview",   # PUT /negotiations/phone_interview/{nid}
+            "owner_id": payload.owner_id,
         })
-        # 2) затем сообщение — текст БЕЗ URL
+        # 2) Сообщение кандидату (form-urlencoded, HH-User-Agent на стороне воркера)
         await queue_client.publish_task({
             "platform": "hh",
             "action": "send_message",
-            "external_id": applicant_id,
+            "negotiation_id": negotiation_id,
             "text": invite_text_hh,
             "owner_id": payload.owner_id,
         })
@@ -198,18 +186,12 @@ async def send_invite(
     return deep_link
 
 
-
 async def tag_lead(lead_id: int, kind: str, amo_client) -> None:
-    """Apply tags to the created lead."""
+    """Присвоить теги лиду."""
     await amo_client.add_tags(
         lead_id,
         [f"type:{'мастер' if kind == 'master' else 'оператор'}"],
     )
 
 
-__all__ = [
-    "enrich_applicant",
-    "create_lead",
-    "send_invite",
-    "tag_lead",
-]
+__all__ = ["enrich_applicant", "create_lead", "send_invite", "tag_lead"]
