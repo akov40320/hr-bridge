@@ -20,6 +20,7 @@ async def request_with_retry(
     headers: Optional[dict[str, str]] = None,
     json: Any = None,
     timeout: int = 30,
+    data: Any = None,
     attempts: int = 5,
     error_cls: Type[Exception],
     service: str,
@@ -35,6 +36,7 @@ async def request_with_retry(
             url,
             headers=headers,
             json=json,
+            data=data,
             timeout=timeout,
         )
         r.raise_for_status()
