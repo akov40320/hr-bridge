@@ -8,4 +8,4 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY . /app
-CMD ["python", "-m", "app.worker_rmq"]
+CMD ["python", "-u", "-m", "app.services.worker_rmq"]
