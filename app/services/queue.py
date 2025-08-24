@@ -9,6 +9,7 @@ tasks.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -158,7 +159,7 @@ class RabbitMQClient:
             await self._exch.publish(msg, routing_key="tasks.dlq")
 
     async def consume(
-        self, handler: Callable[[dict, int], Awaitable[None]], max_attempts: int = 10
+        self, handler: Callable[..., Awaitable[None]], max_attempts: int = 10
     ) -> None:
         """Consume tasks and process them via ``handler``.
 
@@ -169,6 +170,8 @@ class RabbitMQClient:
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
         s = self._s()
+
+        expects_attempts = len(inspect.signature(handler).parameters) > 1
 
         async def _worker() -> None:
             """Continuously fetch messages from the queue and process them."""
@@ -201,7 +204,10 @@ class RabbitMQClient:
                                     )
                                     attempts = 0
 
-                                await handler(payload, attempts)
+                                if expects_attempts:
+                                    await handler(payload, attempts)
+                                else:
+                                    await handler(payload)
                                 await message.ack()
                             except (
                                 json.JSONDecodeError,
