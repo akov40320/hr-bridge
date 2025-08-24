@@ -1,7 +1,7 @@
 services:
   worker:
     build: .
-    command: python -u -m app.worker_rmq
+    command: python -u -m app.services.worker_rmq
     environment:
       PYTHONUNBUFFERED: "1"
       RABBITMQ_URL: ${RABBITMQ_URL}
