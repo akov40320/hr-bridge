@@ -237,18 +237,21 @@ async def ensure_chat_created(  # pylint: disable=too-many-locals
     url = _base() + path
 
     # 1) Создаём/находим чат по ref_id
-    payload_new_conv: dict[str, Any] = {
-        "event_type": "new_conversation",
+    payload_new_conv = {
+        "event_type": "new_message",
         "payload": {
-            "conversation": {
-                "ref_id": f"lead:{lead_id}",
-            },
-            "client": {
+            "conversation": {"ref_id": f"lead:{lead_id}"},
+            "msgid": str(uuid.uuid4()),
+            "timestamp": int(time.time()),
+            "msec_timestamp": int(time.time() * 1000),
+            "sender": {
                 "id": f"tg:{tg_user_id}",
-                "name": (tg_user_name or f"tg_{tg_user_id}"),
+                "name": tg_user_name or f"tg_{tg_user_id}",
             },
+            "message": {"type": "text", "text": "🔗 Инициализация чата"},
         },
     }
+
     body = _dump(payload_new_conv)
     headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
