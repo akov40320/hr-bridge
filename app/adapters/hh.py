@@ -14,6 +14,20 @@ class HHError(Exception):
     """Base exception for HeadHunter related errors."""
 
 
+async def set_state_action(
+    negotiation_id: str,
+    action_id: str,
+    employer_id: Optional[str],
+    client: httpx.AsyncClient,
+) -> None:
+    await set_employer_state(
+        response_id=negotiation_id,
+        target_state=action_id,
+        employer_id=employer_id,
+        client=client,
+    )
+
+
 async def set_employer_state(
     response_id: str,
     target_state: str,              # здесь теперь ожидается action_id: 'phone_interview', 'interview', ...
