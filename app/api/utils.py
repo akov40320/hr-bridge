@@ -1,10 +1,14 @@
 """Utility helpers used across API modules."""
 
-import re
+import re, html
 from typing import Mapping
 
 
 HASHTAG_RE = re.compile(r"(?i)(?<![\w#])#(?:мастер|оператор)\b")
+_TAG_RE = re.compile(r"<[^>]+>")
+
+def _plain_text(s: str) -> str:
+    return _TAG_RE.sub(" ", html.unescape(s or ""))
 
 
 def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
@@ -30,12 +34,16 @@ def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
 
 def route_kind(*, desc: str = "", raw: str = "") -> str:
     """Return pipeline kind based on hashtags in vacancy description or raw text."""
-    blob = " ".join([(desc or ""), (raw or "")])
+    blob = " ".join([_plain_text(desc), (raw or "")])
     m = HASHTAG_RE.search(blob)
     if not m:
         return "ignore"
-    val = m.group(0).lower()
-    return "master" if "мастер" in val else "operator"
+    all_tags = [t.group(0).lower() for t in HASHTAG_RE.finditer(blob)]
+    if any("мастер" in t for t in all_tags):
+        return "master"
+    if any("оператор" in t for t in all_tags):
+        return "operator"
+    return "ignore"
 
 
 _REFUSAL_NAMES = {
