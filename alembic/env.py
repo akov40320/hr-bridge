@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db import Base  # важно: без подключений к БД!
 from app.db import models  # noqa: F401
 
@@ -13,6 +13,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+settings = get_settings()
 
 url = settings.DATABASE_URL
 if not url:
