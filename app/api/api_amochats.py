@@ -24,25 +24,38 @@ from app.store_chat import (
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
+import base64, gzip
+
 
 async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()
-    secret = get_settings().AMO_CHATS_SECRET or ""
-    if not secret:
-        raise HTTPException(status_code=401, detail="Missing secret")
-
+    secret = (get_settings().AMO_CHATS_SECRET or "").encode("utf-8")
     got = (request.headers.get("X-Signature") or "").strip().lower()
-    if not got:
-        raise HTTPException(status_code=401, detail="Missing signature")
 
-    calc = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
+    calc = hmac.new(secret, raw, hashlib.sha1).hexdigest().lower()
+
+    # Доп. гипотезы:
+    cand = {
+        "sha1(body)": hashlib.sha1(raw).hexdigest(),
+        "hmac(body)": calc,
+        "hmac(body+\\n)": hmac.new(secret, raw + b"\n", hashlib.sha1).hexdigest().lower(),
+        "hmac(gzip(body))": hmac.new(secret, gzip.compress(raw), hashlib.sha1).hexdigest().lower(),
+    }
+
+    logger.warning(
+        "amo-chats sig-debug: got=%s len=%d enc=%s ctype=%s TE=%s "
+        "cand=%s body_head_b64=%s body_tail_b64=%s",
+        got[:40], len(raw),
+        request.headers.get("Content-Encoding"),
+        request.headers.get("Content-Type"),
+        request.headers.get("Transfer-Encoding"),
+        {k: v[:40] for k, v in cand.items()},
+        base64.b64encode(raw[:64]).decode(),
+        base64.b64encode(raw[-64:]).decode(),
+    )
+
     if not secrets.compare_digest(got, calc):
-        logger.warning(
-            "amo-chats invalid signature: got=%s calc=%s len=%d path=%s",
-            got[:12], calc[:12], len(raw), request.url.path
-        )
         raise HTTPException(status_code=401, detail="Invalid signature")
-
 
 
 def parse_lead_id(client_id: str) -> int | None:
@@ -56,7 +69,7 @@ def parse_lead_id(client_id: str) -> int | None:
 
 
 async def parse_json(
-    request: Request, raw: bytes, scope_id: str | None
+        request: Request, raw: bytes, scope_id: str | None
 ) -> dict | None:
     """Return the JSON body, logging an error if decoding fails."""
     try:
@@ -78,11 +91,11 @@ def extract_message(data: dict) -> tuple[str, str | None, str, dict, dict, str]:
     sender = root.get("sender") or {}
     receiver = root.get("receiver") or {}
     msg_id = (
-        root.get("msgid")
-        or msg.get("id")
-        or msg.get("uuid")
-        or msg.get("message_id")
-        or ""
+            root.get("msgid")
+            or msg.get("id")
+            or msg.get("uuid")
+            or msg.get("message_id")
+            or ""
     )
     return text, conv_ref_id, client_id, sender, receiver, msg_id
 
@@ -105,15 +118,15 @@ def parse_tg_uid(ext_id: str) -> int | None:
 
 
 async def links_from_ext_id(
-    conv_ref_id: str | None, sender: dict, receiver: dict
+        conv_ref_id: str | None, sender: dict, receiver: dict
 ):
     """Return chat links using an external identifier such as Telegram UID."""
     ext_id = (
-        sender.get("client_id")
-        or sender.get("id")
-        or receiver.get("client_id")
-        or receiver.get("id")
-        or ""
+            sender.get("client_id")
+            or sender.get("id")
+            or receiver.get("client_id")
+            or receiver.get("id")
+            or ""
     )
     tg_uid = parse_tg_uid(ext_id)
     if not tg_uid:
@@ -132,7 +145,7 @@ async def links_from_ext_id(
 
 
 async def resolve_links(
-    conv_ref_id: str | None, lead_id: int | None, sender: dict, receiver: dict
+        conv_ref_id: str | None, lead_id: int | None, sender: dict, receiver: dict
 ):
     """Resolve links based on conversation, lead, or external identifiers."""
     links = []
@@ -148,11 +161,11 @@ async def resolve_links(
 
 
 async def publish_links(
-    queue_client: RabbitMQClient,
-    links,
-    conv_ref_id: str | None,
-    msg_id: str,
-    text: str,
+        queue_client: RabbitMQClient,
+        links,
+        conv_ref_id: str | None,
+        msg_id: str,
+        text: str,
 ) -> None:
     """Publish mirrored messages to the queue for each link."""
     for ln in links or []:
@@ -182,9 +195,9 @@ async def is_duplicate(raw: bytes) -> bool:
     dependencies=[Depends(verify_amochats_signature)],
 )
 async def amochats_in(
-    request: Request,
-    scope_id: str | None = None,
-    queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
+        request: Request,
+        scope_id: str | None = None,
+        queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
     """Process incoming AmoChats webhook and mirror messages to Telegram."""
     raw = await request.body()
