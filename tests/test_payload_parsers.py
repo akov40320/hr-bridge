@@ -33,7 +33,7 @@ def test_parse_hh_payload_ok():
 
 def test_parse_hh_payload_missing_id():
     raw = json.dumps({"response": {}}).encode()
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         parse_hh_payload(raw)
 
 

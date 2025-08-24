@@ -1,4 +1,5 @@
-import json
+from urllib.parse import parse_qs
+
 import pytest
 import httpx
 
@@ -17,7 +18,7 @@ async def test_hh_send_message(monkeypatch, token_mock):
 
     def handler(request):
         captured["url"] = str(request.url)
-        captured["json"] = json.loads(request.content.decode())
+        captured["form"] = parse_qs(request.content.decode())
         assert request.headers["Authorization"] == f"Bearer {token}"
         assert request.headers["Accept"] == "application/json"
         return httpx.Response(200, json={})
@@ -26,7 +27,7 @@ async def test_hh_send_message(monkeypatch, token_mock):
         await hh.send_message("resp1", "hello", "emp1", client)
 
     assert captured["url"].endswith("/negotiations/resp1/messages")
-    assert captured["json"] == {"message": {"text": "hello"}}
+    assert captured["form"] == {"message": ["hello"]}
 
 
 @pytest.mark.asyncio
