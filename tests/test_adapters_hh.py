@@ -51,11 +51,15 @@ async def test_hh_fetch_applicant_details(monkeypatch, token_mock):
         if request.url.path.endswith("/negotiations/resp1"):
             return httpx.Response(200, json={"resume": {"id": "res1"}})
         elif request.url.path.endswith("/resumes/res1"):
+            assert request.url.query == b"with_contacts=true"
             return httpx.Response(
                 200,
                 json={
                     "area": {"name": "Moscow"},
-                    "contact": {"phones": [{"formatted": "+1"}]},
+                    "contact": [
+                        {"kind": "phone", "value": {"formatted": "+1"}},
+                        {"kind": "email", "value": "john@example.com"},
+                    ],
                     "first_name": "John",
                     "last_name": "Doe",
                 },
@@ -65,4 +69,9 @@ async def test_hh_fetch_applicant_details(monkeypatch, token_mock):
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         data = await hh.fetch_applicant_details("resp1", "emp1", client)
 
-    assert data == {"name": "John Doe", "city": "Moscow", "phone": "+1"}
+    assert data == {
+        "name": "John Doe",
+        "city": "Moscow",
+        "phone": "+1",
+        "email": "john@example.com",
+    }

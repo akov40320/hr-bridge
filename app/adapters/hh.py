@@ -98,7 +98,7 @@ async def fetch_applicant_details(
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> dict:
-    """Fetch basic applicant information such as name, city and phone."""
+    """Fetch basic applicant information such as name, city, phone and email."""
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -126,26 +126,33 @@ async def fetch_applicant_details(
     if not resume_id:
         return {}
 
-    # 2) resume -> phone, city, full name
+    # 2) resume -> phone, email, city, full name
     resume_resp = await client.get(
-        f"{base_url}/resumes/{resume_id}", headers=headers, timeout=30
+        f"{base_url}/resumes/{resume_id}?with_contacts=true",
+        headers=headers,
+        timeout=30,
     )
     if resume_resp.status_code >= 400:
         return {}
 
     data = resume_resp.json()
     city = (data.get("area") or {}).get("name")
-    phones = (data.get("contact") or {}).get("phones") or (
-        (data.get("contact") or {}).get("phone") or []
-    )
+    contact = data.get("contact") or []
     phone = None
-    if isinstance(phones, list) and phones:
-        phone = phones[0].get("formatted") or phones[0].get("value")
-    elif isinstance(phones, dict):
-        phone = phones.get("formatted") or phones.get("value")
+    email = None
+    for item in contact:
+        kind = item.get("kind")
+        if kind == "phone" and not phone:
+            phone = item.get("contact_value")
+            if not phone:
+                value = item.get("value") or {}
+                if isinstance(value, dict):
+                    phone = value.get("formatted")
+        elif kind == "email" and not email:
+            email = item.get("contact_value") or item.get("value")
 
     name = " ".join(
         [(data.get("first_name") or "").strip(), (data.get("last_name") or "").strip()]
     ).strip() or data.get("title")
 
-    return {"name": name, "city": city, "phone": phone}
+    return {"name": name, "city": city, "phone": phone, "email": email}
