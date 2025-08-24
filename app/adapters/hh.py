@@ -16,50 +16,11 @@ class HHError(Exception):
 
 async def set_employer_state(
     response_id: str,
-    target_state: str,
+    target_state: str,              # здесь теперь ожидается action_id: 'phone_interview', 'interview', ...
     employer_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
-    """Set the negotiation state for a given employer."""
-    s = get_settings()
-    config = OAuth2Config(
-        service="hh",
-        token_url=s.HH_TOKEN_URL,
-        client_id=s.HH_CLIENT_ID,
-        client_secret=s.HH_CLIENT_SECRET,
-        redirect_uri=s.HH_REDIRECT_URI,
-        use_basic_auth=False,
-        owner_id=employer_id,
-    )
-    access = await ensure_fresh_access(config=config, http_client=client)
-
-    url = s.HH_API_BASE.rstrip("/") + s.HH_SET_STATE_PATH.format(response_id=response_id)
-    payload = {"status": target_state}
-
-    await request_with_retry(
-        client,
-        "POST",
-        url,
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {access}",
-            "Accept": "application/json",
-        },
-        timeout=30,
-        error_cls=HHError,
-        service="HH",
-        action="set_state",
-        retry_func=with_retry,
-    )
-
-
-async def send_message(
-    response_id: str,
-    text: str,
-    employer_id: Optional[str],
-    client: httpx.AsyncClient,
-) -> None:
-    """Send a message to an applicant within a negotiation."""
+    """Перевести отклик в указанный этап через action."""
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -73,17 +34,63 @@ async def send_message(
         ),
         http_client=client,
     )
-    url = s.HH_API_BASE.rstrip("/") + f"/negotiations/{response_id}/messages"
-    payload = {"message": {"text": text}}
 
+    ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT", None) or "hr-bridge/1.0 (support@example.com)"
+    url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{target_state}/{response_id}"
+
+    await request_with_retry(
+        client,
+        "PUT",
+        url,
+        headers={
+            "Authorization": f"Bearer {access}",
+            "Accept": "application/json",
+            "HH-User-Agent": ua,
+        },
+        timeout=30,
+        error_cls=HHError,
+        service="HH",
+        action=f"set_state:{target_state}",
+        retry_func=with_retry,
+    )
+
+
+
+async def send_message(
+    response_id: str,
+    text: str,
+    employer_id: Optional[str],
+    client: httpx.AsyncClient,
+) -> None:
+    """Отправить сообщение в рамках переписки по отклику."""
+    s = get_settings()
+    access = await ensure_fresh_access(
+        config=OAuth2Config(
+            service="hh",
+            token_url=s.HH_TOKEN_URL,
+            client_id=s.HH_CLIENT_ID,
+            client_secret=s.HH_CLIENT_SECRET,
+            redirect_uri=s.HH_REDIRECT_URI,
+            use_basic_auth=False,
+            owner_id=employer_id,
+        ),
+        http_client=client,
+    )
+
+    ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT", None) or "hr-bridge/1.0 (support@example.com)"
+    url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{response_id}/messages"
+
+    # ВАЖНО: x-www-form-urlencoded, а не JSON
     await request_with_retry(
         client,
         "POST",
         url,
-        json=payload,
+        data={"message": text},
         headers={
             "Authorization": f"Bearer {access}",
             "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+            "HH-User-Agent": ua,
         },
         timeout=30,
         error_cls=HHError,
@@ -91,6 +98,7 @@ async def send_message(
         action="send_message",
         retry_func=with_retry,
     )
+
 
 
 async def fetch_applicant_details(
