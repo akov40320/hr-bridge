@@ -43,6 +43,19 @@ async def enrich_applicant(
                 payload.applicant.id,
                 type(e).__name__,
             )
+        if payload.vacancy_id and not (payload.vacancy_desc or "").strip():
+            try:
+                desc = await hh_adapt.fetch_vacancy_description(
+                    payload.vacancy_id, owner_id, http_client
+                )
+                if desc:
+                    payload.vacancy_desc = desc
+            except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover - log only
+                logger.warning(
+                    "HH enrich vacancy %s failed: %s",
+                    payload.vacancy_id,
+                    type(e).__name__,
+                )
     return payload
 
 
@@ -55,15 +68,17 @@ async def create_lead(
     s = get_settings()
 
     kind = route_kind(
-        desc=payload.vacancy_desc or "",
-        raw=payload.raw_text or "",
+    desc=(payload.vacancy_desc or ""),
+    raw=" ".join([payload.raw_text or "", payload.vacancy_title or ""]).strip(),
     )
     payload.kind = kind
 
     if kind == "ignore":
-        logger.info(
-            "routing: ignore (no hashtags) title=%r",
-            payload.vacancy_title or "",
+    logger.info(
+        "routing: ignore (no hashtags) title=%r desc_len=%d raw_len=%d",
+        payload.vacancy_title or "",
+        len(payload.vacancy_desc or ""),
+        len(payload.raw_text or ""),
         )
         return None, kind
 
