@@ -13,7 +13,12 @@ async def test_enrich_applicant(monkeypatch):
     )
 
     async def fake_fetch(applicant_id, owner_id, http_client):
-        return {"phone": "123", "city": "Moscow", "name": "Ivan"}
+        return {
+            "phone": "123",
+            "city": "Moscow",
+            "name": "Ivan",
+            "email": "ivan@example.com",
+        }
 
     monkeypatch.setattr(lead_processor.hh_adapt, "fetch_applicant_details", fake_fetch)
 
@@ -21,6 +26,7 @@ async def test_enrich_applicant(monkeypatch):
     assert result.applicant.phone == "123"
     assert result.applicant.city == "Moscow"
     assert result.applicant.name == "Ivan"
+    assert result.applicant.email == "ivan@example.com"
 
 
 @pytest.mark.asyncio
@@ -30,7 +36,7 @@ async def test_create_lead(monkeypatch):
         vacancy_title="Title",
         vacancy_desc="",
         raw_text="",
-        applicant=Applicant(id="1", name="John"),
+        applicant=Applicant(id="1", name="John", email="j@e.ru"),
         owner_id="own",
         vacancy_id="vac",
     )
@@ -45,6 +51,7 @@ async def test_create_lead(monkeypatch):
             pass
 
     async def fake_enrich(*args, **kwargs):
+        assert kwargs.get("email") == "j@e.ru"
         return None
 
     async def fake_save_link(**kwargs):

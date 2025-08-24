@@ -111,15 +111,17 @@ class AmoClient:
         }]
         return await self._request("POST", url, json=body)
 
-    async def create_contact(self, name: str, phone: str | None = None):
-        """Create a contact with an optional phone number."""
+    async def create_contact(
+        self, name: str, phone: str | None = None, email: str | None = None
+    ):
+        """Create a contact with optional phone and email."""
         url = f"{self.base}/api/v4/contacts"
-        body = [{
-            "name": name,
-            **({"custom_fields_values": [
-                {"field_code": "PHONE", "values": [{"value": phone}]}
-            ]} if phone else {}),
-        }]
+        cfv = []
+        if phone:
+            cfv.append({"field_code": "PHONE", "values": [{"value": phone}]})
+        if email:
+            cfv.append({"field_code": "EMAIL", "values": [{"value": email}]})
+        body = [{"name": name, **({"custom_fields_values": cfv} if cfv else {})}]
         return await self._request("POST", url, json=body)
 
     async def link_contact_to_lead(self, lead_id: int, contact_id: int):

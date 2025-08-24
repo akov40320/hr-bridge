@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     AMO_CF_LEAD_VACANCY_TITLE_ID: int = 0
     AMO_CF_LEAD_APPLICANT_PHONE_ID: int = 0
     AMO_CF_LEAD_APPLICANT_NAME_ID: int = 0
+    AMO_CF_LEAD_APPLICANT_EMAIL_ID: int = 0
     AMO_CF_REFUSAL_REASON_ID: int = 0
 
     def validate_required(self) -> None:
