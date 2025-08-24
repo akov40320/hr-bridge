@@ -173,6 +173,15 @@ async def send_invite(
             }
         )
     if platform == "hh" and applicant_id:
+
+        await queue_client.publish_task({
+                "platform": "hh",
+                "action": "set_state",
+                "external_id": applicant_id,        
+                "target_state": "invite",
+                "owner_id": payload.owner_id,       
+        })
+            
         await queue_client.publish_task(
             {
                 "platform": "hh",
