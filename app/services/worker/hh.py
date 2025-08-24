@@ -47,7 +47,7 @@ async def handle_hh_set_state(payload: dict):
 
     logger.info("hh.set_state: %s -> %s", nid, action_id)
     client = get_http_client()
-    await hh_adapt.set_state_action(
+    await hh_adapt.set_employer_state(
         response_id=nid,
         target_state=action_id,
         employer_id=owner_id,

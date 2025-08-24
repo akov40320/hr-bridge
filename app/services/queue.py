@@ -23,7 +23,6 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-
 def _int(name: str, default: int) -> int:
     """Return environment variable ``name`` converted to ``int``.
 

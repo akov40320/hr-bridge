@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     HH_API_BASE: str = "https://api.hh.ru"
     HH_SET_STATE_PATH: str = "/negotiations/{response_id}/status"
     HH_TOKEN_URL: str = "https://api.hh.ru/oauth/token"  # унифицировали
+    HH_USER_AGENT: str = ""
 
     # Avito
     AVITO_CLIENT_ID: str = ""

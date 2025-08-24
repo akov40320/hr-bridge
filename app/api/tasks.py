@@ -9,7 +9,7 @@ from app.db.token_store import DbTokenStore
 from app.http_client import get_http_client
 
 
-async def handle_task(p: dict):
+async def handle_task(p: dict, attempts: int = 0):
     """Process background tasks based on platform and action."""
     if p.get("platform") == "system" and p.get("action") == "hh_autofill":
 
@@ -24,15 +24,28 @@ async def handle_task(p: dict):
         await autofill_hh_mapping(get_http_client())
         return
 
-    if p["platform"] == "hh" and p["action"] == "set_state":
-        client = get_http_client()
+    if p.get("platform") == "hh" and p.get("action") == "set_state":
+        nid = p.get("negotiation_id") or p.get("external_id")
+        action_id = p.get("action_id") or p.get("target_state")
+        if not nid or not action_id:
+            raise RuntimeError(f"hh.set_state: missing nid/action_id in {p}")
         await hh_adapt.set_employer_state(
-            response_id=p["external_id"],
-            target_state=p["target_state"],
+            response_id=nid,
+            target_state=action_id,
             employer_id=p.get("owner_id"),
-            client=client,
+            client=get_http_client(),
         )
         return
+    if p.get("platform") == "hh" and p.get("action") == "send_message":
+        nid = p.get("negotiation_id") or p.get("external_id")
+        if not nid:
+            raise RuntimeError(f"hh.send_message: missing nid in {p}")
+        await hh_adapt.send_message(
+            response_id=nid,
+            text=p.get("text") or "",
+            employer_id=p.get("owner_id"),
+            client=get_http_client(),
+        )
 
     if p["platform"] == "avito" and p["action"] == "mark_read":
         await avito_adapt.mark_read(
