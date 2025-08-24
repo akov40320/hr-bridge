@@ -7,6 +7,8 @@ to perform the actual API call.
 
 import logging
 
+from httpx import HTTPStatusError
+
 from app.adapters.amo_client import AmoClient
 from app.http_client import get_http_client
 
@@ -34,7 +36,13 @@ async def handle_amo_add_note(payload: dict) -> None:
 
     logger.info("amo.add_note: %s", payload.get("lead_id"))
     amo = await AmoClient.create(get_http_client())
-    await amo.add_note(int(payload["lead_id"]), payload["text"])
+    try:
+        await amo.add_note(int(payload["lead_id"]), payload["text"])
+    except HTTPStatusError as err:  # pylint: disable=broad-except
+        if err.response is not None and err.response.status_code < 500:
+            logger.warning("amo.add_note failed: %s", err)
+        else:
+            raise
 
 
 async def handle_amo_add_tags(payload: dict) -> None:
@@ -46,4 +54,10 @@ async def handle_amo_add_tags(payload: dict) -> None:
 
     logger.info("amo.add_tags: %s", payload.get("lead_id"))
     amo = await AmoClient.create(get_http_client())
-    await amo.add_tags(int(payload["lead_id"]), list(payload.get("tags") or []))
+    try:
+        await amo.add_tags(int(payload["lead_id"]), list(payload.get("tags") or []))
+    except HTTPStatusError as err:  # pylint: disable=broad-except
+        if err.response is not None and err.response.status_code < 500:
+            logger.warning("amo.add_tags failed: %s", err)
+        else:
+            raise
