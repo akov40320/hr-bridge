@@ -12,6 +12,7 @@ class Applicant(BaseModel):
     name: str = Field(..., min_length=1)
     phone: str | None = None
     city: str | None = None
+    email: str | None = None
 
     model_config = ConfigDict(extra="allow")
 

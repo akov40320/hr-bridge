@@ -31,6 +31,7 @@ async def enrich_applicant(
             if extra:
                 payload.applicant.phone = payload.applicant.phone or extra.get("phone")
                 payload.applicant.city = payload.applicant.city or extra.get("city")
+                payload.applicant.email = payload.applicant.email or extra.get("email")
                 payload.applicant.name = (
                     payload.applicant.name
                     if payload.applicant.name and payload.applicant.name != "кандидат"
@@ -108,6 +109,7 @@ async def create_lead(
         phone=payload.applicant.phone,
         city=payload.applicant.city,
         vacancy_title=payload.vacancy_title,
+        email=payload.applicant.email,
     )
 
     await save_link(
