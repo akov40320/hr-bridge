@@ -123,7 +123,7 @@ async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncCli
         log.warning("AmoChats connect warning: %s", exc)
 
 
-async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-locals
+async def send_text_from_client(
     *,
     lead_id: int,
     text: str,
@@ -132,95 +132,47 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments,too-many-
     conversation_id: str | None = None,
     client: httpx.AsyncClient,
 ) -> str | None:
-    """Send message from a client to AmoChats and return conversation id."""
     ac = _get_client()
-
     path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
+    # 1) если нет conversation_id — создаём/находим чат по ref_id
+    if not conversation_id:
+        conversation_id = await ensure_chat_created(
+            lead_id=lead_id,
+            tg_user_id=tg_user_id,
+            tg_user_name=tg_user_name,
+            client=client,
+        )
+
+    # 2) отправляем сообщение по conversation_id
     now_s = int(time.time())
     now_ms = int(time.time() * 1000)
-
-    def _payload(with_ref: bool) -> dict[str, Any]:
-        base: dict[str, Any] = {
-            "event_type": "new_message",
-            "payload": {
-                "msgid": str(uuid.uuid4()),
-                "timestamp": now_s,
-                "msec_timestamp": now_ms,
-                "sender": {
-                    "id": f"tg:{tg_user_id}",
-                    "name": tg_user_name or f"tg_{tg_user_id}",
-                },
-                "message": {"type": "text", "text": text},
+    payload: dict[str, Any] = {
+        "event_type": "new_message",
+        "payload": {
+            "msgid": str(uuid.uuid4()),
+            "timestamp": now_s,
+            "msec_timestamp": now_ms,
+            "conversation_id": conversation_id,
+            "sender": {
+                "id": f"tg:{tg_user_id}",
+                "name": tg_user_name or f"tg_{tg_user_id}",
             },
-        }
-        payload: dict[str, Any] = base["payload"]
-        if with_ref:
-            payload["conversation_ref_id"] = f"lead:{lead_id}"
-        else:
-            payload["conversation_id"] = conversation_id
-        return base
-
-    async def _post(payload: dict[str, Any], route: str) -> httpx.Response:
-        body = _dump(payload)
-        headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
-        logger.debug("send_from_client POST %s -> %s bytes", route, len(body))
-        response = await client.post(url, content=body, headers=headers, timeout=30)
-        logger.debug(
-            "send_from_client %s response %s %s",
-            route,
-            response.status_code,
-            response.text[:200],
-        )
-        return response
-
-    # Если conv_id неизвестен — сразу по ref_id
-    if not conversation_id:
-        logger.info("send_from_client: lead=%s conv=- route=ref", lead_id)
-        r = await _post(_payload(with_ref=True), "ref")
-        if r.status_code >= 400:
-            logger.error(
-                "send_from_client(ref) failed lead=%s status=%s body=%s",
-                lead_id,
-                r.status_code,
-                r.text,
-            )
-            raise AmoChatsError(
-                f"send_text_from_client failed (ref) {r.status_code}: {r.text}"
-            )
-    else:
-        logger.info(
-            "send_from_client: lead=%s conv=%s route=id", lead_id, conversation_id
-        )
-        r = await _post(_payload(with_ref=False), "id")
-        if r.status_code >= 400:
-            logger.warning(
-                "send_from_client(id) failed -> retry by ref_id: lead=%s status=%s",
-                lead_id,
-                r.status_code,
-            )
-            r2 = await _post(_payload(with_ref=True), "ref")
-            if r2.status_code >= 400:
-                logger.error(
-                    "send_from_client retry(ref) failed lead=%s id->%s:%s ref->%s:%s",
-                    lead_id,
-                    r.status_code,
-                    r.text,
-                    r2.status_code,
-                    r2.text,
-                )
-                raise AmoChatsError(
-                    f"send_text_from_client failed. id-> {r.status_code}:{r.text} ; "
-                    f"ref-> {r2.status_code}:{r2.text}"
-                )
-            r = r2
+            "message": {"type": "text", "text": text},
+        },
+    }
+    body = _dump(payload)
+    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
+    r = await client.post(url, content=body, headers=headers, timeout=30)
+    if r.status_code >= 400:
+        raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
 
     data: dict[str, Any] = r.json() if r.content else {}
     conv = (data.get("conversation") or {})
-    cid = conv.get("uuid") or conv.get("id")
+    cid = conv.get("uuid") or conv.get("id") or conversation_id
     logger.info("send_from_client: ok conv_id=%s text_len=%d", cid, len(text))
-    return cid  # может быть None, если API не вернул id/uuid
+    return cid
 
 
 async def send_text_from_manager(  # pylint: disable=too-many-arguments
@@ -277,43 +229,57 @@ async def ensure_chat_created(  # pylint: disable=too-many-locals
     client: httpx.AsyncClient,
 ) -> str:
     """
-    Форсирует создание/поиск чата в AmoChats по conversation_ref_id='lead:<id>'.
-    Возвращает conversation_id (uuid). Сообщение-системка видно только в чате Amo.
+    Гарантированно создаёт (или находит) чат по conversation_ref_id='lead:<id>'.
+    Возвращает conversation_id (uuid). Потом уже можно слать сообщения.
     """
     ac = _get_client()
-
     path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
-    now_s = int(time.time())
-    now_ms = int(time.time() * 1000)
-
-    payload: dict[str, Any] = {
-        "event_type": "new_message",
+    # 1) Создаём/находим чат по ref_id
+    payload_new_conv: dict[str, Any] = {
+        "event_type": "new_conversation",
         "payload": {
-            "msgid": str(uuid.uuid4()),
-            "timestamp": now_s,
-            "msec_timestamp": now_ms,
-            "conversation_ref_id": f"lead:{lead_id}",
-            "sender": {
+            "conversation": {
+                "ref_id": f"lead:{lead_id}",
+            },
+            "client": {
                 "id": f"tg:{tg_user_id}",
                 "name": (tg_user_name or f"tg_{tg_user_id}"),
             },
-            "message": {"type": "text", "text": "🔗 Пользователь открыл бота (инициализация чата)"},
         },
     }
-    body = _dump(payload)
+    body = _dump(payload_new_conv)
     headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
-
-    logger.info("ensure_chat_created: lead=%s tg=%s (%s)", lead_id, tg_user_id, tg_user_name or "-")
 
     data: dict[str, Any] = r.json() if r.content else {}
     conv = (data.get("conversation") or {})
     cid = conv.get("uuid") or conv.get("id")
     if not cid:
         raise AmoChatsError("ensure_chat_created: no conversation id in response")
+
     logger.info("ensure_chat_created: got conversation_id=%s for lead=%s", cid, lead_id)
+
+    # 2) (опционально) прокинем системное сообщение в только что созданный чат
+    try:
+        sys_payload: dict[str, Any] = {
+            "event_type": "new_message",
+            "payload": {
+                "conversation_id": cid,
+                "sender": {
+                    "id": f"tg:{tg_user_id}",
+                    "name": (tg_user_name or f"tg_{tg_user_id}"),
+                },
+                "message": {"type": "text", "text": "🔗 Пользователь открыл бота (инициализация чата)"},
+            },
+        }
+        sys_body = _dump(sys_payload)
+        sys_headers = _build_headers(ac.secret, "POST", path, sys_body, ac.account_id)
+        await client.post(url, content=sys_body, headers=sys_headers, timeout=30)
+    except Exception:  # не критично
+        logger.warning("ensure_chat_created: system message post failed", exc_info=True)
+
     return cid
