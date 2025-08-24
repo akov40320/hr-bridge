@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from app.api._webhook_common import process_job_board_webhook
 from app.http_client import get_http_client
 from app.services.payload_parsers import parse_hh_payload
+from main import log
 
 router = APIRouter()
 
