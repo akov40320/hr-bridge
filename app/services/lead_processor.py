@@ -142,56 +142,61 @@ async def create_lead(
 async def send_invite(
     payload: IncomingPayload, lead_id: int, queue_client: RabbitMQClient = rabbitmq
 ) -> str:
-    """Send invite link to applicant via platform-specific channels."""
     s = get_settings()
 
     kind = payload.kind or route_kind(
         desc=payload.vacancy_desc or "",
-        raw=payload.raw_text or "",
+        raw=" ".join([payload.raw_text or "", payload.vacancy_title or ""]).strip(),
     )
     bot_username = (
-        s.TELEGRAM_MASTER_BOT_USERNAME
-        if kind == "master"
-        else s.TELEGRAM_OPERATOR_BOT_USERNAME
+        s.TELEGRAM_MASTER_BOT_USERNAME if kind == "master" else s.TELEGRAM_OPERATOR_BOT_USERNAME
     )
+
     deep_link = f"https://t.me/{bot_username}?start={lead_id}"
-    invite_text = (
-        "Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос:"
-        f" {deep_link}"
+
+    # Avito — можно со ссылкой
+    invite_text_avito = (
+        "Здравствуйте! Перейдите, пожалуйста, в Telegram-бот и пройдите короткий опрос: "
+        f"{deep_link}"
+    )
+    # HH — без «голой» ссылки: инструкция с ником и /start
+    invite_text_hh = (
+        f"Здравствуйте! Откройте Telegram, найдите @{bot_username} "
+        f"и отправьте команду: /start {lead_id}"
     )
 
     platform = payload.platform
     applicant_id = payload.applicant.id
-    if platform == "avito" and applicant_id:
-        await queue_client.publish_task(
-            {
-                "platform": "avito",
-                "action": "send_message",
-                "external_id": applicant_id,
-                "text": invite_text,
-                "owner_id": payload.owner_id,
-            }
-        )
-    if platform == "hh" and applicant_id:
 
+    if platform == "avito" and applicant_id:
         await queue_client.publish_task({
-                "platform": "hh",
-                "action": "set_state",
-                "external_id": applicant_id,        
-                "target_state": "invite",
-                "owner_id": payload.owner_id,       
+            "platform": "avito",
+            "action": "send_message",
+            "external_id": applicant_id,
+            "text": invite_text_avito,
+            "owner_id": payload.owner_id,
         })
-            
-        await queue_client.publish_task(
-            {
-                "platform": "hh",
-                "action": "send_message",
-                "external_id": applicant_id,
-                "text": invite_text,
-                "owner_id": payload.owner_id,
-            }
-        )
+
+    if platform == "hh" and applicant_id:
+        # 1) сначала приглашаем (иначе HH не принимает сообщения из state=response)
+        await queue_client.publish_task({
+            "platform": "hh",
+            "action": "set_state",
+            "external_id": applicant_id,   # negotiation_id
+            "target_state": "invite",
+            "owner_id": payload.owner_id,  # employer_id
+        })
+        # 2) затем сообщение — текст БЕЗ URL
+        await queue_client.publish_task({
+            "platform": "hh",
+            "action": "send_message",
+            "external_id": applicant_id,
+            "text": invite_text_hh,
+            "owner_id": payload.owner_id,
+        })
+
     return deep_link
+
 
 
 async def tag_lead(lead_id: int, kind: str, amo_client) -> None:
