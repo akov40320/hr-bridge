@@ -27,65 +27,19 @@ router_amo_chats = APIRouter()
 
 async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()
-    s = get_settings()
-
-    secret = getattr(s, "AMO_CHATS_SECRET", "")
+    secret = get_settings().AMO_CHATS_SECRET or ""
     if not secret:
-        # лучше не пропускать, но если нужно — можно временно вернуть здесь
         raise HTTPException(status_code=401, detail="Missing secret")
 
     got = (request.headers.get("X-Signature") or "").strip().lower()
     if not got:
         raise HTTPException(status_code=401, detail="Missing signature")
 
-    # --- Кандидат 1: v2 — HMAC-SHA1(body)
-    candidates = [
-        hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
-    ]
-
-    # --- Кандидаты 2+: «старый стиль» — METHOD \n MD5 \n Content-Type \n Date \n PATH
-    method = request.method.upper()
-    md5_hex = hashlib.md5(raw).hexdigest().lower()
-    raw_ctype = (request.headers.get("Content-Type") or "application/json").strip()
-    ct_base = raw_ctype.split(";", 1)[0].strip()
-    date_hdr = request.headers.get("Date", "")
-
-    # Варианты content-type (иногда без charset)
-    ctype_variants = []
-    for ct in (raw_ctype, ct_base, "application/json"):
-        if ct and ct not in ctype_variants:
-            ctype_variants.append(ct)
-
-    # Варианты пути (с учётом возможных прокси)
-    path_variants = []
-    seen = request.url.path
-    xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
-    xorig = request.headers.get("X-Original-URI")
-    for p in (seen, (seen.rstrip("/") or "/")):
-        if p and p not in path_variants:
-            path_variants.append(p)
-    if xpref:
-        combo = f"{xpref}{seen}"
-        for p in (combo, combo.rstrip("/") or "/"):
-            if p not in path_variants:
-                path_variants.append(p)
-    if xorig:
-        for p in (xorig, xorig.rstrip("/") or "/"):
-            if p and p not in path_variants:
-                path_variants.append(p)
-
-    for ct in ctype_variants:
-        for p in path_variants:
-            string_to_sign = "\n".join([method, md5_hex, ct, date_hdr, p])
-            cand = hmac.new(secret.encode("utf-8"),
-                            string_to_sign.encode("utf-8"),
-                            hashlib.sha1).hexdigest().lower()
-            candidates.append(cand)
-
-    if got not in candidates:
+    calc = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
+    if not secrets.compare_digest(got, calc):
         logger.warning(
-            "amo-chats invalid signature: got=%s sha1(body)=%s len=%d path=%s",
-            got[:12], hashlib.sha1(raw).hexdigest()[:12], len(raw), request.url.path
+            "amo-chats invalid signature: got=%s calc=%s len=%d path=%s",
+            got[:12], calc[:12], len(raw), request.url.path
         )
         raise HTTPException(status_code=401, detail="Invalid signature")
 
