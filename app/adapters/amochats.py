@@ -124,42 +124,28 @@ async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncCli
 
 
 async def send_text_from_client(
-    *,
-    lead_id: int,
-    text: str,
-    tg_user_id: int,
-    tg_user_name: str | None = None,
-    conversation_id: str | None = None,
-    client: httpx.AsyncClient,
+    *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
+    conversation_id: str | None = None, client: httpx.AsyncClient,
 ) -> str | None:
     ac = _get_client()
 
-    # если conversation_id не дали — создаём/получаем чат и берём id
     if not conversation_id:
         conversation_id = await ensure_chat_created(
-            lead_id=lead_id,
-            tg_user_id=tg_user_id,
-            tg_user_name=tg_user_name,
-            client=client,
+            lead_id=lead_id, tg_user_id=tg_user_id, tg_user_name=tg_user_name, client=client
         )
 
-    # отправляем сообщение в уже существующий чат
     path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
-    now_s = int(time.time())
-    now_ms = int(time.time() * 1000)
-    payload: dict[str, Any] = {
+    now_s = int(time.time()); now_ms = int(time.time() * 1000)
+    payload = {
         "event_type": "new_message",
         "payload": {
             "msgid": str(uuid.uuid4()),
             "timestamp": now_s,
             "msec_timestamp": now_ms,
-            "conversation_id": conversation_id,  # <-- ключевое поле
-            "sender": {
-                "id": f"tg:{tg_user_id}",
-                "name": tg_user_name or f"tg_{tg_user_id}",
-            },
+            "conversation_id": conversation_id,  # <-- интеграционный ID
+            "sender": {"id": f"tg:{tg_user_id}", "name": tg_user_name or f"tg_{tg_user_id}"},
             "message": {"type": "text", "text": text},
         },
     }
@@ -169,11 +155,10 @@ async def send_text_from_client(
     if r.status_code >= 400:
         raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
 
-    data: dict[str, Any] = r.json() if r.content else {}
-    conv = (data.get("conversation") or {})
-    cid = conv.get("uuid") or conv.get("id") or conversation_id
-    logger.info("send_from_client: ok conv_id=%s text_len=%d", cid, len(text))
-    return cid
+    # можно просто вернуть тот же интеграционный conversation_id
+    logger.info("send_from_client: ok conv_id=%s text_len=%d", conversation_id, len(text))
+    return conversation_id
+
 
 
 async def send_text_from_manager(  # pylint: disable=too-many-arguments
@@ -222,64 +207,43 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
         raise AmoChatsError(f"send_text_from_manager failed {r.status_code}: {r.text}")
 
 
-async def ensure_chat_created(  # pylint: disable=too-many-locals
-    *,
-    lead_id: int,
-    tg_user_id: int,
-    tg_user_name: str | None,
-    client: httpx.AsyncClient,
+async def ensure_chat_created(
+    *, lead_id: int, tg_user_id: int, tg_user_name: str | None, client: httpx.AsyncClient
 ) -> str:
-    """
-    Гарантированно создаёт (или находит) чат по conversation_ref_id='lead:<id>'.
-    Возвращает conversation_id (uuid). Потом уже можно слать сообщения.
-    """
     ac = _get_client()
 
-    # 1) создаём/ищем чат через /chats (без event_type)
-    path_chats = f"/v2/origin/custom/{ac.scope_id}/chats"
-    url_chats = _base() + path_chats
+    conv_id = f"lead:{lead_id}"  # стабильный ID на стороне интеграции
 
-    body_chats = _dump({
-        # ref на сделку — именно как conversation_ref_id
-        "conversation_ref_id": f"lead:{lead_id}",
-        # кто клиент (идемпотентно, Amo сам сопоставит/создаст при необходимости)
+    # 1) создаём/находим чат
+    path = f"/v2/origin/custom/{ac.scope_id}/chats"
+    url = _base() + path
+    body = _dump({
+        "conversation_id": conv_id,           # <-- ВАЖНО: conversation_id (а не ref_id)
         "user": {
             "id": f"tg:{tg_user_id}",
-            "name": (tg_user_name or f"tg_{tg_user_id}"),
+            "name": tg_user_name or f"tg_{tg_user_id}",
         },
     })
-    headers_chats = _build_headers(ac.secret, "POST", path_chats, body_chats, ac.account_id)
-    r = await client.post(url_chats, content=body_chats, headers=headers_chats, timeout=30)
+    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
+    r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
 
-    data: dict[str, Any] = r.json() if r.content else {}
-    conv = (data.get("conversation") or {})
-    cid = conv.get("uuid") or conv.get("id")
-    if not cid:
-        raise AmoChatsError("ensure_chat_created: no conversation id in response")
+    logger.info("ensure_chat_created: ok for lead=%s -> conv_id=%s", lead_id, conv_id)
 
-    logger.info("ensure_chat_created: got conversation_id=%s for lead=%s", cid, lead_id)
-
-    # 2) (опционально) системное сообщение уже в созданный чат
+    # 2) (опционально) системное сообщение (уже в созданный чат)
     try:
         path_msg = f"/v2/origin/custom/{ac.scope_id}"
         url_msg = _base() + path_msg
-        sys_payload: dict[str, Any] = {
+        sys_payload = {
             "event_type": "new_message",
             "payload": {
                 "msgid": str(uuid.uuid4()),
                 "timestamp": int(time.time()),
                 "msec_timestamp": int(time.time() * 1000),
-                "conversation_id": cid,
-                "sender": {
-                    "id": f"tg:{tg_user_id}",
-                    "name": (tg_user_name or f"tg_{tg_user_id}"),
-                },
-                "message": {
-                    "type": "text",
-                    "text": "🔗 Пользователь открыл бота (инициализация чата)",
-                },
+                "conversation_id": conv_id,  # <-- используем Тот же интеграционный ID
+                "sender": {"id": f"tg:{tg_user_id}", "name": tg_user_name or f"tg_{tg_user_id}"},
+                "message": {"type": "text", "text": "🔗 Пользователь открыл бота (инициализация чата)"},
             },
         }
         sys_body = _dump(sys_payload)
@@ -288,4 +252,5 @@ async def ensure_chat_created(  # pylint: disable=too-many-locals
     except Exception:
         logger.warning("ensure_chat_created: system message post failed", exc_info=True)
 
-    return cid
+    # возвращаем ИНТЕГРАЦИОННЫЙ conv_id (его же будем использовать в send)
+    return conv_id
