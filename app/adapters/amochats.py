@@ -66,22 +66,28 @@ def _build_headers(
     method: str,
     path: str,
     body: bytes | None,
+    account_id: str | None = None,   # <— добавили
 ) -> dict[str, str]:
-    date_hdr = formatdate(usegmt=True)                
+    date_hdr = formatdate(usegmt=True)
     ctype = "application/json"
     b = body or b""
-    md5_hex = hashlib.md5(b).hexdigest().lower()     
+    md5_hex = hashlib.md5(b).hexdigest().lower()
     string_to_sign = "\n".join([method.upper(), md5_hex, ctype, date_hdr, path])
     sig = hmac.new(secret.encode("utf-8"),
                    string_to_sign.encode("utf-8"),
                    hashlib.sha1).hexdigest().lower()
 
-    return {
+    headers = {
         "Date": date_hdr,
         "Content-Type": ctype,
         "Content-MD5": md5_hex,
         "X-Signature": sig,
     }
+    # если нужно — прокидывай айди аккаунта
+    if account_id:
+        headers["X-Account-Id"] = account_id
+
+    return headers
 
 
 async def connect_channel(client: httpx.AsyncClient) -> dict[str, Any]:
