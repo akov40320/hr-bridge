@@ -1,8 +1,6 @@
 """Worker handlers for the HeadHunter (hh.ru) service.
 
-The module provides functions that proxy worker payloads to the ``hh`` adapter.
-Each handler expects a payload dictionary produced by message broker tasks and
-forwards it to the appropriate adapter function using a shared HTTP client.
+Функции-обработчики воркера. Проксируют задачи в адаптер HH.
 """
 
 import logging
@@ -14,38 +12,44 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_hh_send_message(payload: dict):
-    """Send a message via the hh adapter.
+    """Отправить сообщение кандидату.
 
-    The ``payload`` must contain ``external_id`` and ``text`` keys. Optionally,
-    the ``owner_id`` key can be provided to target a specific employer.
+    payload:
+        negotiation_id (str) — ID отклика/приглашения (nid)
+        text (str) — текст сообщения
+        owner_id (str|None) — работодатель/менеджер
     """
+    nid = payload["negotiation_id"]
+    text = payload["text"]
+    owner_id = payload.get("owner_id")
 
-    logger.info("hh.send_message: %s", payload.get("external_id"))
+    logger.info("hh.send_message: %s text=%r", nid, text[:40])
     client = get_http_client()
     await hh_adapt.send_message(
-        payload["external_id"],
-        payload["text"],
-        employer_id=payload.get("owner_id"),
+        negotiation_id=nid,
+        text=text,
+        employer_id=owner_id,
         client=client,
     )
 
 
 async def handle_hh_set_state(payload: dict):
-    """Update an employer's state in hh.ru.
+    """Перевести отклик на следующий этап.
 
-    The ``payload`` must contain ``external_id`` and ``target_state`` keys. The
-    optional ``owner_id`` key is used to specify the employer account context.
+    payload:
+        negotiation_id (str) — ID отклика/приглашения (nid)
+        action_id (str) — действие, например 'phone_interview', 'interview'
+        owner_id (str|None) — работодатель/менеджер
     """
+    nid = payload["negotiation_id"]
+    action_id = payload["action_id"]
+    owner_id = payload.get("owner_id")
 
-    logger.info(
-        "hh.set_state: %s -> %s",
-        payload.get("external_id"),
-        payload.get("target_state"),
-    )
+    logger.info("hh.set_state: %s -> %s", nid, action_id)
     client = get_http_client()
-    await hh_adapt.set_employer_state(
-        payload["external_id"],
-        payload["target_state"],
-        employer_id=payload.get("owner_id"),
+    await hh_adapt.set_state_action(
+        negotiation_id=nid,
+        action_id=action_id,
+        employer_id=owner_id,
         client=client,
     )
