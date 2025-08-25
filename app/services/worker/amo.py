@@ -61,3 +61,22 @@ async def handle_amo_add_tags(payload: dict) -> None:
             logger.warning("amo.add_tags failed: %s", err)
         else:
             raise
+
+
+async def handle_amo_update_status(payload: dict) -> None:
+    """Update lead status in amoCRM.
+
+    Args:
+        payload: Must contain ``lead_id`` and ``status_id`` specifying the new
+            status for the lead.
+    """
+
+    logger.info("amo.update_status: %s", payload.get("lead_id"))
+    amo = await AmoClient.create(get_http_client())
+    try:
+        await amo.update_status(int(payload["lead_id"]), int(payload["status_id"]))
+    except HTTPStatusError as err:  # pylint: disable=broad-except
+        if err.response is not None and err.response.status_code < 500:
+            logger.warning("amo.update_status failed: %s", err)
+        else:
+            raise

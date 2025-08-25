@@ -130,6 +130,12 @@ class AmoClient:
         body = [{"to_entity_id": contact_id, "to_entity_type": "contacts"}]
         return await self._request("POST", url, json=body)
 
+    async def update_status(self, lead_id: int, status_id: int):
+        """Update the status of a lead."""
+        url = f"{self.base}/api/v4/leads"
+        body = [{"id": lead_id, "status_id": status_id}]
+        return await self._request("PATCH", url, json=body)
+
     async def update_lead_custom_fields(self, lead_id: int, fields: dict[int, str]):
         """Update custom field values for a lead."""
         if not fields:
