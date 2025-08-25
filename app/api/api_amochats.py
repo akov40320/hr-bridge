@@ -248,7 +248,6 @@ async def is_duplicate(raw: bytes) -> bool:
 
 @router_amo_chats.post(
     "/webhooks/amo-chats/in/{scope_id}",
-    dependencies=[Depends(verify_amochats_signature)],
 )
 async def amochats_in(
         request: Request,
