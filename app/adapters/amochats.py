@@ -1,6 +1,6 @@
 """Utilities for interacting with the AmoChats API."""
 
-from typing import Any, cast
+from typing import Any, cast, Tuple
 import hashlib
 import hmac
 import json
@@ -13,7 +13,6 @@ from functools import lru_cache
 import httpx
 
 from app.core.config import get_settings
-
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -62,11 +61,11 @@ def _dump(obj: dict[str, Any]) -> bytes:
 
 
 def _build_headers(
-    secret: str,
-    method: str,
-    path: str,
-    body: bytes | None,
-    account_id: str | None = None,   # <— добавили
+        secret: str,
+        method: str,
+        path: str,
+        body: bytes | None,
+        account_id: str | None = None,  # <— добавили
 ) -> dict[str, str]:
     date_hdr = formatdate(usegmt=True)
     ctype = "application/json"
@@ -124,8 +123,8 @@ async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncCli
 
 
 async def send_text_from_client(
-    *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
-    conversation_id: str | None = None, client: httpx.AsyncClient,
+        *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
+        conversation_id: str | None = None, client: httpx.AsyncClient,
 ) -> str | None:
     ac = _get_client()
 
@@ -137,7 +136,8 @@ async def send_text_from_client(
     path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
-    now_s = int(time.time()); now_ms = int(time.time() * 1000)
+    now_s = int(time.time());
+    now_ms = int(time.time() * 1000)
     payload = {
         "event_type": "new_message",
         "payload": {
@@ -161,13 +161,13 @@ async def send_text_from_client(
 
 
 async def send_text_from_manager(  # pylint: disable=too-many-arguments
-    *,
-    conversation_id: str,  # здесь нужен уже существующий uuid/id чата
-    user_id: int,
-    user_name: str | None,
-    avatar: str | None,
-    text: str,
-    client: httpx.AsyncClient,
+        *,
+        conversation_id: str,  # здесь нужен уже существующий uuid/id чата
+        user_id: int,
+        user_name: str | None,
+        avatar: str | None,
+        text: str,
+        client: httpx.AsyncClient,
 ) -> None:
     """
     Сообщение 'от менеджера' — используем sender.ref_id = AMO_CHATS_SENDER_USER_AMOJO_ID,
@@ -207,16 +207,16 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
 
 
 async def ensure_chat_created(
-    *,
-    lead_id: int,
-    tg_user_id: int,
-    tg_user_name: str | None,
-    client: httpx.AsyncClient,
-    contact_id: int | None = None,
-    init_text: str | None = None,       # если передан — отправим первым сообщением
-    init_as_manager: bool = False,      # False = как кандидат, True = как менеджер
-    send_default_system: bool = False,  # если True и init_text не задан — отправим тех.сообщение
-) -> str:
+        *,
+        lead_id: int,
+        tg_user_id: int,
+        tg_user_name: str | None,
+        client: httpx.AsyncClient,
+        contact_id: int | None = None,
+        init_text: str | None = None,  # если передан — отправим первым сообщением
+        init_as_manager: bool = False,  # False = как кандидат, True = как менеджер
+        send_default_system: bool = False,  # если True и init_text не задан — отправим тех.сообщение
+) -> tuple[str, Any | None]:
     """
     Создаёт (или находит) чат в AmoChats.
 
@@ -238,7 +238,7 @@ async def ensure_chat_created(
     path_chats = f"/v2/origin/custom/{ac.scope_id}/chats"
     url_chats = _base() + path_chats
     body_chats = _dump({
-        "conversation_id": conv_id,              # ВАЖНО: используем conversation_id
+        "conversation_id": conv_id,  # ВАЖНО: используем conversation_id
         "user": {
             "id": f"tg:{tg_user_id}",
             "name": tg_user_name or f"tg_{tg_user_id}",
@@ -249,6 +249,12 @@ async def ensure_chat_created(
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
 
+    data = r.json() if r.content else {}
+    amo_chat_uuid = (
+            data.get("conversation", {}).get("id")
+            or data.get("conversation", {}).get("uuid")
+            or None
+    )
     logger.info(
         "ensure_chat_created: ok for lead=%s contact=%s -> conv_id=%s",
         lead_id,
@@ -310,6 +316,4 @@ async def ensure_chat_created(
     except Exception:
         logger.warning("ensure_chat_created: initial message post failed", exc_info=True)
 
-
-    return conv_id
-
+    return conv_id,amo_chat_uuid

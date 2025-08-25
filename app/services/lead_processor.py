@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def enrich_applicant(
-    payload: IncomingPayload, http_client: httpx.AsyncClient
+        payload: IncomingPayload, http_client: httpx.AsyncClient
 ) -> IncomingPayload:
     """Обогатить данные кандидата из HH, если возможно."""
     if payload.platform == "hh" and payload.applicant.id:
@@ -54,9 +54,9 @@ async def enrich_applicant(
 
 
 async def create_lead(
-    payload: IncomingPayload,
-    client,
-    queue_client: RabbitMQClient = rabbitmq,
+        payload: IncomingPayload,
+        client,
+        queue_client: RabbitMQClient = rabbitmq,
 ) -> tuple[int | None, str]:
     """Создать лид в AmoCRM и вернуть (lead_id, kind)."""
     s = get_settings()
@@ -122,7 +122,7 @@ async def create_lead(
     tg_user_id = getattr(payload, "tg_user_id", None)
     if tg_user_id:
         tg_user_name = getattr(payload, "tg_user_name", None)
-        conv_id = await amochats.ensure_chat_created(
+        conv_ref_id, amo_chat_uuid = await amochats.ensure_chat_created(
             lead_id=lead_id,
             tg_user_id=int(tg_user_id),
             tg_user_name=tg_user_name,
@@ -132,10 +132,16 @@ async def create_lead(
         await store_chat.upsert_tg_link(
             user_id=int(tg_user_id), bot_kind=kind, lead_id=lead_id
         )
-        if conv_id:
+        if conv_ref_id:
             await store_chat.set_conversation(
-                int(tg_user_id), kind, conv_id
+                int(tg_user_id), kind, conv_ref_id
             )
+
+        if contact_id and amo_chat_uuid:
+            try:
+                await client.attach_chat_to_contact(contact_id, amo_chat_uuid)
+            except Exception as e:
+                logger.warning("attach chat to contact failed: %s", e)
 
     if contact_id:
         try:
@@ -155,7 +161,7 @@ async def create_lead(
 
 
 async def send_invite(
-    payload: IncomingPayload, lead_id: int, queue_client: RabbitMQClient = rabbitmq
+        payload: IncomingPayload, lead_id: int, queue_client: RabbitMQClient = rabbitmq
 ) -> str:
     """Отправить приглашение кандидату (правильные действия для HH/Avito)."""
     s = get_settings()
@@ -197,7 +203,7 @@ async def send_invite(
             "platform": "hh",
             "action": "set_state",
             "negotiation_id": negotiation_id,
-            "action_id": "phone_interview",   # PUT /negotiations/phone_interview/{nid}
+            "action_id": "phone_interview",  # PUT /negotiations/phone_interview/{nid}
             "owner_id": payload.owner_id,
         })
         # 2) Сообщение кандидату (form-urlencoded, HH-User-Agent на стороне воркера)

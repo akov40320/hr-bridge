@@ -211,6 +211,21 @@ async def amochats_in(
     lead_id = parse_lead_id(client_id)
     links = await resolve_links(conv_ref_id, lead_id, sender, receiver)
 
+    if lead_id and conv_ref_id and links:
+        try:
+            from app.adapters.amo_client import AmoClient
+            from app.http_client import get_http_client
+            amo = await AmoClient.create(get_http_client())
+            lead = await amo.get_lead(lead_id)
+            # основной контакт сделки (если есть)
+            main_contact_id = (
+                    (lead.get("_embedded") or {}).get("contacts") or [{}]
+            )[0].get("id")
+            if main_contact_id:
+                await amo.attach_chat_to_contact(int(main_contact_id), conv_ref_id)
+        except Exception:
+            logger.warning("amochats_in: attach_chat fallback failed", exc_info=True)
+
     logger.info(
         "amo-chats links found: %d (conv=%s lead=%s)",
         len(links),
