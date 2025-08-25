@@ -105,16 +105,24 @@ async def test_store_answer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_finish(monkeypatch, queue_mock):
+@pytest.mark.parametrize(
+    "bot_kind, stage_attr, stage_value",
+    [
+        ("master", "AMO_STAGE_ID_MASTER_SURVEY", 5),
+        ("operator", "AMO_STAGE_ID_OPERATOR_SURVEY", 6),
+    ],
+)
+async def test_finish(bot_kind, stage_attr, stage_value, monkeypatch, queue_mock):
     deleted = []
 
-    async def fake_delete(user_id, bot_kind):
-        deleted.append((user_id, bot_kind))
+    async def fake_delete(user_id, b_kind):
+        deleted.append((user_id, b_kind))
 
     monkeypatch.setattr("app.services.survey_service.delete_survey", fake_delete)
+    monkeypatch.setattr(settings, stage_attr, stage_value)
 
     svc = SurveyService()
-    await svc.finish(3, "b3", 33, "summary")
+    await svc.finish(3, bot_kind, 33, "summary")
 
     assert queue_mock == [
         {
@@ -127,7 +135,13 @@ async def test_finish(monkeypatch, queue_mock):
             "platform": "amo",
             "action": "amo_add_note",
             "lead_id": 33,
-            "text": "[b3] summary",
+            "text": f"[{bot_kind}] summary",
+        },
+        {
+            "platform": "amo",
+            "action": "amo_update_status",
+            "lead_id": 33,
+            "status_id": stage_value,
         },
     ]
-    assert deleted == [(3, "b3")]
+    assert deleted == [(3, bot_kind)]
