@@ -239,7 +239,7 @@ async def is_duplicate(raw: bytes) -> bool:
 )
 async def amochats_in(
         request: Request,
-        scope_id: str | None = None,
+        scope_id: str,
         queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
     """Process incoming AmoChats webhook and mirror messages to Telegram."""
