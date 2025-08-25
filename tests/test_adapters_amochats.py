@@ -16,7 +16,7 @@ from app.adapters import amochats
             conversation_id="cid", user_id=1, user_name=None, avatar=None, text="hi", client=client
         ),
         lambda client: amochats.ensure_chat_created(
-            lead_id=1, tg_user_id=1, tg_user_name=None, client=client
+            lead_id=1, tg_user_id=1, tg_user_name=None, client=client, contact_id=2
         ),
     ],
 )

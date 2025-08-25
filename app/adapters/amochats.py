@@ -212,21 +212,27 @@ async def ensure_chat_created(
     tg_user_id: int,
     tg_user_name: str | None,
     client: httpx.AsyncClient,
+    contact_id: int | None = None,
     init_text: str | None = None,       # если передан — отправим первым сообщением
     init_as_manager: bool = False,      # False = как кандидат, True = как менеджер
     send_default_system: bool = False,  # если True и init_text не задан — отправим тех.сообщение
 ) -> str:
     """
-    Создаёт (или находит) чат в AmoChats по conversation_id='lead:<lead_id>'.
+    Создаёт (или находит) чат в AmoChats.
+
+    ``conversation_id`` формируется детерминированно: если передан
+    ``contact_id`` — используем ``contact:{contact_id}``, иначе
+    ``lead:{lead_id}``.
+
     При необходимости сразу отправляет первое сообщение.
 
     Возвращает:
-        str: conversation_id (тот же детерминированный 'lead:<lead_id>')
+        str: conversation_id (детерминированный идентификатор чата)
     """
     ac = _get_client()
 
     # стабильный ID чата на стороне интеграции
-    conv_id = f"lead:{lead_id}"
+    conv_id = f"contact:{contact_id}" if contact_id else f"lead:{lead_id}"
 
     # 1) создать/найти чат
     path_chats = f"/v2/origin/custom/{ac.scope_id}/chats"
@@ -243,7 +249,12 @@ async def ensure_chat_created(
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
 
-    logger.info("ensure_chat_created: ok for lead=%s -> conv_id=%s", lead_id, conv_id)
+    logger.info(
+        "ensure_chat_created: ok for lead=%s contact=%s -> conv_id=%s",
+        lead_id,
+        contact_id,
+        conv_id,
+    )
 
     # 2) при необходимости — отправить первое сообщение в только что созданный чат
     path_msg = f"/v2/origin/custom/{ac.scope_id}"
