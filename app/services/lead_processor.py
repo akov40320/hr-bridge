@@ -6,14 +6,16 @@ import time
 
 import httpx
 
-from app.adapters import hh as hh_adapt
+from app.adapters import hh as hh_adapt, amochats
 from app.adapters.amo_client import ReauthRequired
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.store import save_link
+from app import store_chat
 from app.api.utils import route_kind
 from app.services import amo_lead_enrichment
 from app.models import IncomingPayload
+from app.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,23 @@ async def create_lead(
         vacancy_title=payload.vacancy_title,
         email=payload.applicant.email,
     )
+
+    tg_user_id = getattr(payload, "tg_user_id", None)
+    if tg_user_id:
+        tg_user_name = getattr(payload, "tg_user_name", None)
+        conv_id = await amochats.ensure_chat_created(
+            lead_id=lead_id,
+            tg_user_id=int(tg_user_id),
+            tg_user_name=tg_user_name,
+            client=get_http_client(),
+        )
+        await store_chat.upsert_tg_link(
+            user_id=int(tg_user_id), bot_kind=kind, lead_id=lead_id
+        )
+        if conv_id:
+            await store_chat.set_conversation(
+                int(tg_user_id), kind, conv_id
+            )
 
     await save_link(
         lead_id=lead_id,
