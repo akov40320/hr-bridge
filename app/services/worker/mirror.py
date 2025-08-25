@@ -17,6 +17,7 @@ from app.services import tg_send_with_retry
 from app.core.retry import with_retry
 from app.http_client import get_http_client
 from app.adapters.amo_client import AmoClient
+from app.services.queue import rabbitmq
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
     user_name = payload.get("user_name")
     conv_id = payload.get("conversation_id")
     lead_id = payload.get("lead_id")
+    status_id = payload.get("status_id")
 
     http_client = get_http_client()
     text_sent = False
@@ -162,6 +164,17 @@ async def handle_mirror_bot_to_amo(payload: dict):
             is_retryable=lambda e: True,
         )
         text_sent = True
+        if status_id is not None:
+            dedup = calc_key("chat_status", f"{lead_id}:{status_id}")
+            if await check_and_store(dedup):
+                await rabbitmq.publish_task(
+                    {
+                        "platform": "amo",
+                        "action": "amo_update_status",
+                        "lead_id": int(lead_id),
+                        "status_id": int(status_id),
+                    }
+                )
 
     if not conv_id:
         raise RuntimeError("bot_to_amo: no conversation_id and no lead_id to create one")
