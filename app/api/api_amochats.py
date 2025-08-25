@@ -1,5 +1,5 @@
 """Handlers for AmoChats webhooks and related helpers."""
-
+import datetime
 import hashlib
 import hmac
 import logging
@@ -28,90 +28,22 @@ router_amo_chats = APIRouter()
 def _md5_hex(b: bytes) -> str:
     return hashlib.md5(b).hexdigest().lower()
 
-async def verify_amochats_signature(request: Request) -> None:
+
+async def verify_amochats_signature(
+        request: Request,
+        settings=Depends(get_settings),
+) -> None:
     raw = await request.body()
+    x_sig = request.headers.get("X-Signature")
+    if not x_sig:
+        raise HTTPException(status_code=400, detail="missing X-Signature")
 
-    s = get_settings()
-    secret = (getattr(s, "AMOCHATS_INCOMING_SECRET", "") or getattr(s, "AMO_CHATS_SECRET", "")).strip()
-    if not secret:
-        raise HTTPException(status_code=401, detail="Missing secret")
+    calc = hmac.new(settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1).hexdigest()
+    if not hmac.compare_digest(x_sig.lower(), calc.lower()):
+        raise HTTPException(status_code=401, detail="invalid signature")
 
-    got = (request.headers.get("X-Signature") or "").strip().lower()
-    if not got:
-        raise HTTPException(status_code=401, detail="Missing signature")
 
-    method    = request.method.upper()
-    date_hdr  = request.headers.get("Date", "")
-    ctype_raw = (request.headers.get("Content-Type") or "application/json").strip()
-    ctype_base = ctype_raw.split(";", 1)[0].strip()
-    ctypes = []
-    for ct in (ctype_raw, ctype_base, "application/json"):
-        if ct and ct not in ctypes:
-            ctypes.append(ct)
-
-    seen_path = request.url.path
-    xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
-    xorig = request.headers.get("X-Original-URI")
-    paths = []
-    for p in (seen_path,
-              seen_path.rstrip("/") or "/",
-              f"{xpref}{seen_path}" if xpref else None,
-              (f"{xpref}{seen_path}".rstrip("/") if xpref else None),
-              xorig,
-              (xorig.rstrip("/") if xorig else None)):
-        if p and p not in paths:
-            paths.append(p)
-
-    md5_body = _md5_hex(raw)
-    md5_empty = _md5_hex(b"")
-
-    def sig_hmac_body(b: bytes) -> str:
-        return hmac.new(secret.encode("utf-8"), b, hashlib.sha1).hexdigest().lower()
-
-    def sig_canon(parts: list[str], sep: str = "\n") -> str:
-        s2s = sep.join(parts)
-        return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
-
-    # — кандидаты: HMAC(body) и варианты с переводами строки
-    body_variants = [
-        ("hmac(body)",            sig_hmac_body(raw)),
-        ("hmac(body.rstrip)",     sig_hmac_body(raw.rstrip(b"\r\n"))),
-        ("hmac(body+\\n)",        sig_hmac_body(raw if raw.endswith(b"\n") else raw + b"\n")),
-    ]
-    for name, cand in body_variants:
-        if secrets.compare_digest(got, cand):
-            logger.info("amo-chats signature matched by %s", name)
-            return
-
-    # — каноника: 5 строк (с Date) и 4 строки (без Date); с md5=body и md5=''
-    canon_defs = []
-    for ct in ctypes:
-        for p in paths:
-            # 5-строчная (METHOD, MD5, CT, DATE, PATH)
-            if date_hdr:
-                canon_defs.append((f"canon5 md5=body ct={ct} date", [method, md5_body, ct, date_hdr, p]))
-                canon_defs.append((f"canon5 md5=empty ct={ct} date", [method, md5_empty, ct, date_hdr, p]))
-            # 4-строчная (METHOD, MD5, CT, PATH)
-            canon_defs.append((f"canon4 md5=body ct={ct}", [method, md5_body, ct, p]))
-            canon_defs.append((f"canon4 md5=empty ct={ct}", [method, md5_empty, ct, p]))
-
-    for name, parts in canon_defs:
-        for sep in ("\n", "\r\n"):
-            cand = sig_canon(parts, sep=sep)
-            if secrets.compare_digest(got, cand):
-                logger.info("amo-chats signature matched by %s sep=%r", name, sep)
-                return
-
-    # — ничего не подошло: подробный лог для оффлайн-сравнения
-    logger.warning(
-        "amo-chats sig-mismatch: got=%s date=%s method=%s md5=%s sha1=%s len=%d path_seen=%s ctype=%s "
-        "head64=%s tail64=%s",
-        got[:40], date_hdr, method, md5_body, hashlib.sha1(raw).hexdigest(),
-        len(raw), seen_path, ctype_raw,
-        base64.b64encode(raw[:64]).decode("ascii"),
-        base64.b64encode(raw[-64:] if len(raw) >= 64 else raw).decode("ascii"),
-    )
-    raise HTTPException(status_code=401, detail="Invalid signature")
+    request.state.raw_body = raw
 
 
 def parse_lead_id(client_id: str) -> int | None:
@@ -246,9 +178,8 @@ async def is_duplicate(raw: bytes) -> bool:
     return not await check_and_store(key)
 
 
-@router_amo_chats.post(
-    "/webhooks/amo-chats/in/{scope_id}",
-)
+@router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}",
+                       dependencies=[Depends(verify_amochats_signature)])
 async def amochats_in(
         request: Request,
         scope_id: str,
