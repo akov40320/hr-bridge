@@ -39,6 +39,8 @@ async def test_create_lead(monkeypatch):
         applicant=Applicant(id="1", name="John", email="j@e.ru"),
         owner_id="own",
         vacancy_id="vac",
+        tg_user_id=123,
+        tg_user_name="tg",
     )
 
     monkeypatch.setattr(lead_processor, "route_kind", lambda **kw: "master")
@@ -60,9 +62,27 @@ async def test_create_lead(monkeypatch):
     monkeypatch.setattr(lead_processor.amo_lead_enrichment, "enrich_lead", fake_enrich)
     monkeypatch.setattr(lead_processor, "save_link", fake_save_link)
 
+    called = {}
+
+    async def fake_ensure_chat_created(**kwargs):
+        called["chat"] = kwargs
+        return "lead:321"
+
+    async def fake_upsert(user_id, bot_kind, lead_id):
+        called["upsert"] = (user_id, bot_kind, lead_id)
+
+    async def fake_set_conv(user_id, bot_kind, conversation_id):
+        called["conv"] = (user_id, bot_kind, conversation_id)
+
+    monkeypatch.setattr(lead_processor.amochats, "ensure_chat_created", fake_ensure_chat_created)
+    monkeypatch.setattr(lead_processor.store_chat, "upsert_tg_link", fake_upsert)
+    monkeypatch.setattr(lead_processor.store_chat, "set_conversation", fake_set_conv)
+
     lead_id, kind = await lead_processor.create_lead(payload, DummyClient())
     assert lead_id == 321
     assert kind == "master"
+    assert called["upsert"] == (123, "master", 321)
+    assert called["conv"] == (123, "master", "lead:321")
 
 
 @pytest.mark.asyncio
