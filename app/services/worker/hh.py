@@ -25,12 +25,18 @@ async def handle_hh_send_message(payload: dict):
 
     logger.info("hh.send_message: %s text=%r", nid, text[:40])
     client = get_http_client()
-    await hh_adapt.send_message(
-        response_id=nid,
-        text=text,
-        employer_id=owner_id,
-        client=client,
-    )
+    try:
+        await hh_adapt.send_message(
+            response_id=nid,
+            text=text,
+            employer_id=owner_id,
+            client=client,
+        )
+    except hh_adapt.HHError as err:  # pragma: no cover - network errors
+        if "topic_not_found" in str(err):
+            logger.warning("hh.send_message: topic not found %s", nid)
+            return
+        raise
 
 
 async def handle_hh_set_state(payload: dict):
@@ -47,9 +53,15 @@ async def handle_hh_set_state(payload: dict):
 
     logger.info("hh.set_state: %s -> %s", nid, action_id)
     client = get_http_client()
-    await hh_adapt.set_employer_state(
-        response_id=nid,
-        target_state=action_id,
-        employer_id=owner_id,
-        client=client,
-    )
+    try:
+        await hh_adapt.set_employer_state(
+            response_id=nid,
+            target_state=action_id,
+            employer_id=owner_id,
+            client=client,
+        )
+    except hh_adapt.HHError as err:  # pragma: no cover - network errors
+        if "topic_not_found" in str(err):
+            logger.warning("hh.set_state: topic not found %s", nid)
+            return
+        raise

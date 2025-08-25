@@ -9,7 +9,12 @@ dictionary with details specific to the direction of the mirror.
 import logging
 from aiogram import Bot
 
-from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
+from app.adapters.amochats import (
+    send_text_from_manager,
+    ensure_chat_created,
+    send_text_from_client,
+    AmoChatsError,
+)
 from app.core.config import get_settings
 from app.services.dedup import check_and_store, calc_key
 from app.store_chat import set_conversation
@@ -134,22 +139,29 @@ async def handle_mirror_bot_to_amo(payload: dict):
         raise RuntimeError("bot_to_amo: lead_id is required to create/attach chat")
 
     http_client = get_http_client()
-    amo = await AmoClient.create(http_client)
-
-    # основной контакт сделки
-    lead = await amo.get_lead(int(lead_id))
-    main_contact_id = (((lead.get("_embedded") or {}).get("contacts")) or [{}])[0].get("id")
+    amo = None
+    main_contact_id = None
+    try:
+        amo = await AmoClient.create(http_client)
+        lead = await amo.get_lead(int(lead_id))
+        main_contact_id = (((lead.get("_embedded") or {}).get("contacts")) or [{}])[0].get("id")
+    except Exception as err:  # pragma: no cover - network or token errors
+        logger.warning("amo client unavailable: %s", err)
 
     # создать чат, получить uuid, привязать к контакту
     if not conv_id:
-        conv_id, amo_uuid = await ensure_chat_created(
+        result = await ensure_chat_created(
             lead_id=int(lead_id),
             tg_user_id=user_id,
             tg_user_name=user_name,
             client=http_client,
             contact_id=main_contact_id,
         )
-        if main_contact_id and amo_uuid:
+        if isinstance(result, tuple):
+            conv_id, amo_uuid = result
+        else:
+            conv_id, amo_uuid = result, None
+        if amo and main_contact_id and amo_uuid:
             await amo.attach_chat_to_contact(int(main_contact_id), amo_uuid)
 
         # опционально сменить статус после первой инициализации
@@ -164,15 +176,18 @@ async def handle_mirror_bot_to_amo(payload: dict):
                 })
 
     # отправить сообщение после привязки
-    await with_retry(
-        lambda: send_text_from_client(
-            lead_id=int(lead_id),
-            text=text,
-            tg_user_id=user_id,
-            tg_user_name=user_name,
-            conversation_id=conv_id,
-            client=http_client,
-        ),
-        attempts=6,
-        is_retryable=lambda e: True,
-    )
+    try:
+        await with_retry(
+            lambda: send_text_from_client(
+                lead_id=int(lead_id),
+                text=text,
+                tg_user_id=user_id,
+                tg_user_name=user_name,
+                conversation_id=conv_id,
+                client=http_client,
+            ),
+            attempts=6,
+            is_retryable=lambda e: True,
+        )
+    except AmoChatsError as err:  # pragma: no cover - configuration errors
+        logger.warning("amochats send failed: %s", err)
