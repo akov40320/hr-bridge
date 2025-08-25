@@ -34,7 +34,7 @@ async def test_enrich_lead_updates_fields(monkeypatch):
     monkeypatch.setattr(settings, "AMO_CF_LEAD_APPLICANT_NAME_ID", 4)
     monkeypatch.setattr(settings, "AMO_CF_LEAD_APPLICANT_EMAIL_ID", 5)
 
-    await amo_lead_enrichment.enrich_lead(
+    contact_id = await amo_lead_enrichment.enrich_lead(
         amo,
         10,
         applicant_name="Ivan",
@@ -50,6 +50,8 @@ async def test_enrich_lead_updates_fields(monkeypatch):
     )
     assert "add_note" not in amo.calls
     assert amo.calls["create_contact"] == ("Ivan", "123", "i@ex.ru")
+    assert contact_id == 1
+    assert "link_contact_to_lead" not in amo.calls
 
 
 @pytest.mark.asyncio
@@ -62,7 +64,7 @@ async def test_enrich_lead_creates_note_when_no_cfs(monkeypatch):
     monkeypatch.setattr(settings, "AMO_CF_LEAD_APPLICANT_NAME_ID", 0)
     monkeypatch.setattr(settings, "AMO_CF_LEAD_APPLICANT_EMAIL_ID", 0)
 
-    await amo_lead_enrichment.enrich_lead(
+    contact_id = await amo_lead_enrichment.enrich_lead(
         amo,
         20,
         applicant_name="Anna",
@@ -83,3 +85,5 @@ async def test_enrich_lead_creates_note_when_no_cfs(monkeypatch):
         and "a@ex.ru" in note
     )
     assert amo.calls["create_contact"] == ("Anna", "456", "a@ex.ru")
+    assert contact_id == 1
+    assert "link_contact_to_lead" not in amo.calls

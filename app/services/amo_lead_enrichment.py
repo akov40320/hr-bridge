@@ -16,8 +16,11 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
     city: str | None,
     vacancy_title: str | None,
     email: str | None,
-) -> None:
-    """Attach extra data to a newly created lead."""
+) -> int | None:
+    """Attach extra data to a newly created lead.
+
+    Returns the ID of the created contact if a contact was created.
+    """
     s = get_settings()
 
     contact_id = None
@@ -25,9 +28,8 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
         try:
             cr = await amo.create_contact(applicant_name or "Кандидат", phone, email)
             contact_id = cr["_embedded"]["contacts"][0]["id"]
-            await amo.link_contact_to_lead(lead_id, contact_id)
         except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-            logger.warning("create/link contact failed: %s", e)
+            logger.warning("create contact failed: %s", e)
 
     cf: dict[int, str] = {}
     if s.AMO_CF_LEAD_CITY_ID:
@@ -66,6 +68,7 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
             await amo.add_note(lead_id, note)
         except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
             logger.warning("add note (candidate data) error: %s", e)
+    return contact_id
 
 
 __all__ = ["enrich_lead"]

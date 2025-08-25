@@ -109,7 +109,7 @@ async def create_lead(
 
     lead_id = created["_embedded"]["leads"][0]["id"]
 
-    await amo_lead_enrichment.enrich_lead(
+    contact_id = await amo_lead_enrichment.enrich_lead(
         client,
         lead_id,
         applicant_name=payload.applicant.name,
@@ -126,6 +126,7 @@ async def create_lead(
             lead_id=lead_id,
             tg_user_id=int(tg_user_id),
             tg_user_name=tg_user_name,
+            contact_id=contact_id,
             client=get_http_client(),
         )
         await store_chat.upsert_tg_link(
@@ -135,6 +136,12 @@ async def create_lead(
             await store_chat.set_conversation(
                 int(tg_user_id), kind, conv_id
             )
+
+    if contact_id:
+        try:
+            await client.link_contact_to_lead(lead_id, contact_id)
+        except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
+            logger.warning("link contact to lead failed: %s", e)
 
     await save_link(
         lead_id=lead_id,

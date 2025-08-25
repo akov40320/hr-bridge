@@ -52,9 +52,13 @@ async def test_create_lead(monkeypatch):
         async def add_tags(self, *a, **kw):
             pass
 
+        async def link_contact_to_lead(self, lead_id, contact_id):
+             called["link"] = (lead_id, contact_id)
+             called["order"].append("link")
+
     async def fake_enrich(*args, **kwargs):
         assert kwargs.get("email") == "j@e.ru"
-        return None
+        return 555
 
     async def fake_save_link(**kwargs):
         return None
@@ -62,17 +66,20 @@ async def test_create_lead(monkeypatch):
     monkeypatch.setattr(lead_processor.amo_lead_enrichment, "enrich_lead", fake_enrich)
     monkeypatch.setattr(lead_processor, "save_link", fake_save_link)
 
-    called = {}
+    called = {"order": []}
 
     async def fake_ensure_chat_created(**kwargs):
+        called["order"].append("chat")
         called["chat"] = kwargs
-        return "lead:321"
+        assert kwargs.get("contact_id") == 555
+        return "contact:555"
 
     async def fake_upsert(user_id, bot_kind, lead_id):
         called["upsert"] = (user_id, bot_kind, lead_id)
 
     async def fake_set_conv(user_id, bot_kind, conversation_id):
         called["conv"] = (user_id, bot_kind, conversation_id)
+        called["order"].append("conv")
 
     monkeypatch.setattr(lead_processor.amochats, "ensure_chat_created", fake_ensure_chat_created)
     monkeypatch.setattr(lead_processor.store_chat, "upsert_tg_link", fake_upsert)
@@ -82,7 +89,9 @@ async def test_create_lead(monkeypatch):
     assert lead_id == 321
     assert kind == "master"
     assert called["upsert"] == (123, "master", 321)
-    assert called["conv"] == (123, "master", "lead:321")
+    assert called["conv"] == (123, "master", "contact:555")
+    assert called["link"] == (321, 555)
+    assert called["order"] == ["chat", "conv", "link"]
 
 
 @pytest.mark.asyncio
