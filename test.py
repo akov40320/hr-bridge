@@ -1,51 +1,17 @@
-import hmac, hashlib, json
-from datetime import datetime, timezone
-import requests
-
-secret = "040afe61cf9128b9fbe36b7543cbdc9aa8769cb9"
-scope = "be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779"
-base = "https://hr-bridge.onrender.com"
-path = f"/webhooks/amo-chats/in/{scope}"
-url = base + path
-
-method = "POST"
-ctype = "application/json"
-
-body_obj = {
-    "payload": {
-        "msgid": "test-msg",
-        "message": {"text": "Тест"},
-        "conversation": {"id": "lead:20471555", "client_id": "lead:20471555"},
-        "sender": {"id": "tg:777", "name": "py-tester"},
-    }
+$Body = @{
+    client_id     = "85fe9a17-2b27-48a7-9544-4746cc1486bf"
+    client_secret = "ZN1TQ8QfnBEEGio5uOPNwR1BfByliN69pklekerUecCPibAytbQVNmjPsMW6dapy"
+    grant_type    = "authorization_code"
+    code          = "def5020021787ce5ecc45d8297e24facacb3471b295f8029aa6cefc5ae11601854c9c9c6ccd6e189acfc880cbcf9e35a98d9e48653146c6da8ccd84ebe0172d6989e22cd9ab5fe9531b1305d19d3be9b976d4f75082eab584a8b98b4c4241edb1c96cdfd4810f27a7b7a87d722af2d83e5562143539968a2c59de5678236848910222bc4b8d669c9085144a9629978eacdc43ff035f30f0d8e1f4645fc5fe6e430572d6891180b7d23f188f4205878d3e4d767a9b634033e924a38b9aeb5c5014c1038f8f8bcee59374c84f3d91a87648c6113d0152fb09c302894011f3cb986121ba902d32ddeecec706dc22df774972092ecb7c28e5c3dd234fd6aac6f9d96c13e43869a64001c9cc9250f3ed61fe18f0b325c6d19db61f42eeb534e7d7fee84fd6ca8feba4c7211f3d29abbc12f65f0b3249f2bcd517473cc69ea2401300d60a6b46fd1fc7c224aeb4f8a07b696a87f769837d6ab5ff8b961a90fc554fe22ae3c0b15ee866fdd95bfb35d0f7f1efaf5b8369819a4aa9ccf1adffaa2d54acbc452b1e58049d10d0c9b8049efbd5a8b76658a78a84ef88162a2395b929b19d1c480529a40406c93243ea887cce911d629408b88bbec30cccce2fd112cdda3345692de3cb4366d5b5450edf2c32fae263041263a33a4075963c25730e7e1985c96040f20f360ad5ff0affb2e356493459543613cc2447e977a48c28cd6ec9e30ee95580a42&state=9364RBlEuvOwXobX4qs9Pg&referer=dimitrieidifesk10.amocrm.ru&platform=1&client_id=85fe9a17-2b27-48a7-9544-4746cc1486bf"  # вставь весь твой code сюда
+    redirect_uri  = "https://hr-bridge.onrender.com/oauth/amo/start"
 }
+\
 
-body = json.dumps(body_obj, ensure_ascii=False, separators=(",", ":"))
 
-md5hex = hashlib.md5(body.encode("utf-8")).hexdigest()
-date_ = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
-
-string_to_sign = "\n".join([
-    method.upper(),
-    md5hex,
-    ctype,
-    date_,
-    path
-])
-
-sig = hmac.new(secret.encode("utf-8"), string_to_sign.encode("utf-8"), hashlib.sha1).hexdigest()
-
-headers = {
-    "Date": date_,
-    "Content-Type": ctype,
-    "Content-MD5": md5hex,
-    "X-Signature": sig,
-    "User-Agent": "py-amo-chats-tester/1.0",
+$Body = @{
+    client_id     = "85fe9a17-2b27-48a7-9544-4746cc1486bf"
+    client_secret = "ZN1TQ8QfnBEEGio5uOPNwR1BfByliN69pklekerUecCPibAytbQVNmjPsMW6dapy"
+    grant_type    = "authorization_code"
+    code          = "def5020021787ce5ecc45d8297e24facacb3471b295f8029aa6cefc5ae11601854c9c9c6ccd6e189acfc880cbcf9e35a98d9e48653146c6da8ccd84ebe0172d6989e22cd9ab5fe9531b1305d19d3be9b976d4f75082eab584a8b98b4c4241edb1c96cdfd4810f27a7b7a87d722af2d83e5562143539968a2c59de5678236848910222bc4b8d669c9085144a9629978eacdc43ff035f30f0d8e1f4645fc5fe6e430572d6891180b7d23f188f4205878d3e4d767a9b634033e924a38b9aeb5c5014c1038f8f8bcee59374c84f3d91a87648c6113d0152fb09c302894011f3cb986121ba902d32ddeecec706dc22df774972092ecb7c28e5c3dd234fd6aac6f9d96c13e43869a64001c9cc9250f3ed61fe18f0b325c6d19db61f42eeb534e7d7fee84fd6ca8feba4c7211f3d29abbc12f65f0b3249f2bcd517473cc69ea2401300d60a6b46fd1fc7c224aeb4f8a07b696a87f769837d6ab5ff8b961a90fc554fe22ae3c0b15ee866fdd95bfb35d0f7f1efaf5b8369819a4aa9ccf1adffaa2d54acbc452b1e58049d10d0c9b8049efbd5a8b76658a78a84ef88162a2395b929b19d1c480529a40406c93243ea887cce911d629408b88bbec30cccce2fd112cdda3345692de3cb4366d5b5450edf2c32fae263041263a33a4075963c25730e7e1985c96040f20f360ad5ff0affb2e356493459543613cc2447e977a48c28cd6ec9e30ee95580a42&state=9364RBlEuvOwXobX4qs9Pg"
+    redirect_uri  = "https://hr-bridge.onrender.com/oauth/amo/start"
 }
-
-print("Date:", date_)
-print("Content-MD5:", md5hex)
-print("X-Signature:", sig)
-
-r = requests.post(url, headers=headers, data=body.encode("utf-8"))
-print(r.status_code, r.text)
