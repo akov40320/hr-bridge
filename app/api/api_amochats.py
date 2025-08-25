@@ -28,11 +28,9 @@ router_amo_chats = APIRouter()
 def _md5_hex(b: bytes) -> str:
     return hashlib.md5(b).hexdigest().lower()
 
-
 async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()
 
-    # 1) секрет: если задан отдельный для входящих — используем его, иначе секрет канала
     s = get_settings()
     secret = (getattr(s, "AMOCHATS_INCOMING_SECRET", "") or getattr(s, "AMO_CHATS_SECRET", "")).strip()
     if not secret:
@@ -42,60 +40,66 @@ async def verify_amochats_signature(request: Request) -> None:
     if not got:
         raise HTTPException(status_code=401, detail="Missing signature")
 
-    # --- Вариант A: HMAC-SHA1(raw body)
-    hmac_body = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
-    if secrets.compare_digest(got, hmac_body):
-        return
-
-    # --- Вариант B: "каноническая строка"
     method = request.method.upper()
     date_hdr = request.headers.get("Date", "")
-
-    raw_ctype = (request.headers.get("Content-Type") or "application/json").strip()
-    ct_base = raw_ctype.split(";", 1)[0].strip()
-    ctype_variants = []
-    for ct in (raw_ctype, ct_base, "application/json"):
-        if ct and ct not in ctype_variants:
-            ctype_variants.append(ct)
-
-    md5_body = _md5_hex(raw)
+    ctype_full = (request.headers.get("Content-Type") or "application/json").strip()
+    ctype_base = ctype_full.split(";", 1)[0].strip()
+    ctype_variants = [v for v in (ctype_full, ctype_base, "application/json") if v]
 
     seen_path = request.url.path
     xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
     xorig = request.headers.get("X-Original-URI")
     path_variants = []
     for p in (
-            seen_path,
-            seen_path.rstrip("/") or "/",
-            f"{xpref}{seen_path}" if xpref else None,
-            (f"{xpref}{seen_path}".rstrip("/") if xpref else None),
-            xorig,
-            (xorig.rstrip("/") if xorig else None),
+        seen_path,
+        seen_path.rstrip("/") or "/",
+        f"{xpref}{seen_path}" if xpref else None,
+        (f"{xpref}{seen_path}".rstrip("/") if xpref else None),
+        xorig,
+        (xorig.rstrip("/") if xorig else None),
     ):
         if p and p not in path_variants:
             path_variants.append(p)
 
-    def sign(path: str, ctype: str) -> str:
-        s2s = "\n".join([method, md5_body, ctype, date_hdr, path])
+    md5_body = _md5_hex(raw)
+
+    def sign5(path: str, ctype: str, date_val: str) -> str:
+        # 5-строчная каноника: METHOD \n MD5 \n Content-Type \n Date \n PATH
+        s2s = "\n".join([method, md5_body, ctype, date_val, path])
         return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
 
-    for ct in ctype_variants:
-        for p in path_variants:
-            if secrets.compare_digest(got, sign(p, ct)):
-                return
+    def sign4(path: str, ctype: str) -> str:
+        # 4-строчная каноника БЕЗ Date (многие интеграции так делают, когда Date отсутствует)
+        s2s = "\n".join([method, md5_body, ctype, path])
+        return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
 
-    # --- не сошлось: лог подробностей
+    # --- 0) HMAC(body) и его «окраины» (\n)
+    h_body      = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
+    h_body_trim = hmac.new(secret.encode("utf-8"), raw.rstrip(b"\r\n"), hashlib.sha1).hexdigest().lower()
+    h_body_nl   = hmac.new(secret.encode("utf-8"), raw + (b"" if raw.endswith(b"\n") else b"\n"), hashlib.sha1).hexdigest().lower()
+    if got in (h_body, h_body_trim, h_body_nl):
+        return
+
+    # --- 1) 5-строчная каноника (если есть Date)
+    if date_hdr:
+        for ct in ctype_variants:
+            for p in path_variants:
+                if secrets.compare_digest(got, sign5(p, ct, date_hdr)):
+                    return
+
+    # --- 2) 4-строчная каноника (без Date) — актуально, если заголовка Date нет
+    if not date_hdr:
+        for ct in ctype_variants:
+            for p in path_variants:
+                if secrets.compare_digest(got, sign4(p, ct)):
+                    return
+
+    # --- не сошлось: лог всего, что помогает воспроизвести руками
     logger.warning(
-        "amo-chats sig-mismatch: got=%s date=%s method=%s md5=%s sha1=%s len=%d "
-        "path_seen=%s ctype=%s head64=%s tail64=%s",
-        got[:40],
-        date_hdr,
-        method,
-        md5_body,
-        hashlib.sha1(raw).hexdigest(),
-        len(raw),
-        seen_path,
-        raw_ctype,
+        "amo-chats sig-mismatch: got=%s date=%s method=%s md5=%s sha1=%s len=%d path_seen=%s ctype=%s "
+        "head64=%s tail64=%s",
+        got[:40], date_hdr, method, md5_body, hashlib.sha1(raw).hexdigest(),
+        len(raw), seen_path, ctype_full,
         base64.b64encode(raw[:64]).decode("ascii"),
         base64.b64encode(raw[-64:] if len(raw) >= 64 else raw).decode("ascii"),
     )
