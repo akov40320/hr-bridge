@@ -154,8 +154,8 @@ class AmoClient:
         url = f"{self.base}/api/v4/leads/{lead_id}"
         return await self._request("GET", url)
 
-    async def attach_chat_to_contact(self, contact_id: int, chat_id: str):
+    async def attach_chat_to_contact(self, contact_id: int, chat_uuid: str):
         """Привязать чат AmoChats к контакту (provider=amojo)."""
         url = f"{self.base}/api/v4/contacts/chats"
-        body = [{"contact_id": contact_id, "chat_id": chat_id, "provider": "amojo"}]
+        body = [{"contact_id": contact_id, "chat_id": chat_uuid, "provider": "amojo"}]
         return await self._request("POST", url, json=body)

@@ -59,22 +59,7 @@ async def handle_mirror_amo_to_tg(payload: dict):
 
 
 async def handle_mirror_tg_to_amo(payload: dict):
-    """Mirror a Telegram message into AMO CRM.
-
-    Args:
-        payload: Mapping with message information. Required keys include
-            ``lead_id``, ``text``, ``tg_user_id`` and ``bot_kind``; optional
-            keys are ``tg_user_name``, ``conversation_id`` and ``msg_key`` for
-            deduplication.
-
-    Behaviour:
-        Adds the message as a note in AMO and forwards it through the
-        ``send_text_from_client`` adapter. If a new conversation identifier is
-        returned, it is stored for later use.
-
-    Returns:
-        None
-    """
+    """Mirror a Telegram message into AMO CRM (with safe chat attach)."""
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
@@ -95,13 +80,26 @@ async def handle_mirror_tg_to_amo(payload: dict):
     http_client = get_http_client()
     amo = await AmoClient.create(http_client)
 
-    await with_retry(
-        lambda: amo.add_note(lead_id, f"[TG->{bot_kind}] {text}"),
-        attempts=6,
-        is_retryable=lambda e: True,
-    )
+    # лог в ленте
+    await with_retry(lambda: amo.add_note(lead_id, f"[TG->{bot_kind}] {text}"), attempts=6, is_retryable=lambda e: True)
 
-    new_cid = await with_retry(
+    # гарантируем, что чат создан и ПРИВЯЗАН к контакту до отправки сообщения
+    if not conv_id:
+        lead = await amo.get_lead(int(lead_id))
+        main_contact_id = (((lead.get("_embedded") or {}).get("contacts")) or [{}])[0].get("id")
+
+        conv_id, amo_uuid = await ensure_chat_created(
+            lead_id=int(lead_id),
+            tg_user_id=tg_user_id,
+            tg_user_name=tg_user_name,
+            client=http_client,
+            contact_id=main_contact_id,
+        )
+        if main_contact_id and amo_uuid:
+            await amo.attach_chat_to_contact(int(main_contact_id), amo_uuid)
+
+    # теперь безопасно отправляем
+    await with_retry(
         lambda: send_text_from_client(
             lead_id=lead_id,
             text=text,
@@ -113,26 +111,11 @@ async def handle_mirror_tg_to_amo(payload: dict):
         attempts=6,
         is_retryable=lambda e: True,
     )
-    if new_cid is not None and new_cid != conv_id:
-        await set_conversation(tg_user_id, bot_kind, new_cid)
+
 
 
 async def handle_mirror_bot_to_amo(payload: dict):
-    """Forward a bot-generated message to AMO chat.
-
-    Args:
-        payload: Mapping that contains ``text`` and ``user_id``. Optional keys
-            are ``user_name``, ``conversation_id``, ``lead_id`` and ``msg_key``
-            used for deduplication.
-
-    Behaviour:
-        Ensures an AMO chat conversation exists for the Telegram user and
-        sends the text as a manager message. Duplicate payloads are ignored
-        when ``msg_key`` has already been processed.
-
-    Returns:
-        None
-    """
+    """Forward a bot-generated message to AMO chat (attach before send)."""
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
@@ -147,49 +130,49 @@ async def handle_mirror_bot_to_amo(payload: dict):
     lead_id = payload.get("lead_id")
     status_id = payload.get("status_id")
 
-    http_client = get_http_client()
-    text_sent = False
+    if not lead_id:
+        raise RuntimeError("bot_to_amo: lead_id is required to create/attach chat")
 
-    if not conv_id and lead_id:
-        conv_id = await with_retry(
-            lambda: ensure_chat_created(
-                lead_id=int(lead_id),
-                tg_user_id=user_id,
-                tg_user_name=user_name,
-                client=http_client,
-                init_text=text,
-                init_as_manager=False,
-            ),
-            attempts=6,
-            is_retryable=lambda e: True,
+    http_client = get_http_client()
+    amo = await AmoClient.create(http_client)
+
+    # основной контакт сделки
+    lead = await amo.get_lead(int(lead_id))
+    main_contact_id = (((lead.get("_embedded") or {}).get("contacts")) or [{}])[0].get("id")
+
+    # создать чат, получить uuid, привязать к контакту
+    if not conv_id:
+        conv_id, amo_uuid = await ensure_chat_created(
+            lead_id=int(lead_id),
+            tg_user_id=user_id,
+            tg_user_name=user_name,
+            client=http_client,
+            contact_id=main_contact_id,
         )
-        text_sent = True
+        if main_contact_id and amo_uuid:
+            await amo.attach_chat_to_contact(int(main_contact_id), amo_uuid)
+
+        # опционально сменить статус после первой инициализации
         if status_id is not None:
             dedup = calc_key("chat_status", f"{lead_id}:{status_id}")
             if await check_and_store(dedup):
-                await rabbitmq.publish_task(
-                    {
-                        "platform": "amo",
-                        "action": "amo_update_status",
-                        "lead_id": int(lead_id),
-                        "status_id": int(status_id),
-                    }
-                )
+                await rabbitmq.publish_task({
+                    "platform": "amo",
+                    "action": "amo_update_status",
+                    "lead_id": int(lead_id),
+                    "status_id": int(status_id),
+                })
 
-    if not conv_id:
-        raise RuntimeError("bot_to_amo: no conversation_id and no lead_id to create one")
-
-    if not text_sent:
-        lead_for_call = int(lead_id) if lead_id is not None else 0
-        await with_retry(
-            lambda: send_text_from_client(
-                lead_id=lead_for_call,
-                text=text,
-                tg_user_id=user_id,
-                tg_user_name=user_name,
-                conversation_id=conv_id,
-                client=http_client,
-            ),
-            attempts=6,
-            is_retryable=lambda e: True,
-        )
+    # отправить сообщение после привязки
+    await with_retry(
+        lambda: send_text_from_client(
+            lead_id=int(lead_id),
+            text=text,
+            tg_user_id=user_id,
+            tg_user_name=user_name,
+            conversation_id=conv_id,
+            client=http_client,
+        ),
+        attempts=6,
+        is_retryable=lambda e: True,
+    )

@@ -119,35 +119,39 @@ async def create_lead(
         email=payload.applicant.email,
     )
 
+    if not contact_id:
+        try:
+            cr = await client.create_contact(payload.applicant.name or "Кандидат", None, None)
+            contact_id = cr["_embedded"]["contacts"][0]["id"]
+        except Exception as e:  # pragma: no cover
+            logger.warning("force create contact failed: %s", e)
+
+    if contact_id:
+        try:
+            await client.link_contact_to_lead(lead_id, contact_id)
+        except Exception as e:  # pragma: no cover
+            logger.warning("link contact to lead failed: %s", e)
+
     tg_user_id = getattr(payload, "tg_user_id", None)
     if tg_user_id:
         tg_user_name = getattr(payload, "tg_user_name", None)
-        conv_ref_id, amo_chat_uuid = await amochats.ensure_chat_created(
+        conv_id, amo_uuid = await amochats.ensure_chat_created(
             lead_id=lead_id,
             tg_user_id=int(tg_user_id),
             tg_user_name=tg_user_name,
             contact_id=contact_id,
             client=get_http_client(),
         )
-        await store_chat.upsert_tg_link(
-            user_id=int(tg_user_id), bot_kind=kind, lead_id=lead_id
-        )
-        if conv_ref_id:
-            await store_chat.set_conversation(
-                int(tg_user_id), kind, conv_ref_id
-            )
+        await store_chat.upsert_tg_link(user_id=int(tg_user_id), bot_kind=kind, lead_id=lead_id)
+        if conv_id:
+            await store_chat.set_conversation(int(tg_user_id), kind, conv_id)
 
-        if contact_id and amo_chat_uuid:
+        # 4) Привязать чат к контакту
+        if contact_id and amo_uuid:
             try:
-                await client.attach_chat_to_contact(contact_id, amo_chat_uuid)
-            except Exception as e:
+                await client.attach_chat_to_contact(int(contact_id), amo_uuid)
+            except Exception as e:  # pragma: no cover
                 logger.warning("attach chat to contact failed: %s", e)
-
-    if contact_id:
-        try:
-            await client.link_contact_to_lead(lead_id, contact_id)
-        except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-            logger.warning("link contact to lead failed: %s", e)
 
     await save_link(
         lead_id=lead_id,
