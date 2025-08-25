@@ -83,7 +83,7 @@ async def in_memory_db(monkeypatch):
 @pytest.fixture
 def app(monkeypatch):
     """FastAPI application with essential routers for tests."""
-    from app.api import hh_incoming
+    from app.api import hh_incoming, avito_incoming
 
     application = FastAPI()
 
@@ -93,7 +93,9 @@ def app(monkeypatch):
             return object()
 
     monkeypatch.setattr(hh_incoming, "AmoClient", DummyAmoClient, raising=False)
+    monkeypatch.setattr(avito_incoming, "AmoClient", DummyAmoClient, raising=False)
     application.include_router(hh_incoming.router)
+    application.include_router(avito_incoming.router)
     return application
 
 
