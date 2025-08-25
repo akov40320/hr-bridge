@@ -24,6 +24,7 @@ async def handle_hh_send_message(payload: dict):
     owner_id = payload.get("owner_id")
 
     logger.info("hh.send_message: %s text=%r", nid, text[:40])
+    logger.info("hh.send_message: nid=%s owner_id=%s text=%r", nid, owner_id, text[:40])
     client = get_http_client()
     await hh_adapt.send_message(
         response_id=nid,
@@ -46,6 +47,7 @@ async def handle_hh_set_state(payload: dict):
     owner_id = payload.get("owner_id")
 
     logger.info("hh.set_state: %s -> %s", nid, action_id)
+    logger.info("hh.set_state: nid=%s owner_id=%s -> %s", nid, owner_id, action_id)
     client = get_http_client()
     await hh_adapt.set_employer_state(
         response_id=nid,
