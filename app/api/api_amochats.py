@@ -40,66 +40,74 @@ async def verify_amochats_signature(request: Request) -> None:
     if not got:
         raise HTTPException(status_code=401, detail="Missing signature")
 
-    method = request.method.upper()
-    date_hdr = request.headers.get("Date", "")
-    ctype_full = (request.headers.get("Content-Type") or "application/json").strip()
-    ctype_base = ctype_full.split(";", 1)[0].strip()
-    ctype_variants = [v for v in (ctype_full, ctype_base, "application/json") if v]
+    method    = request.method.upper()
+    date_hdr  = request.headers.get("Date", "")
+    ctype_raw = (request.headers.get("Content-Type") or "application/json").strip()
+    ctype_base = ctype_raw.split(";", 1)[0].strip()
+    ctypes = []
+    for ct in (ctype_raw, ctype_base, "application/json"):
+        if ct and ct not in ctypes:
+            ctypes.append(ct)
 
     seen_path = request.url.path
     xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
     xorig = request.headers.get("X-Original-URI")
-    path_variants = []
-    for p in (
-        seen_path,
-        seen_path.rstrip("/") or "/",
-        f"{xpref}{seen_path}" if xpref else None,
-        (f"{xpref}{seen_path}".rstrip("/") if xpref else None),
-        xorig,
-        (xorig.rstrip("/") if xorig else None),
-    ):
-        if p and p not in path_variants:
-            path_variants.append(p)
+    paths = []
+    for p in (seen_path,
+              seen_path.rstrip("/") or "/",
+              f"{xpref}{seen_path}" if xpref else None,
+              (f"{xpref}{seen_path}".rstrip("/") if xpref else None),
+              xorig,
+              (xorig.rstrip("/") if xorig else None)):
+        if p and p not in paths:
+            paths.append(p)
 
     md5_body = _md5_hex(raw)
+    md5_empty = _md5_hex(b"")
 
-    def sign5(path: str, ctype: str, date_val: str) -> str:
-        # 5-строчная каноника: METHOD \n MD5 \n Content-Type \n Date \n PATH
-        s2s = "\n".join([method, md5_body, ctype, date_val, path])
+    def sig_hmac_body(b: bytes) -> str:
+        return hmac.new(secret.encode("utf-8"), b, hashlib.sha1).hexdigest().lower()
+
+    def sig_canon(parts: list[str], sep: str = "\n") -> str:
+        s2s = sep.join(parts)
         return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
 
-    def sign4(path: str, ctype: str) -> str:
-        # 4-строчная каноника БЕЗ Date (многие интеграции так делают, когда Date отсутствует)
-        s2s = "\n".join([method, md5_body, ctype, path])
-        return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
+    # — кандидаты: HMAC(body) и варианты с переводами строки
+    body_variants = [
+        ("hmac(body)",            sig_hmac_body(raw)),
+        ("hmac(body.rstrip)",     sig_hmac_body(raw.rstrip(b"\r\n"))),
+        ("hmac(body+\\n)",        sig_hmac_body(raw if raw.endswith(b"\n") else raw + b"\n")),
+    ]
+    for name, cand in body_variants:
+        if secrets.compare_digest(got, cand):
+            logger.info("amo-chats signature matched by %s", name)
+            return
 
-    # --- 0) HMAC(body) и его «окраины» (\n)
-    h_body      = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
-    h_body_trim = hmac.new(secret.encode("utf-8"), raw.rstrip(b"\r\n"), hashlib.sha1).hexdigest().lower()
-    h_body_nl   = hmac.new(secret.encode("utf-8"), raw + (b"" if raw.endswith(b"\n") else b"\n"), hashlib.sha1).hexdigest().lower()
-    if got in (h_body, h_body_trim, h_body_nl):
-        return
+    # — каноника: 5 строк (с Date) и 4 строки (без Date); с md5=body и md5=''
+    canon_defs = []
+    for ct in ctypes:
+        for p in paths:
+            # 5-строчная (METHOD, MD5, CT, DATE, PATH)
+            if date_hdr:
+                canon_defs.append((f"canon5 md5=body ct={ct} date", [method, md5_body, ct, date_hdr, p]))
+                canon_defs.append((f"canon5 md5=empty ct={ct} date", [method, md5_empty, ct, date_hdr, p]))
+            # 4-строчная (METHOD, MD5, CT, PATH)
+            canon_defs.append((f"canon4 md5=body ct={ct}", [method, md5_body, ct, p]))
+            canon_defs.append((f"canon4 md5=empty ct={ct}", [method, md5_empty, ct, p]))
 
-    # --- 1) 5-строчная каноника (если есть Date)
-    if date_hdr:
-        for ct in ctype_variants:
-            for p in path_variants:
-                if secrets.compare_digest(got, sign5(p, ct, date_hdr)):
-                    return
+    for name, parts in canon_defs:
+        for sep in ("\n", "\r\n"):
+            cand = sig_canon(parts, sep=sep)
+            if secrets.compare_digest(got, cand):
+                logger.info("amo-chats signature matched by %s sep=%r", name, sep)
+                return
 
-    # --- 2) 4-строчная каноника (без Date) — актуально, если заголовка Date нет
-    if not date_hdr:
-        for ct in ctype_variants:
-            for p in path_variants:
-                if secrets.compare_digest(got, sign4(p, ct)):
-                    return
-
-    # --- не сошлось: лог всего, что помогает воспроизвести руками
+    # — ничего не подошло: подробный лог для оффлайн-сравнения
     logger.warning(
         "amo-chats sig-mismatch: got=%s date=%s method=%s md5=%s sha1=%s len=%d path_seen=%s ctype=%s "
         "head64=%s tail64=%s",
         got[:40], date_hdr, method, md5_body, hashlib.sha1(raw).hexdigest(),
-        len(raw), seen_path, ctype_full,
+        len(raw), seen_path, ctype_raw,
         base64.b64encode(raw[:64]).decode("ascii"),
         base64.b64encode(raw[-64:] if len(raw) >= 64 else raw).decode("ascii"),
     )
