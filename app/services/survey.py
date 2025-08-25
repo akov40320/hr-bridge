@@ -79,3 +79,16 @@ async def mark_went_to_bot_async(
         "lead_id": lead_id,
         "tags": [s.AMO_TAG_WENT_TO_BOT],
     })
+    stage_id = (
+        s.AMO_STAGE_ID_MASTER_NEW
+        if bot_kind == "master"
+        else s.AMO_STAGE_ID_OPERATOR_NEW
+    )
+    await queue_client.publish_task(
+        {
+            "platform": "amo",
+            "action": "amo_update_status",
+            "lead_id": lead_id,
+            "status_id": stage_id,
+        }
+    )
