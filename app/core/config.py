@@ -38,8 +38,10 @@ class Settings(BaseSettings):
     # IDшники воронок/стадий — как Optional[int]
     AMO_PIPELINE_ID_MASTER: Optional[int] = None
     AMO_STAGE_ID_MASTER_NEW: Optional[int] = None
+    AMO_STAGE_ID_MASTER_SURVEY: Optional[int] = None
     AMO_PIPELINE_ID_OPERATOR: Optional[int] = None
     AMO_STAGE_ID_OPERATOR_NEW: Optional[int] = None
+    AMO_STAGE_ID_OPERATOR_SURVEY: Optional[int] = None
 
     # Теги/роутинг
     AMO_TAG_WENT_TO_BOT: str = "Перешел в бота"
@@ -123,8 +125,10 @@ class Settings(BaseSettings):
             ("AMO_REDIRECT_URI", self.AMO_REDIRECT_URI),
             ("AMO_PIPELINE_ID_MASTER", self.AMO_PIPELINE_ID_MASTER),
             ("AMO_STAGE_ID_MASTER_NEW", self.AMO_STAGE_ID_MASTER_NEW),
+            ("AMO_STAGE_ID_MASTER_SURVEY", self.AMO_STAGE_ID_MASTER_SURVEY),
             ("AMO_PIPELINE_ID_OPERATOR", self.AMO_PIPELINE_ID_OPERATOR),
             ("AMO_STAGE_ID_OPERATOR_NEW", self.AMO_STAGE_ID_OPERATOR_NEW),
+            ("AMO_STAGE_ID_OPERATOR_SURVEY", self.AMO_STAGE_ID_OPERATOR_SURVEY),
             ("ADMIN_TOKEN", self.ADMIN_TOKEN),
             # AmoChats — если включено автоподключение/использование
             (

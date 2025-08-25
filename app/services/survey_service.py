@@ -52,4 +52,17 @@ class SurveyService:
             "lead_id": lead_id,
             "text": f"[{bot_kind}] {summary}",
         })
+        stage_id = (
+            s.AMO_STAGE_ID_MASTER_SURVEY
+            if bot_kind == "master"
+            else s.AMO_STAGE_ID_OPERATOR_SURVEY
+        )
+        await self.queue_client.publish_task(
+            {
+                "platform": "amo",
+                "action": "amo_update_status",
+                "lead_id": lead_id,
+                "status_id": stage_id,
+            }
+        )
         await delete_survey(user_id, bot_kind)
