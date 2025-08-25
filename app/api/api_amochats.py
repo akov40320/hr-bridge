@@ -30,74 +30,56 @@ def _md5_hex(b: bytes) -> str:
 
 
 async def verify_amochats_signature(request: Request) -> None:
-    """
-    Проверка подписи AmoChats по схеме:
-      HMAC-SHA1( secret,  METHOD + "\n" + MD5(body) + "\n" + Content-Type + "\n" + Date + "\n" + PATH )
-    где PATH — путь без query, как в исходящем примере.
-    """
     raw = await request.body()
 
-    # 1) секрет канала (ТОТ ЖЕ, что используешь при исходящих в Chat API)
-    secret = (get_settings().AMO_CHATS_SECRET or "").strip()
+    # сначала пробуем отдельный секрет вебхука (если задан), иначе — секрет канала
+    s = get_settings()
+    secret = (getattr(s, "AMOCHATS_INCOMING_SECRET", "") or getattr(s, "AMO_CHATS_SECRET", "")).strip()
     if not secret:
         raise HTTPException(status_code=401, detail="Missing secret")
 
-    # 2) подпись из заголовка
     got = (request.headers.get("X-Signature") or "").strip().lower()
     if not got:
         raise HTTPException(status_code=401, detail="Missing signature")
 
-    # 3) собираем компоненты строки
+    # КАНДИДАТ №1: HMAC-SHA1(raw body)
+    sig_body = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
+    if secrets.compare_digest(got, sig_body):
+        return
+
     method = request.method.upper()
     date_hdr = request.headers.get("Date", "")
-
     raw_ctype = (request.headers.get("Content-Type") or "application/json").strip()
-    base_ctype = raw_ctype.split(";", 1)[0].strip()
-    ctype_candidates = []
-    for ct in (raw_ctype, base_ctype, "application/json"):
-        if ct and ct not in ctype_candidates:
-            ctype_candidates.append(ct)
-
-    # пути иногда «портят» прокси — подстрахуемся
-    seen = request.url.path
-    xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
-    xorig = request.headers.get("X-Original-URI")
-    path_candidates = []
-    for p in (
-        seen,
-        seen.rstrip("/") or "/",
-        f"{xpref}{seen}" if xpref else None,
-        (f"{xpref}{seen}".rstrip("/") if xpref else None),
-        xorig,
-        (xorig.rstrip("/") if xorig else None) if xorig else None,
-    ):
-        if p and p not in path_candidates:
-            path_candidates.append(p)
+    ct_base = raw_ctype.split(";", 1)[0].strip()
+    ctype_variants = [v for v in (raw_ctype, ct_base, "application/json") if v]
 
     md5_body = _md5_hex(raw)
 
-    def calc_sig(path: str, ctype: str) -> str:
-        string_to_sign = "\n".join([method, md5_body, ctype, date_hdr, path])
-        return hmac.new(secret.encode("utf-8"),
-                        string_to_sign.encode("utf-8"),
-                        hashlib.sha1).hexdigest().lower()
+    seen = request.url.path
+    xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
+    xorig = request.headers.get("X-Original-URI")
+    path_variants = []
+    for p in (
+            seen,
+            seen.rstrip("/") or "/",
+            f"{xpref}{seen}" if xpref else None,
+            (f"{xpref}{seen}".rstrip("/") if xpref else None),
+            xorig,
+            (xorig.rstrip("/") if xorig else None),
+    ):
+        if p and p not in path_variants:
+            path_variants.append(p)
 
-    # 4) проверяем все разумные комбинации
-    for ct in ctype_candidates:
-        for path in path_candidates:
-            if secrets.compare_digest(got, calc_sig(path, ct)):
-                return  # ok
+    def sign(path: str, ctype: str) -> str:
+        s2s = "\n".join([method, md5_body, ctype, date_hdr, path])
+        return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
 
-    # 5) (необязательный fallback) некоторые интеграции шлют HMAC-SHA1(body)
-    fallback = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
-    if secrets.compare_digest(got, fallback):
-        return
+    for ct in ctype_variants:
+        for path in path_variants:
+            if secrets.compare_digest(got, sign(path, ct)):
+                return
 
-    # 6) иначе — 401 и лог
-    logger.warning(
-        "amo-chats invalid signature: got=%s len=%d path=%s",
-        got[:12], len(raw), seen
-    )
+    logger.warning("amo-chats invalid signature: got=%s len=%d path=%s", got[:12], len(raw), seen)
     raise HTTPException(status_code=401, detail="Invalid signature")
 
 
