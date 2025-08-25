@@ -6,6 +6,7 @@ from app.services.survey_service import SurveyService
 
 settings = get_settings()
 
+
 @pytest.mark.asyncio
 async def test_start(monkeypatch, queue_mock):
     called = []
@@ -16,23 +17,70 @@ async def test_start(monkeypatch, queue_mock):
     monkeypatch.setattr(
         "app.services.survey_service.start_or_reset_survey", fake_start_or_reset
     )
+    monkeypatch.setattr(settings, "AMO_STAGE_ID_MASTER_NEW", 1)
+    monkeypatch.setattr(settings, "AMO_STAGE_ID_OPERATOR_NEW", 2)
 
     svc = SurveyService()
-    await svc.start(1, "bot", 10, "id:42")
+    await svc.start(1, "master", 10, "id:42")
 
-    assert called == [(1, "bot", 10)]
+    assert called == [(1, "master", 10)]
     assert queue_mock == [
         {
             "platform": "amo",
             "action": "amo_add_note",
             "lead_id": 10,
-            "text": "[bot] Кандидат перешёл в бота (TG id:42).",
+            "text": "[master] Кандидат перешёл в бота (TG id:42).",
         },
         {
             "platform": "amo",
             "action": "amo_add_tags",
             "lead_id": 10,
             "tags": [settings.AMO_TAG_WENT_TO_BOT],
+        },
+        {
+            "platform": "amo",
+            "action": "amo_update_status",
+            "lead_id": 10,
+            "status_id": settings.AMO_STAGE_ID_MASTER_NEW,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_start_operator(monkeypatch, queue_mock):
+    called = []
+
+    async def fake_start_or_reset(user_id, bot_kind, lead_id):
+        called.append((user_id, bot_kind, lead_id))
+
+    monkeypatch.setattr(
+        "app.services.survey_service.start_or_reset_survey", fake_start_or_reset
+    )
+    monkeypatch.setattr(settings, "AMO_STAGE_ID_MASTER_NEW", 3)
+    monkeypatch.setattr(settings, "AMO_STAGE_ID_OPERATOR_NEW", 4)
+
+    svc = SurveyService()
+    await svc.start(2, "operator", 20, "id:99")
+
+    assert called == [(2, "operator", 20)]
+    assert queue_mock == [
+        {
+            "platform": "amo",
+            "action": "amo_add_note",
+            "lead_id": 20,
+            "text": "[operator] Кандидат перешёл в бота (TG id:99).",
+        },
+        {
+            "platform": "amo",
+            "action": "amo_add_tags",
+            "lead_id": 20,
+            "tags": [settings.AMO_TAG_WENT_TO_BOT],
+        },
+        {
+            "platform": "amo",
+            "action": "amo_update_status",
+            "lead_id": 20,
+            "status_id": settings.AMO_STAGE_ID_OPERATOR_NEW,
         },
     ]
 
