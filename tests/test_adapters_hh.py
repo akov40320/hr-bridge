@@ -46,6 +46,29 @@ async def test_hh_send_message_error(monkeypatch, token_mock):
 
 
 @pytest.mark.asyncio
+async def test_hh_set_state(monkeypatch, token_mock):
+    async def fake_with_retry(coro, attempts, is_retryable):
+        return await coro()
+
+    monkeypatch.setattr(hh, "with_retry", fake_with_retry)
+    token = token_mock
+    captured = {}
+
+    def handler(request):
+        captured["method"] = request.method
+        captured["url"] = str(request.url)
+        assert request.headers["Authorization"] == f"Bearer {token}"
+        assert request.headers["Accept"] == "application/json"
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await hh.set_employer_state("resp1", "phone_interview", "emp1", client)
+
+    assert captured["method"] == "PUT"
+    assert captured["url"].endswith("/negotiations/resp1/phone_interview")
+
+
+@pytest.mark.asyncio
 async def test_hh_fetch_applicant_details(monkeypatch, token_mock):
 
     def handler(request):

@@ -171,7 +171,7 @@ async def send_invite(
             "platform": "hh",
             "action": "set_state",
             "negotiation_id": negotiation_id,
-            "action_id": "phone_interview",   # PUT /negotiations/phone_interview/{nid}
+            "action_id": "phone_interview",   # PUT /negotiations/{nid}/phone_interview
             "owner_id": payload.owner_id,
         })
         # 2) Сообщение кандидату (form-urlencoded, HH-User-Agent на стороне воркера)
