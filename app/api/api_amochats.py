@@ -29,7 +29,7 @@ def _md5_hex(b: bytes) -> str:
     return hashlib.md5(b).hexdigest().lower()
 
 
-async def verify_amochats_signature(request):
+async def verify_amochats_signature(request: Request) -> None:
     """
     Проверка подписи AmoChats по схеме:
       HMAC-SHA1( secret,  METHOD + "\n" + MD5(body) + "\n" + Content-Type + "\n" + Date + "\n" + PATH )
