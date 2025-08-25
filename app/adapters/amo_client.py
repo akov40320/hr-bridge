@@ -153,3 +153,14 @@ class AmoClient:
         """Retrieve a lead by its identifier."""
         url = f"{self.base}/api/v4/leads/{lead_id}"
         return await self._request("GET", url)
+
+    async def get_lead_with_contacts(self, lead_id: int):
+        """Retrieve a lead with embedded contacts."""
+        url = f"{self.base}/api/v4/leads/{int(lead_id)}?with=contacts"
+        return await self._request("GET", url)
+
+    async def bind_chat_to_contact(self, contact_id: int, chat_id: str):
+        """Bind a chat to a contact (POST /api/v4/contacts/chats)."""
+        url = f"{self.base}/api/v4/contacts/chats"
+        body = [{"contact_id": int(contact_id), "chat_id": str(chat_id)}]
+        return await self._request("POST", url, json=body)

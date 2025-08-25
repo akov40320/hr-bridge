@@ -14,7 +14,6 @@ import httpx
 
 from app.core.config import get_settings
 
-
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -62,11 +61,11 @@ def _dump(obj: dict[str, Any]) -> bytes:
 
 
 def _build_headers(
-    secret: str,
-    method: str,
-    path: str,
-    body: bytes | None,
-    account_id: str | None = None,   # <— добавили
+        secret: str,
+        method: str,
+        path: str,
+        body: bytes | None,
+        account_id: str | None = None,  # <— добавили
 ) -> dict[str, str]:
     date_hdr = formatdate(usegmt=True)
     ctype = "application/json"
@@ -124,8 +123,8 @@ async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncCli
 
 
 async def send_text_from_client(
-    *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
-    conversation_id: str | None = None, client: httpx.AsyncClient,
+        *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
+        conversation_id: str | None = None, client: httpx.AsyncClient,
 ) -> str | None:
     ac = _get_client()
 
@@ -137,7 +136,8 @@ async def send_text_from_client(
     path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
-    now_s = int(time.time()); now_ms = int(time.time() * 1000)
+    now_s = int(time.time());
+    now_ms = int(time.time() * 1000)
     payload = {
         "event_type": "new_message",
         "payload": {
@@ -161,13 +161,13 @@ async def send_text_from_client(
 
 
 async def send_text_from_manager(  # pylint: disable=too-many-arguments
-    *,
-    conversation_id: str,  # здесь нужен уже существующий uuid/id чата
-    user_id: int,
-    user_name: str | None,
-    avatar: str | None,
-    text: str,
-    client: httpx.AsyncClient,
+        *,
+        conversation_id: str,  # здесь нужен уже существующий uuid/id чата
+        user_id: int,
+        user_name: str | None,
+        avatar: str | None,
+        text: str,
+        client: httpx.AsyncClient,
 ) -> None:
     """
     Сообщение 'от менеджера' — используем sender.ref_id = AMO_CHATS_SENDER_USER_AMOJO_ID,
@@ -207,14 +207,16 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
 
 
 async def ensure_chat_created(
-    *,
-    lead_id: int,
-    tg_user_id: int,
-    tg_user_name: str | None,
-    client: httpx.AsyncClient,
-    init_text: str | None = None,       # если передан — отправим первым сообщением
-    init_as_manager: bool = False,      # False = как кандидат, True = как менеджер
-    send_default_system: bool = False,  # если True и init_text не задан — отправим тех.сообщение
+        *,
+        lead_id: int,
+        tg_user_id: int,
+        tg_user_name: str | None,
+        client: httpx.AsyncClient,
+        contact_id: int | None = None,
+        bind_contact_id: int | None = None,
+        init_text: str | None = None,
+        init_as_manager: bool = False,
+        send_default_system: bool = False,
 ) -> str:
     """
     Создаёт (или находит) чат в AmoChats по conversation_id='lead:<lead_id>'.
@@ -223,20 +225,24 @@ async def ensure_chat_created(
     Возвращает:
         str: conversation_id (тот же детерминированный 'lead:<lead_id>')
     """
+
+    from app.adapters.amo_client import AmoClient
+
     ac = _get_client()
 
     # стабильный ID чата на стороне интеграции
-    conv_id = f"lead:{lead_id}"
+    conv_id = f"contact:{contact_id}" if contact_id else f"lead:{lead_id}"
 
     # 1) создать/найти чат
     path_chats = f"/v2/origin/custom/{ac.scope_id}/chats"
     url_chats = _base() + path_chats
     body_chats = _dump({
-        "conversation_id": conv_id,              # ВАЖНО: используем conversation_id
+        "conversation_id": conv_id,
         "user": {
             "id": f"tg:{tg_user_id}",
             "name": tg_user_name or f"tg_{tg_user_id}",
         },
+
     })
     headers_chats = _build_headers(ac.secret, "POST", path_chats, body_chats, ac.account_id)
     r = await client.post(url_chats, content=body_chats, headers=headers_chats, timeout=30)
@@ -245,10 +251,36 @@ async def ensure_chat_created(
 
     logger.info("ensure_chat_created: ok for lead=%s -> conv_id=%s", lead_id, conv_id)
 
-    # 2) при необходимости — отправить первое сообщение в только что созданный чат
+    # попытаться вытащить chat_id из ответа
+    chat_id: str | None = None
+    try:
+        jr = r.json() if r.content else {}
+        # разные инсталляции могут отдать по-разному — пробуем распространённые места
+        chat_id = (
+                jr.get("chat_id")
+                or jr.get("id")
+                or (jr.get("payload") or {}).get("chat_id")
+                or (jr.get("_embedded") or {}).get("chats", [{}])[0].get("id")
+        )
+    except Exception:  # pragma: no cover
+        logger.warning("ensure_chat_created: parse chat_id failed", exc_info=True)
+
+    logger.info("ensure_chat_created: ok for %s -> conv_id=%s chat_id=%s",
+                ("contact" if contact_id else "lead"),
+                conv_id, chat_id or "-")
+
+    # 1.1) при желании — сразу привяжем чат к контакту
+    if bind_contact_id and chat_id:
+        try:
+            amo = await AmoClient.create(client)
+            await amo.bind_chat_to_contact(bind_contact_id, chat_id)
+            logger.info("chat bound to contact: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
+        except Exception:
+            logger.warning("bind chat to contact failed", exc_info=True)
+
+    # 2) опционально отправить первое сообщение
     path_msg = f"/v2/origin/custom/{ac.scope_id}"
     url_msg = _base() + path_msg
-
     def _now():
         return int(time.time()), int(time.time() * 1000)
 
@@ -299,6 +331,4 @@ async def ensure_chat_created(
     except Exception:
         logger.warning("ensure_chat_created: initial message post failed", exc_info=True)
 
-
     return conv_id
-

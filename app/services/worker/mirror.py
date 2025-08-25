@@ -151,19 +151,35 @@ async def handle_mirror_bot_to_amo(payload: dict):
     text_sent = False
 
     if not conv_id and lead_id:
+
+        amo = await AmoClient.create(http_client)
+        contact_id: int | None = None
+        try:
+            lead = await amo.get_lead_with_contacts(int(lead_id))
+            emb = (lead or {}).get("_embedded") or {}
+            contacts = emb.get("contacts") or []
+            if contacts:
+                contact_id = int(contacts[0]["id"])
+        except Exception:
+            logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
+
         conv_id = await with_retry(
             lambda: ensure_chat_created(
                 lead_id=int(lead_id),
+                contact_id=contact_id,
+                bind_contact_id=contact_id,
                 tg_user_id=user_id,
                 tg_user_name=user_name,
                 client=http_client,
                 init_text=text,
-                init_as_manager=False,
+                init_as_manager=True,
             ),
             attempts=6,
             is_retryable=lambda e: True,
         )
+
         text_sent = True
+
         if status_id is not None:
             dedup = calc_key("chat_status", f"{lead_id}:{status_id}")
             if await check_and_store(dedup):

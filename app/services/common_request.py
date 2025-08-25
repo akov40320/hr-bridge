@@ -10,11 +10,12 @@ from app.http_client import get_http_client
 
 T = typing.TypeVar("T")
 
+
 async def perform_request(
-    func: typing.Callable[..., typing.Awaitable[T]],
-    *args: typing.Any,
-    client=None,
-    **kwargs: typing.Any,
+        func: typing.Callable[..., typing.Awaitable[T]],
+        *args: typing.Any,
+        client=None,
+        **kwargs: typing.Any,
 ) -> T:
     """Execute *func* with a shared HTTP client.
 
