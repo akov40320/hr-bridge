@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import logging
 import secrets
-
+import base64
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -25,61 +25,44 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
-def _md5_hex(b: bytes) -> str:
-    return hashlib.md5(b).hexdigest().lower()
-
-
 async def verify_amochats_signature(request: Request) -> None:
     raw = await request.body()
 
-    # сначала пробуем отдельный секрет вебхука (если задан), иначе — секрет канала
+    # 1) секрет: отдельный для входящих если есть, иначе секрет канала
     s = get_settings()
     secret = (getattr(s, "AMOCHATS_INCOMING_SECRET", "") or getattr(s, "AMO_CHATS_SECRET", "")).strip()
     if not secret:
         raise HTTPException(status_code=401, detail="Missing secret")
 
+    # 2) подпись из заголовка
     got = (request.headers.get("X-Signature") or "").strip().lower()
     if not got:
         raise HTTPException(status_code=401, detail="Missing signature")
 
-    # КАНДИДАТ №1: HMAC-SHA1(raw body)
-    sig_body = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
-    if secrets.compare_digest(got, sig_body):
+    # 3) считаем HMAC-SHA1(raw body)
+    calc = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
+
+    # 4) если ок — просто выходим
+    if secrets.compare_digest(got, calc):
         return
 
-    method = request.method.upper()
-    date_hdr = request.headers.get("Date", "")
-    raw_ctype = (request.headers.get("Content-Type") or "application/json").strip()
-    ct_base = raw_ctype.split(";", 1)[0].strip()
-    ctype_variants = [v for v in (raw_ctype, ct_base, "application/json") if v]
+    # 5) расширенный лог при расхождении
+    sha1_body = hashlib.sha1(raw).hexdigest()
+    md5_body = hashlib.md5(raw).hexdigest()
+    ctype = request.headers.get("Content-Type")
+    cenc  = request.headers.get("Content-Encoding")
+    te    = request.headers.get("Transfer-Encoding")
 
-    md5_body = _md5_hex(raw)
+    # полезно видеть кусочки тела, но не весь
+    head_b64 = base64.b64encode(raw[:64]).decode("ascii")
+    tail_b64 = base64.b64encode(raw[-64:] if len(raw) >= 64 else raw).decode("ascii")
 
-    seen = request.url.path
-    xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
-    xorig = request.headers.get("X-Original-URI")
-    path_variants = []
-    for p in (
-            seen,
-            seen.rstrip("/") or "/",
-            f"{xpref}{seen}" if xpref else None,
-            (f"{xpref}{seen}".rstrip("/") if xpref else None),
-            xorig,
-            (xorig.rstrip("/") if xorig else None),
-    ):
-        if p and p not in path_variants:
-            path_variants.append(p)
-
-    def sign(path: str, ctype: str) -> str:
-        s2s = "\n".join([method, md5_body, ctype, date_hdr, path])
-        return hmac.new(secret.encode("utf-8"), s2s.encode("utf-8"), hashlib.sha1).hexdigest().lower()
-
-    for ct in ctype_variants:
-        for path in path_variants:
-            if secrets.compare_digest(got, sign(path, ct)):
-                return
-
-    logger.warning("amo-chats invalid signature: got=%s len=%d path=%s", got[:12], len(raw), seen)
+    logger.warning(
+        "amo-chats sig-mismatch: got=%s calc=%s sha1(body)=%s md5(body)=%s "
+        "len=%d path=%s ctype=%s cenc=%s te=%s head64=%s tail64=%s",
+        got, calc, sha1_body, md5_body,
+        len(raw), request.url.path, ctype, cenc, te, head_b64, tail_b64
+    )
     raise HTTPException(status_code=401, detail="Invalid signature")
 
 
