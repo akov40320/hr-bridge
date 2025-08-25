@@ -24,38 +24,81 @@ from app.store_chat import (
 logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
-import base64, gzip
+
+def _md5_hex(b: bytes) -> str:
+    return hashlib.md5(b).hexdigest().lower()
 
 
-async def verify_amochats_signature(request: Request) -> None:
+async def verify_amochats_signature(request):
+    """
+    Проверка подписи AmoChats по схеме:
+      HMAC-SHA1( secret,  METHOD + "\n" + MD5(body) + "\n" + Content-Type + "\n" + Date + "\n" + PATH )
+    где PATH — путь без query, как в исходящем примере.
+    """
     raw = await request.body()
-    secret = (get_settings().AMO_CHATS_SECRET or "").encode("utf-8")
+
+    # 1) секрет канала (ТОТ ЖЕ, что используешь при исходящих в Chat API)
+    secret = (get_settings().AMO_CHATS_SECRET or "").strip()
+    if not secret:
+        raise HTTPException(status_code=401, detail="Missing secret")
+
+    # 2) подпись из заголовка
     got = (request.headers.get("X-Signature") or "").strip().lower()
+    if not got:
+        raise HTTPException(status_code=401, detail="Missing signature")
 
-    calc = hmac.new(secret, raw, hashlib.sha1).hexdigest().lower()
+    # 3) собираем компоненты строки
+    method = request.method.upper()
+    date_hdr = request.headers.get("Date", "")
 
-    # Доп. гипотезы:
-    cand = {
-        "sha1(body)": hashlib.sha1(raw).hexdigest(),
-        "hmac(body)": calc,
-        "hmac(body+\\n)": hmac.new(secret, raw + b"\n", hashlib.sha1).hexdigest().lower(),
-        "hmac(gzip(body))": hmac.new(secret, gzip.compress(raw), hashlib.sha1).hexdigest().lower(),
-    }
+    raw_ctype = (request.headers.get("Content-Type") or "application/json").strip()
+    base_ctype = raw_ctype.split(";", 1)[0].strip()
+    ctype_candidates = []
+    for ct in (raw_ctype, base_ctype, "application/json"):
+        if ct and ct not in ctype_candidates:
+            ctype_candidates.append(ct)
 
+    # пути иногда «портят» прокси — подстрахуемся
+    seen = request.url.path
+    xpref = (request.headers.get("X-Forwarded-Prefix") or "").rstrip("/")
+    xorig = request.headers.get("X-Original-URI")
+    path_candidates = []
+    for p in (
+        seen,
+        seen.rstrip("/") or "/",
+        f"{xpref}{seen}" if xpref else None,
+        (f"{xpref}{seen}".rstrip("/") if xpref else None),
+        xorig,
+        (xorig.rstrip("/") if xorig else None) if xorig else None,
+    ):
+        if p and p not in path_candidates:
+            path_candidates.append(p)
+
+    md5_body = _md5_hex(raw)
+
+    def calc_sig(path: str, ctype: str) -> str:
+        string_to_sign = "\n".join([method, md5_body, ctype, date_hdr, path])
+        return hmac.new(secret.encode("utf-8"),
+                        string_to_sign.encode("utf-8"),
+                        hashlib.sha1).hexdigest().lower()
+
+    # 4) проверяем все разумные комбинации
+    for ct in ctype_candidates:
+        for path in path_candidates:
+            if secrets.compare_digest(got, calc_sig(path, ct)):
+                return  # ok
+
+    # 5) (необязательный fallback) некоторые интеграции шлют HMAC-SHA1(body)
+    fallback = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest().lower()
+    if secrets.compare_digest(got, fallback):
+        return
+
+    # 6) иначе — 401 и лог
     logger.warning(
-        "amo-chats sig-debug: got=%s len=%d enc=%s ctype=%s TE=%s "
-        "cand=%s body_head_b64=%s body_tail_b64=%s",
-        got[:40], len(raw),
-        request.headers.get("Content-Encoding"),
-        request.headers.get("Content-Type"),
-        request.headers.get("Transfer-Encoding"),
-        {k: v[:40] for k, v in cand.items()},
-        base64.b64encode(raw[:64]).decode(),
-        base64.b64encode(raw[-64:]).decode(),
+        "amo-chats invalid signature: got=%s len=%d path=%s",
+        got[:12], len(raw), seen
     )
-
-    if not secrets.compare_digest(got, calc):
-        raise HTTPException(status_code=401, detail="Invalid signature")
+    raise HTTPException(status_code=401, detail="Invalid signature")
 
 
 def parse_lead_id(client_id: str) -> int | None:
