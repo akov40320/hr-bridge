@@ -24,14 +24,13 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
         raise ValueError("invalid json") from exc
 
     obj = (
-        data.get("object")
-        or data.get("negotiation")
-        or data.get("response")
-        or data.get("payload")
-        or {}
+            data.get("object")
+            or data.get("negotiation")
+            or data.get("response")
+            or data.get("payload")
+            or {}
     )
 
-    
     negotiation_id = str(
         obj.get("topic_id")
         or obj.get("id")
@@ -55,7 +54,7 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
     ).strip() or None
 
     vacancy_title = vacancy.get("name") or data.get("vacancy_title") or ""
-    vacancy_desc  = vacancy.get("description") or data.get("vacancy_description") or ""
+    vacancy_desc = vacancy.get("description") or data.get("vacancy_description") or ""
     applicant_name = (applicant.get("name") or applicant.get("first_name") or "").strip() or "кандидат"
 
     owner_id = str(
@@ -78,38 +77,49 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
     )
 
 
-
 def extract_avito_payload(raw: bytes) -> AvitoPayload:
-    """Extract raw Avito webhook data into :class:`AvitoPayload`."""
-
-    try:
-        data = json.loads(raw.decode() or "{}")
-    except Exception as exc:  # pragma: no cover - log only
-        logger.warning("Avito payload parse error: %s", exc)
-        raise ValueError("invalid json") from exc
-
+    data = json.loads(raw.decode() or "{}")
     payload_root = data.get("payload") or {}
     val = payload_root.get("value") or {}
 
-    chat_id = str(val.get("chat_id") or "")
-    text = (val.get("content") or {}).get("text") or ""
+    chat_id = str(val.get("chat_id") or "") or None
+
+    if not chat_id:
+        chat_id = str(
+            data.get("contacts", {}).get("chat", {}).get("value")  # new job response
+            or ""
+        ) or None
+
+    content = val.get("content") or {}
+    text = content.get("text") or ""
+
     item = val.get("item") or {}
     ctx = val.get("context") or {}
+    # поддерживаем оба варианта: item.id и context.value.id/context.id/context.item_id
+    ctx_val = ctx.get("value") or {}
+    item_id = str(
+        item.get("id")
+        or ctx_val.get("id")
+        or ctx.get("id")
+        or ctx.get("item_id")
+        or ""
+    ) or None
 
-    item_id = str(item.get("id") or ctx.get("item_id") or "") or None
-    item_title = item.get("title") or val.get("title") or "Отклик Avito"
-    item_description = item.get("description") or ctx.get("description") or ""
-    applicant_id = str(val.get("user_id") or val.get("author_id") or "") or None
+    item_title = item.get("title") or ctx_val.get("title") or val.get("title") or "Отклик Avito"
+    item_description = item.get("description") or ctx_val.get("description") or ctx.get("description") or ""
 
-    owner_id = (
-        str(
-            data.get("account_id")
-            or payload_root.get("account_id")
-            or val.get("account_id")
-            or "",
-        )
-        or None
-    )
+    # предпочитаем автора (кто реально писал сообщение)
+    applicant_id = str(val.get("author_id") or val.get("user_id") or "") or None
+
+    owner_id = str(
+        data.get("account_id")
+        or payload_root.get("account_id")
+        or val.get("account_id")
+        or ""
+    ) or None
+
+    if not chat_id:
+        raise ValueError("missing chat_id in Avito payload")
 
     return AvitoPayload(
         chat_id=chat_id,
