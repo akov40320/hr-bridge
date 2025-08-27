@@ -128,7 +128,7 @@ async def _get_applications_webhook(client: httpx.AsyncClient, headers: dict[str
             js = r.json()
             log.debug("avito: applications current: %s", js)
             return (path, js)
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
             log.warning("avito: applications get %s failed: %s %s", path, e.response.status_code, e.response.text[:200])
             continue
     return (None, None)
