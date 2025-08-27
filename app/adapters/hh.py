@@ -15,10 +15,10 @@ class HHError(Exception):
 
 
 async def set_state_action(
-    negotiation_id: str,
-    action_id: str,
-    employer_id: Optional[str],
-    client: httpx.AsyncClient,
+        negotiation_id: str,
+        action_id: str,
+        employer_id: Optional[str],
+        client: httpx.AsyncClient,
 ) -> None:
     await set_employer_state(
         response_id=negotiation_id,
@@ -29,10 +29,10 @@ async def set_state_action(
 
 
 async def set_employer_state(
-    response_id: str,
-    target_state: str,              # здесь теперь ожидается action_id: 'phone_interview', 'interview', ...
-    employer_id: Optional[str],
-    client: httpx.AsyncClient,
+        response_id: str,
+        target_state: str,  # здесь теперь ожидается action_id: 'phone_interview', 'interview', ...
+        employer_id: Optional[str],
+        client: httpx.AsyncClient,
 ) -> None:
     """Перевести отклик в указанный этап через action."""
     s = get_settings()
@@ -49,7 +49,8 @@ async def set_employer_state(
         http_client=client,
     )
 
-    ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT", None) or "hr-bridge/1.0 (support@example.com)"
+    ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
+                                                      None) or "hr-bridge/1.0 (support@example.com)"
     url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{target_state}/{response_id}"
 
     await request_with_retry(
@@ -69,12 +70,11 @@ async def set_employer_state(
     )
 
 
-
 async def send_message(
-    response_id: str,
-    text: str,
-    employer_id: Optional[str],
-    client: httpx.AsyncClient,
+        response_id: str,
+        text: str,
+        employer_id: Optional[str],
+        client: httpx.AsyncClient,
 ) -> None:
     """Отправить сообщение в рамках переписки по отклику."""
     s = get_settings()
@@ -91,7 +91,8 @@ async def send_message(
         http_client=client,
     )
 
-    ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT", None) or "hr-bridge/1.0 (support@example.com)"
+    ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
+                                                      None) or "hr-bridge/1.0 (support@example.com)"
     url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{response_id}/messages"
 
     # ВАЖНО: x-www-form-urlencoded, а не JSON
@@ -114,11 +115,10 @@ async def send_message(
     )
 
 
-
 async def fetch_applicant_details(
-    response_id: str,
-    employer_id: Optional[str],
-    client: httpx.AsyncClient,
+        response_id: str,
+        employer_id: Optional[str],
+        client: httpx.AsyncClient,
 ) -> dict:
     """Fetch basic applicant information such as name, city, phone and email."""
     s = get_settings()
@@ -180,11 +180,10 @@ async def fetch_applicant_details(
     return {"name": name, "city": city, "phone": phone, "email": email}
 
 
-
 async def fetch_vacancy_description(
-    vacancy_id: str,
-    employer_id: Optional[str],
-    client: httpx.AsyncClient,
+        vacancy_id: str,
+        employer_id: Optional[str],
+        client: httpx.AsyncClient,
 ) -> str:
     """Fetch vacancy description text."""
     from app.api.oauth2 import OAuth2Config

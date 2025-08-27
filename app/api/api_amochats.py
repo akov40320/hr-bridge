@@ -42,7 +42,6 @@ async def verify_amochats_signature(
     if not hmac.compare_digest(x_sig.lower(), calc.lower()):
         raise HTTPException(status_code=401, detail="invalid signature")
 
-
     request.state.raw_body = raw
 
 

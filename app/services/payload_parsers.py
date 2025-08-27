@@ -78,57 +78,144 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
 
 
 def extract_avito_payload(raw: bytes) -> AvitoPayload:
-    data = json.loads(raw.decode() or "{}")
-    payload_root = data.get("payload") or {}
-    val = payload_root.get("value") or {}
+    # 1) Безопасно декодируем тело
+    try:
+        body = raw.decode("utf-8")
+    except Exception:
+        body = raw.decode("utf-8", "ignore")
 
-    chat_id = str(val.get("chat_id") or "") or None
+    # 2) Пытаемся распарсить как JSON, иначе — как форму payload=<json>
+    data = None
+    try:
+        data = json.loads(body or "{}")
+    except Exception:
+        try:
+            from urllib.parse import parse_qs
+            form = parse_qs(body)
+            if "payload" in form and form["payload"]:
+                data = json.loads(form["payload"][0])
+        except Exception:
+            pass
+    if not isinstance(data, dict):
+        raise ValueError("invalid Avito payload: not a JSON object")
 
-    if not chat_id:
-        chat_id = str(
-            data.get("contacts", {}).get("chat", {}).get("value")  # new job response
+    # ---------- ВЕБХУК МЕССЕНДЖЕРА ----------
+    # ожидается структура: {"payload":{"type": "...", "value": {...}}}
+    payload_root = data.get("payload")
+    if isinstance(payload_root, dict) and "type" in payload_root:
+        val = payload_root.get("value") or {}
+
+        chat_id = str(val.get("chat_id") or "") or None
+        if not chat_id:
+            # резервный вариант: иногда чат кладут сюда
+            chat_id = str(
+                data.get("contacts", {}).get("chat", {}).get("value") or ""
+            ) or None
+        if not chat_id:
+            raise ValueError("missing chat_id in Avito messenger payload")
+
+        content = val.get("content") or {}
+        text = content.get("text") or ""
+
+        item = val.get("item") or {}
+        ctx = val.get("context") or {}
+        ctx_val = (ctx.get("value") or {}) if isinstance(ctx, dict) else {}
+
+        item_id = (
+                          str(item.get("id") or "") or
+                          str(ctx_val.get("id") or "") or
+                          str((ctx.get("id") if isinstance(ctx, dict) else "") or "") or
+                          str((ctx.get("item_id") if isinstance(ctx, dict) else "") or "")
+                  ) or None
+
+        item_title = (
+                item.get("title")
+                or ctx_val.get("title")
+                or val.get("title")
+                or "Отклик Avito"
+        )
+        item_description = (
+                item.get("description")
+                or ctx_val.get("description")
+                or (ctx.get("description") if isinstance(ctx, dict) else "")
+                or ""
+        )
+
+        applicant_id = str(val.get("author_id") or val.get("user_id") or "") or None
+        owner_id = str(
+            data.get("account_id")
+            or payload_root.get("account_id")
+            or val.get("account_id")
             or ""
         ) or None
 
-    content = val.get("content") or {}
-    text = content.get("text") or ""
+        return AvitoPayload(
+            chat_id=chat_id,
+            item_id=item_id,
+            item_title=item_title,
+            item_description=item_description,
+            applicant_id=applicant_id,
+            text=text,
+            owner_id=owner_id,
+        )
 
-    item = val.get("item") or {}
-    ctx = val.get("context") or {}
-    # поддерживаем оба варианта: item.id и context.value.id/context.id/context.item_id
-    ctx_val = ctx.get("value") or {}
-    item_id = str(
-        item.get("id")
-        or ctx_val.get("id")
-        or ctx.get("id")
-        or ctx.get("item_id")
-        or ""
+    # ---------- ВЕБХУК ОТКЛИКОВ (APPLICATIONS) ----------
+    # ожидается структура: {"event":"application.created", "application": {...}}
+    application = data.get("application") if isinstance(data.get("application"), dict) else None
+    event = str(data.get("event") or "") or ""
+
+    if application or event.startswith("application."):
+        app_id = str((application or {}).get("id") or "") or None
+        if not app_id:
+            raise ValueError("missing application.id in Avito applications payload")
+
+        # синтетический канал, чтобы не рушить общий конвейер
+        chat_id = f"app:{app_id}"
+
+        item_id = str((application or {}).get("vacancy_id") or "") or None
+        applicant_id = str(
+            (application or {}).get("resume_id")
+            or (application or {}).get("applicant_id")
+            or ""
+        ) or None
+
+        # минимальные текст/заголовок для карточки
+        item_title = "Отклик по вакансии"
+        item_description = ""
+        state_or_status = (application or {}).get("state") or (application or {}).get("status")
+        text = (event or "application.event") + (f": {state_or_status}" if state_or_status else "")
+
+        owner_id = str(
+            data.get("account_id")
+            or (application or {}).get("account_id")
+            or ""
+        ) or None
+
+        return AvitoPayload(
+            chat_id=chat_id,
+            item_id=item_id,
+            item_title=item_title,
+            item_description=item_description,
+            applicant_id=applicant_id,
+            text=text,
+            owner_id=owner_id,
+        )
+
+    # ---------- ЛЕГАСИ-ФОЛБЭК (если прилетел минималистичный формат) ----------
+    chat_id = str(
+        data.get("contacts", {}).get("chat", {}).get("value") or ""
     ) or None
-
-    item_title = item.get("title") or ctx_val.get("title") or val.get("title") or "Отклик Avito"
-    item_description = item.get("description") or ctx_val.get("description") or ctx.get("description") or ""
-
-    # предпочитаем автора (кто реально писал сообщение)
-    applicant_id = str(val.get("author_id") or val.get("user_id") or "") or None
-
-    owner_id = str(
-        data.get("account_id")
-        or payload_root.get("account_id")
-        or val.get("account_id")
-        or ""
-    ) or None
-
     if not chat_id:
-        raise ValueError("missing chat_id in Avito payload")
+        raise ValueError("unrecognized Avito payload format (no payload/type, no application, no contacts.chat)")
 
     return AvitoPayload(
         chat_id=chat_id,
-        item_id=item_id,
-        item_title=item_title,
-        item_description=item_description,
-        applicant_id=applicant_id,
-        text=text,
-        owner_id=owner_id,
+        item_id=None,
+        item_title="Отклик Avito",
+        item_description="",
+        applicant_id=None,
+        text="",
+        owner_id=str(data.get("account_id") or "") or None,
     )
 
 
