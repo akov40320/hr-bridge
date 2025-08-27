@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     AVITO_API_BASE: str = "https://api.avito.ru"
     AVITO_SEND_MESSAGE_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/messages"
     AVITO_MARK_READ_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/read"
+    AVITO_WEBHOOK_URL: str = ""
+    AVITO_MESSENGER_EVENTS: str = "message"
+    AVITO_WEBHOOK_SECRET: str | None = None
+    AVITO_SIGNATURE_HEADER: str = "X-Avito-Signature"
 
     # Поведение
     HH_SYNC_ENABLED: bool = False
