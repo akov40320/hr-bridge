@@ -29,11 +29,10 @@ async def test_status_update_on_chat_creation(monkeypatch, queue_mock):
 
     await worker_mirror.handle_mirror_bot_to_amo(payload)
     await worker_mirror.handle_mirror_bot_to_amo(payload)
-
-    assert queue_mock == [
-        {
-            "platform": "amo",
-            "action": "amo_update_status",
-            "payload": {"lead_id": 123, "status_id": 777},
-        }
-    ]
+    assert len(queue_mock) == 1
+    item = queue_mock[0]
+    assert item["platform"] == "amo"
+    assert item["action"] == "amo_update_status"
+    assert item["payload"]["lead_id"] == 123
+    assert item["payload"]["status_id"] == 777
+    assert isinstance(item["payload"]["ts"], int)

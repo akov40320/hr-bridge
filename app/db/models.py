@@ -115,3 +115,13 @@ class EventDedup(Base):
         TIMESTAMP(timezone=True),
         server_default=func.now(),  # pylint: disable=not-callable
     )
+
+
+class LeadStatusTransition(Base):
+    """Stores the last applied status transition for a lead."""
+
+    __tablename__ = "lead_status_transitions"
+
+    lead_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    status_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ts: Mapped[int] = mapped_column(BigInteger, nullable=False)

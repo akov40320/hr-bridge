@@ -6,6 +6,8 @@ queue client.  The functions wrap lower level helpers and publish messages to
 other services when the survey state changes.
 """
 
+import time
+
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.store_survey import (
@@ -39,6 +41,7 @@ class SurveyService:
             if bot_kind == "master"
             else s.AMO_STAGE_ID_OPERATOR_NEW
         )
+        ts = int(time.time())
         await _publish_tasks(
             self.queue_client,
             [
@@ -64,6 +67,7 @@ class SurveyService:
                     "payload": {
                         "lead_id": lead_id,
                         "status_id": stage_id,
+                        "ts": ts,
                     },
                 },
             ],
@@ -85,6 +89,7 @@ class SurveyService:
             if bot_kind == "master"
             else s.AMO_STAGE_ID_OPERATOR_SURVEY
         )
+        ts = int(time.time())
         await _publish_tasks(
             self.queue_client,
             [
@@ -110,6 +115,7 @@ class SurveyService:
                     "payload": {
                         "lead_id": lead_id,
                         "status_id": stage_id,
+                        "ts": ts,
                     },
                 },
             ],

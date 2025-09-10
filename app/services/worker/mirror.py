@@ -7,6 +7,7 @@ dictionary with details specific to the direction of the mirror.
 """
 
 import logging
+import time
 from aiogram import Bot
 
 from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
@@ -198,6 +199,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
                     payload=UpdateStatusPayload(
                         lead_id=int(lead_id),
                         status_id=int(status_id),
+                        ts=int(time.time()),
                     ),
                 )
                 await rabbitmq.publish_task(event.model_dump(exclude_none=True))
