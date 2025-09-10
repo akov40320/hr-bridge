@@ -47,7 +47,7 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
         return ["2", "1"]
 
     monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
-    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com/webhooks/hh")
 
     captured = []
 
@@ -62,6 +62,7 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
 
     assert captured, "no requests were made"
     assert captured[0].headers.get("Authorization") == "Bearer tok2"
+    assert json.loads(captured[1].content)["url"] == "http://example.com/webhooks/hh/2"
 
 
 def _set_events(monkeypatch, value: str):
@@ -106,7 +107,7 @@ async def test_ensure_skips_when_no_valid_events(in_memory_db, monkeypatch):
         return ["1"]
 
     monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
-    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com/webhooks/hh")
     _set_events(monkeypatch, "invalid")
 
     captured = []
@@ -140,7 +141,7 @@ async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
         return ["1"]
 
     monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
-    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com/webhooks/hh")
     _set_events(monkeypatch, "negotiation_created,invalid")
 
     captured = []
@@ -155,6 +156,8 @@ async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
         await hh_webhooks.ensure_hh_webhook(client)
 
     assert len(captured) == 2
-    assert json.loads(captured[1].content)["actions"] == [
+    body = json.loads(captured[1].content)
+    assert body["url"] == "http://example.com/webhooks/hh/1"
+    assert body["actions"] == [
         {"type": "NEW_NEGOTIATION_VACANCY", "settings": {"vacancies_only_mine": False}}
     ]

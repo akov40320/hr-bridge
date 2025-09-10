@@ -113,8 +113,8 @@ async def _find_sub_by_url(client: httpx.AsyncClient, headers: dict[str, str], u
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
     """Создать/обновить подписку HH, идемпотентно (POST/PUT/DELETE при необходимости)."""
-    url = _target_url()
-    if not url:
+    base_url = _target_url()
+    if not base_url:
         log.info("HH webhook: HH_WEBHOOK_URL пуст — пропускаю регистрацию")
         return
 
@@ -133,6 +133,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
 
     s = get_settings()
     for employer_id in owners:
+        url = f"{base_url.rstrip('/')}/{employer_id}"
         try:
             access = await ensure_fresh_access(
                 config=OAuth2Config(

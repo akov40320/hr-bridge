@@ -10,7 +10,7 @@ from app.models import Applicant, IncomingPayload, AvitoPayload
 logger = logging.getLogger(__name__)
 
 
-def parse_hh_payload(raw: bytes) -> IncomingPayload:
+def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload:
     import json, logging
     from pydantic import ValidationError
     from app.models import Applicant, IncomingPayload
@@ -57,7 +57,7 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
     vacancy_desc = vacancy.get("description") or data.get("vacancy_description") or ""
     applicant_name = (applicant.get("name") or applicant.get("first_name") or "").strip() or "кандидат"
 
-    owner_id = str(
+    parsed_owner_id = str(
         data.get("employer", {}).get("id")
         or obj.get("employer", {}).get("id")
         or obj.get("employer_id")
@@ -69,7 +69,7 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
 
     return IncomingPayload(
         platform="hh",
-        owner_id=owner_id,
+        owner_id=owner_id or parsed_owner_id,
         vacancy_id=vacancy_id,
         vacancy_title=vacancy_title,
         vacancy_desc=vacancy_desc,
@@ -102,7 +102,9 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:
     # ---------- ВЕБХУК МЕССЕНДЖЕРА ----------
     # ожидается структура: {"payload":{"type": "...", "value": {...}}}
     payload_root = data.get("payload")
-    if isinstance(payload_root, dict) and "type" in payload_root:
+    if isinstance(payload_root, dict) and (
+        "value" in payload_root or "type" in payload_root
+    ):
         val = payload_root.get("value") or {}
 
         chat_id = str(val.get("chat_id") or "") or None
@@ -111,8 +113,6 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:
             chat_id = str(
                 data.get("contacts", {}).get("chat", {}).get("value") or ""
             ) or None
-        if not chat_id:
-            raise ValueError("missing chat_id in Avito messenger payload")
 
         content = val.get("content") or {}
         text = content.get("text") or ""
