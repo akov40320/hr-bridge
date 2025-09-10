@@ -25,8 +25,12 @@ admin_tg = APIRouter(prefix="/admin/tg", dependencies=[Depends(require_admin)])
 
 # модульный tokens — тесты ожидают tg_webhooks.tokens
 tokens: dict[str, object] = {
-    "master": settings.TELEGRAM_MASTER_BOT_TOKEN,
-    "operator": settings.TELEGRAM_OPERATOR_BOT_TOKEN,
+    "master": settings.TELEGRAM_MASTER_BOT_TOKEN.get_secret_value()
+    if settings.TELEGRAM_MASTER_BOT_TOKEN
+    else "",
+    "operator": settings.TELEGRAM_OPERATOR_BOT_TOKEN.get_secret_value()
+    if settings.TELEGRAM_OPERATOR_BOT_TOKEN
+    else "",
 }
 
 
@@ -39,7 +43,12 @@ def make_tg_webhook(key: object, kind: str | None = None):
     async def _handler(request: Request):
         # 1) секрет проверяем первым
         secret_hdr = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-        if settings.TELEGRAM_WEBHOOK_SECRET and secret_hdr != settings.TELEGRAM_WEBHOOK_SECRET:
+        secret = (
+            settings.TELEGRAM_WEBHOOK_SECRET.get_secret_value()
+            if settings.TELEGRAM_WEBHOOK_SECRET
+            else ""
+        )
+        if secret and secret_hdr != secret:
             logger.warning("%s webhook: bad secret -> 401", kind or key)
             return Response(status_code=401)
 
@@ -88,7 +97,11 @@ async def set_webhooks():
     base = (settings.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
     if not base:
         return {"ok": False, "error": "TELEGRAM_WEBHOOK_BASE is empty"}
-    secret = settings.TELEGRAM_WEBHOOK_SECRET or None
+    secret = (
+        settings.TELEGRAM_WEBHOOK_SECRET.get_secret_value()
+        if settings.TELEGRAM_WEBHOOK_SECRET
+        else None
+    )
     allowed = ["message"]
 
     out = {}

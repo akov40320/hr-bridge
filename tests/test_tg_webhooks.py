@@ -1,6 +1,7 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from app.api import tg_webhooks
 
@@ -42,7 +43,9 @@ def build_app(bot, kind, dp, monkeypatch):
 def test_factory_success(monkeypatch, sample_update):
     dp = DummyDP()
     bot = object()
-    monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", "")
+    monkeypatch.setattr(
+        tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", SecretStr("")
+    )
     app = build_app(bot, "master", dp, monkeypatch)
     client = TestClient(app)
     r = client.post("/tg/webhook/master", json=sample_update)
@@ -53,7 +56,9 @@ def test_factory_success(monkeypatch, sample_update):
 
 def test_factory_no_bot(monkeypatch, sample_update):
     dp = DummyDP()
-    monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", "")
+    monkeypatch.setattr(
+        tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", SecretStr("")
+    )
     app = build_app(None, "operator", dp, monkeypatch)
     client = TestClient(app)
     r = client.post("/tg/webhook/operator", json=sample_update)
@@ -63,7 +68,9 @@ def test_factory_no_bot(monkeypatch, sample_update):
 def test_factory_bad_secret(monkeypatch, sample_update):
     dp = DummyDP()
     bot = object()
-    monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", "s3cret")
+    monkeypatch.setattr(
+        tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", SecretStr("s3cret")
+    )
     app = build_app(bot, "master", dp, monkeypatch)
     client = TestClient(app)
     r = client.post("/tg/webhook/master", json=sample_update)
@@ -98,8 +105,10 @@ def test_set_webhooks(monkeypatch):
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
     monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_BASE", "https://example")
-    monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", "s3cr")
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(
+        tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", SecretStr("s3cr")
+    )
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", SecretStr("secret"))
 
     app = _build_admin_app()
     client = TestClient(app)
@@ -132,7 +141,7 @@ def test_set_webhooks_no_base(monkeypatch):
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
     monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_BASE", "")
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", SecretStr("secret"))
 
     app = _build_admin_app()
     client = TestClient(app)
@@ -162,7 +171,7 @@ def test_delete_webhooks(monkeypatch):
 
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", SecretStr("secret"))
 
     app = _build_admin_app()
     client = TestClient(app)
@@ -196,7 +205,7 @@ def test_webhook_info(monkeypatch):
 
     monkeypatch.setattr(tg_webhooks, "Bot", DummyBot)
     monkeypatch.setattr(tg_webhooks, "tokens", {"m": "token"})
-    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(tg_webhooks.settings, "ADMIN_TOKEN", SecretStr("secret"))
 
     app = _build_admin_app()
     client = TestClient(app)

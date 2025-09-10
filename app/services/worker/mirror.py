@@ -50,7 +50,10 @@ async def handle_mirror_amo_to_tg(payload: dict):
     text = payload["text"]
 
     s = get_settings()
-    token = s.TELEGRAM_MASTER_BOT_TOKEN if bot_kind == "master" else s.TELEGRAM_OPERATOR_BOT_TOKEN
+    token_field = (
+        s.TELEGRAM_MASTER_BOT_TOKEN if bot_kind == "master" else s.TELEGRAM_OPERATOR_BOT_TOKEN
+    )
+    token = token_field.get_secret_value() if token_field else ""
     if not token:
         raise RuntimeError(f"Telegram bot '{bot_kind}' is not configured")
 
@@ -152,16 +155,21 @@ async def handle_mirror_bot_to_amo(payload: dict):
 
     if not conv_id and lead_id:
 
-        amo = await AmoClient.create(http_client)
-        contact_id: int | None = None
+        amo = None
         try:
-            lead = await amo.get_lead_with_contacts(int(lead_id))
-            emb = (lead or {}).get("_embedded") or {}
-            contacts = emb.get("contacts") or []
-            if contacts:
-                contact_id = int(contacts[0]["id"])
-        except Exception:
-            logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
+            amo = await AmoClient.create(http_client)
+        except RuntimeError:
+            logger.warning("Amo token not available, skipping contact fetch")
+        contact_id: int | None = None
+        if amo is not None:
+            try:
+                lead = await amo.get_lead_with_contacts(int(lead_id))
+                emb = (lead or {}).get("_embedded") or {}
+                contacts = emb.get("contacts") or []
+                if contacts:
+                    contact_id = int(contacts[0]["id"])
+            except Exception:
+                logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
 
         conv_id = await with_retry(
             lambda: ensure_chat_created(
@@ -208,4 +216,5 @@ async def handle_mirror_bot_to_amo(payload: dict):
             ),
             attempts=6,
             is_retryable=lambda e: True,
-        )
+                )
+

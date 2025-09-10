@@ -102,7 +102,9 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:
     # ---------- ВЕБХУК МЕССЕНДЖЕРА ----------
     # ожидается структура: {"payload":{"type": "...", "value": {...}}}
     payload_root = data.get("payload")
-    if isinstance(payload_root, dict) and "type" in payload_root:
+    if isinstance(payload_root, dict) and (
+        "type" in payload_root or "value" in payload_root
+    ):
         val = payload_root.get("value") or {}
 
         chat_id = str(val.get("chat_id") or "") or None
@@ -111,8 +113,6 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:
             chat_id = str(
                 data.get("contacts", {}).get("chat", {}).get("value") or ""
             ) or None
-        if not chat_id:
-            raise ValueError("missing chat_id in Avito messenger payload")
 
         content = val.get("content") or {}
         text = content.get("text") or ""

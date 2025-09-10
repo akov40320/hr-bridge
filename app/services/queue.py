@@ -63,7 +63,9 @@ class RabbitMQClient:
             return
 
         s = self._s()
-        self._conn = await aio_pika.connect_robust(s.RABBITMQ_URL)
+        self._conn = await aio_pika.connect_robust(
+            s.RABBITMQ_URL.get_secret_value()
+        )
         self._chan = await self._conn.channel(publisher_confirms=True)
         chan = self._chan
         assert chan is not None

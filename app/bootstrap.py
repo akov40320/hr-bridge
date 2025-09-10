@@ -39,9 +39,11 @@ async def ensure_tokens() -> None:
             log.exception("Failed to load token for service %s", service)
             raise
 
-        at = getattr(settings, f"{prefix}_ACCESS_TOKEN", None)
-        rt = getattr(settings, f"{prefix}_REFRESH_TOKEN", None)
+        at_field = getattr(settings, f"{prefix}_ACCESS_TOKEN", None)
+        rt_field = getattr(settings, f"{prefix}_REFRESH_TOKEN", None)
         ea = getattr(settings, f"{prefix}_EXPIRES_AT", None)
+        at = at_field.get_secret_value() if at_field else ""
+        rt = rt_field.get_secret_value() if rt_field else ""
         if at and rt and ea:
             await store.save(TokenData(
                 access_token=at,

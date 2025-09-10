@@ -10,7 +10,8 @@ async def require_admin(
     x_admin_token: str | None = Header(None),
 ):
     """Validate admin credentials via Authorization or X-Admin-Token headers."""
-    token = get_settings().ADMIN_TOKEN
+    token_field = get_settings().ADMIN_TOKEN
+    token = token_field.get_secret_value() if token_field else ""
     if not token:
         raise RuntimeError("ADMIN_TOKEN must be set")
     # допускаем либо Authorization: Bearer <token>,

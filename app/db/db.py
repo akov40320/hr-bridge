@@ -44,7 +44,7 @@ def get_engine() -> AsyncEngine:
 
     if _STATE.engine is None:
         settings = get_settings()
-        url = settings.DATABASE_URL
+        url = settings.DATABASE_URL.get_secret_value()
         kwargs: dict[str, object] = {"echo": False, "pool_pre_ping": True}
         if _is_sqlite_memory_url(url):
             _STATE.sqlite_memory = True

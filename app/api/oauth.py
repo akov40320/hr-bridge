@@ -52,7 +52,7 @@ async def hh_callback(
         "grant_type": "authorization_code",
         "code": code,
         "client_id": s.HH_CLIENT_ID,
-        "client_secret": s.HH_CLIENT_SECRET,
+        "client_secret": s.HH_CLIENT_SECRET.get_secret_value(),
         "redirect_uri": s.HH_REDIRECT_URI,
     }
 
@@ -142,7 +142,9 @@ async def _exchange_avito_code(http_client: httpx.AsyncClient, s, code: str):
         "code": code,
         "redirect_uri": s.AVITO_REDIRECT_URI,
     }
-    auth = httpx.BasicAuth(s.AVITO_CLIENT_ID, s.AVITO_CLIENT_SECRET)
+    auth = httpx.BasicAuth(
+        s.AVITO_CLIENT_ID, s.AVITO_CLIENT_SECRET.get_secret_value()
+    )
     try:
         r = await http_client.post(
             s.AVITO_TOKEN_URL,
@@ -222,7 +224,7 @@ async def avito_callback(
     if not (
         s.AVITO_TOKEN_URL
         and s.AVITO_CLIENT_ID
-        and s.AVITO_CLIENT_SECRET
+        and s.AVITO_CLIENT_SECRET.get_secret_value()
     ):
         return {"ok": False, "error": "avito token env not set"}
 
@@ -273,7 +275,7 @@ async def amo_callback(
     url = s.AMO_BASE_URL.rstrip("/") + "/oauth2/access_token"
     payload = {
         "client_id": s.AMO_CLIENT_ID,
-        "client_secret": s.AMO_CLIENT_SECRET,
+        "client_secret": s.AMO_CLIENT_SECRET.get_secret_value(),
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": s.AMO_REDIRECT_URI,
