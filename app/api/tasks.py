@@ -1,4 +1,4 @@
-"""Background task handlers used by RMQ consumer."""
+"""Обработчики фоновых задач для потребителя RMQ."""
 
 import time as _time
 
@@ -10,7 +10,7 @@ from app.http_client import get_http_client
 
 
 async def handle_task(p: dict, attempts: int = 0):
-    """Process background tasks based on platform and action."""
+    """Обрабатывает фоновые задачи в зависимости от платформы и действия."""
     payload = p.get("payload") or {}
     if p.get("msg_key") is not None:
         payload.setdefault("msg_key", p["msg_key"])

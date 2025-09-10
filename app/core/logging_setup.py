@@ -1,4 +1,4 @@
-"""Logging setup using a JSON formatter."""
+"""Настройка логирования с использованием JSON-форматтера."""
 
 import logging
 import sys
@@ -7,7 +7,7 @@ from pythonjsonlogger import jsonlogger
 
 
 class SensitiveFilter(logging.Filter):  # pylint: disable=too-few-public-methods
-    """Mask sensitive fields like tokens or secrets in logs."""
+    """Скрывает чувствительные поля в логах, например токены или пароли."""
 
     KEYWORDS = ("token", "secret", "password")
 
@@ -19,12 +19,12 @@ class SensitiveFilter(logging.Filter):  # pylint: disable=too-few-public-methods
 
 
 def setup_logging(level: str = "INFO") -> None:
-    """Configure root logger with JSON formatting.
+    """Настроить корневой логгер с JSON-форматированием.
 
-    Parameters
+    Параметры
     ----------
     level: str
-        Logging level for root logger.
+        Уровень логирования корневого логгера.
     """
 
     root = logging.getLogger()

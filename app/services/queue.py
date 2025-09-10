@@ -1,9 +1,8 @@
-"""RabbitMQ client wrapper providing convenient helpers for publishing and consuming.
+"""Обёртка клиента RabbitMQ, предоставляющая удобные помощники для публикации и обработки задач.
 
-This module exposes :class:`RabbitMQClient` and a default instance ``rabbitmq`` which
-is used across the project. The class keeps state of the connection/channel and
-provides methods to publish tasks, republish to retry/DLQ queues and to consume
-tasks.
+Модуль предоставляет класс :class:`RabbitMQClient` и глобальный экземпляр ``rabbitmq``.
+Класс хранит состояние соединения/канала и предоставляет методы публикации задач,
+повторной публикации в очереди повтора/DLQ и потребления задач.
 """
 
 from __future__ import annotations
@@ -25,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 def _int(name: str, default: int) -> int:
-    """Return environment variable ``name`` converted to ``int``.
+    """Вернуть переменную окружения ``name`` как ``int``.
 
-    Falls back to ``default`` if the value is missing or not an integer.
+    Возвращает ``default``, если значение отсутствует или не является целым числом.
     """
     try:
         return int(os.getenv(name, str(default)))
     except ValueError:  # pragma: no cover - defensive
-        logger.warning("Invalid integer for %s, using default %s", name, default)
+        logger.warning("Некорректное целое число для %s, использую значение по умолчанию %s", name, default)
         return default
 
 
@@ -40,7 +39,7 @@ RMQ_PREFETCH = _int("RMQ_PREFETCH", 32)
 
 
 class RabbitMQClient:
-    """Maintain state of RMQ connection and provide helper methods."""
+    """Поддерживает состояние соединения с RMQ и предоставляет вспомогательные методы."""
 
     def __init__(self) -> None:
         self._conn: amqp_abc.AbstractRobustConnection | None = None
@@ -54,10 +53,10 @@ class RabbitMQClient:
         return self._settings
 
     async def _ensure(self) -> None:
-        """Ensure connection, channel, exchange and queues exist.
+        """Гарантировать наличие соединения, канала, обменника и очередей.
 
-        This establishes a connection to RabbitMQ, declares the main, retry
-        and dead-letter queues and binds them to the exchange.
+        Устанавливает соединение с RabbitMQ, объявляет основные, очередь повтора
+        и очередь DLQ и привязывает их к обменнику.
         """
         if self._conn and not self._conn.is_closed and self._chan and not self._chan.is_closed:
             return
@@ -96,11 +95,11 @@ class RabbitMQClient:
         await q_dlq.bind(exch, routing_key="tasks.dlq")
 
     async def connect(self) -> None:
-        """Establish a connection to RabbitMQ if not already connected."""
+        """Установить соединение с RabbitMQ, если оно ещё не установлено."""
         await self._ensure()
 
     async def close(self) -> None:
-        """Close the connection and channel if they are open."""
+        """Закрыть соединение и канал, если они открыты."""
         try:
             if self._chan and not self._chan.is_closed:
                 await self._chan.close()
@@ -110,7 +109,7 @@ class RabbitMQClient:
         self._conn = self._chan = self._exch = None
 
     async def publish_task(self, payload: dict, attempts: int = 0) -> None:
-        """Publish a task to the main queue."""
+        """Опубликовать задачу в основную очередь."""
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
         body = json.dumps({"payload": payload, "attempts": attempts}, ensure_ascii=False).encode()
@@ -124,7 +123,7 @@ class RabbitMQClient:
             await self._exch.publish(msg, routing_key="tasks")
 
     async def publish_retry(self, payload: dict, attempts: int) -> None:
-        """Publish a task to the retry queue."""
+        """Опубликовать задачу в очередь повтора."""
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
 
@@ -146,7 +145,7 @@ class RabbitMQClient:
     async def publish_dlq(
         self, payload: dict, attempts: int, error: str | None = None
     ) -> None:
-        """Publish a task to the dead-letter queue."""
+        """Опубликовать задачу в очередь DLQ."""
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
         obj = {"payload": payload, "attempts": attempts, "error": error}
@@ -161,9 +160,9 @@ class RabbitMQClient:
             await self._exch.publish(msg, routing_key="tasks.dlq")
 
     async def requeue_dlq(self, count: int) -> int:
-        """Move up to ``count`` messages from the DLQ back to the main queue.
+        """Переместить до ``count`` сообщений из DLQ обратно в основную очередь.
 
-        Returns the number of messages requeued.
+        Возвращает количество перемещённых сообщений.
         """
         if count <= 0:
             return 0
@@ -194,11 +193,11 @@ class RabbitMQClient:
     async def consume(
         self, handler: Callable[..., Awaitable[None]], max_attempts: int = 10
     ) -> None:
-        """Consume tasks and process them via ``handler``.
+        """Потреблять задачи и обрабатывать их через ``handler``.
 
-        Messages are acknowledged only after successful processing. If processing
-        fails, messages are republished to the retry or dead-letter queues
-        depending on the number of attempts.
+        Сообщения подтверждаются только после успешной обработки. При ошибке
+        сообщение перепубликуется в очередь повтора или DLQ в зависимости от
+        количества попыток.
         """
         if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
             await self._ensure()
@@ -207,7 +206,7 @@ class RabbitMQClient:
         expects_attempts = len(inspect.signature(handler).parameters) > 1
 
         async def _worker() -> None:
-            """Continuously fetch messages from the queue and process them."""
+            """Непрерывно получать сообщения из очереди и обрабатывать их."""
             q: amqp_abc.AbstractQueue | None = None
             while True:
                 try:
@@ -235,7 +234,7 @@ class RabbitMQClient:
                                     attempts = int(obj.get("attempts") or 0)
                                 except (TypeError, ValueError):
                                     logger.warning(
-                                        "Invalid attempts value: %s",
+                                        "Некорректное значение попыток: %s",
                                         obj.get("attempts"),
                                     )
                                     attempts = 0
@@ -256,23 +255,23 @@ class RabbitMQClient:
                                     if cur_attempts >= max_attempts:
                                         await self.publish_dlq(payload, cur_attempts, str(e))
                                         logger.exception(
-                                            "sent to DLQ after attempts=%s", cur_attempts
+                                            "отправлено в DLQ после попыток=%s", cur_attempts
                                         )
                                     else:
                                         await self.publish_retry(payload, cur_attempts)
                                         logger.exception(
-                                            "requeued to retry, attempt=%s", cur_attempts
+                                            "отправлено в очередь повтора, попытка=%s", cur_attempts
                                         )
                                     republished = True
                                 except aio_exc.AMQPError:  # pragma: no cover - log only
-                                    logger.exception("failed to republish to retry/DLQ")
+                                    logger.exception("не удалось перепубликовать в очередь повтора/DLQ")
                                 finally:
                                     if republished:
                                         await message.ack()
                 except asyncio.CancelledError:
                     break
                 except aio_exc.AMQPError:  # pragma: no cover - network errors
-                    logger.exception("RMQ connection lost, retrying ...")
+                    logger.exception("соединение с RMQ потеряно, пытаюсь повторить ...")
                     q = None
                     await asyncio.sleep(1)
                     await self._ensure()
@@ -283,7 +282,6 @@ class RabbitMQClient:
                 tg.create_task(_worker())
 
 
-# Global instance used across the project
 rabbitmq = RabbitMQClient()
 
 
