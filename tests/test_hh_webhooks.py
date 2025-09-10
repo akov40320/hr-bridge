@@ -63,6 +63,7 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
 
     assert captured, "no requests were made"
     assert captured[0].headers.get("Authorization") == "Bearer tok2"
+    assert json.loads(captured[1].content)["url"] == "http://example.com/2"
 
 
 def _set_events(monkeypatch, value: str):
@@ -157,6 +158,7 @@ async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
         await routes.ensure_hh_webhook(client)
 
     assert len(captured) == 2
+    assert json.loads(captured[1].content)["url"] == "http://example.com/1"
     assert json.loads(captured[1].content)["actions"] == [
         {"type": "NEW_NEGOTIATION_VACANCY", "settings": {"vacancies_only_mine": False}}
     ]

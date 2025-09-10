@@ -15,14 +15,17 @@ router = APIRouter()
 log = logging.getLogger(__name__)  
 
 
-@router.post("/webhooks/hh")
+@router.post("/webhooks/hh/{owner_id}")
 async def webhook_hh(
-    request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
+    owner_id: str,
+    request: Request,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
 ):
     """Handle HeadHunter webhook events.
 
-    Fetches the raw request body and passes it to the generic job board
-    webhook processor along with the HeadHunter payload parser.
+    The ``owner_id`` is embedded into the webhook URL so that we don't need to
+    perform extra lookups to determine the employer. If the parsed payload lacks
+    ``owner_id``, the value from the URL is used.
     """
     raw = await request.body()
 
@@ -31,7 +34,7 @@ async def webhook_hh(
     ts = None
     try:
         data = json.loads(raw.decode("utf-8", "ignore") or "{}")
-        log.info(f"HH FULL WEBHOOK BODY: {data}") 
+        log.info(f"HH FULL WEBHOOK BODY: {data}")
         obj = (
             data.get("object")
             or data.get("negotiation")
@@ -50,7 +53,13 @@ async def webhook_hh(
         pass
     log.info("HH webhook received nid=%s ts=%s", nid, ts)
     log.debug("HH webhook body: %s", raw.decode("utf-8", "ignore"))
-    return await process_job_board_webhook("hh", raw, http_client, parse_hh_payload)
+
+    def _parser(b: bytes):
+        p = parse_hh_payload(b)
+        p.owner_id = p.owner_id or owner_id
+        return p
+
+    return await process_job_board_webhook("hh", raw, http_client, _parser)
 
 
 __all__ = ["router"]
