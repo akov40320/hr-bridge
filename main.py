@@ -11,7 +11,7 @@ from app.adapters.amochats import ensure_amo_chats_connected
 from app.api import oauth, admin as admin_module, hh_incoming, avito_incoming, amo_webhooks
 from app.api.api_amochats import router_amo_chats, amo_admin
 from app.api.avito_webhooks import ensure_avito_webhooks
-from app.api.hh_webhooks import ensure_hh_webhook
+from app.api.hh_webhook import ensure_hh_webhook
 from app.api.tg_webhooks import router as tg_wh_router
 from app.api.tasks import handle_task as _handle_task
 from app.bootstrap import ensure_tokens

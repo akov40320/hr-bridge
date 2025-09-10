@@ -4,7 +4,7 @@ import httpx
 from sqlalchemy import insert
 from pydantic import SecretStr
 
-from app.api import hh_webhooks
+from app.api.hh_webhook import routes, subscription
 from app.db.db import get_session
 from app.db import models
 from app.db.token_store import DbTokenStore
@@ -15,7 +15,7 @@ def patch_ensure_fresh_access(monkeypatch):
     async def fake_ensure(*, config, **kwargs):
         return f"tok{config.owner_id}"
 
-    monkeypatch.setattr(hh_webhooks, "ensure_fresh_access", fake_ensure)
+    monkeypatch.setattr(routes, "ensure_fresh_access", fake_ensure)
 
 
 @pytest.mark.asyncio
@@ -48,7 +48,7 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
         return ["2", "1"]
 
     monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
-    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    monkeypatch.setattr(subscription, "_target_url", lambda: "http://example.com")
 
     captured = []
 
@@ -59,7 +59,7 @@ async def test_ensure_hh_webhook_uses_first_owner(in_memory_db, monkeypatch):
         return httpx.Response(200, json={})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        await hh_webhooks.ensure_hh_webhook(client)
+        await routes.ensure_hh_webhook(client)
 
     assert captured, "no requests were made"
     assert captured[0].headers.get("Authorization") == "Bearer tok2"
@@ -73,14 +73,15 @@ def _set_events(monkeypatch, value: str):
         HH_CLIENT_SECRET = SecretStr("secret")
         HH_REDIRECT_URI = "http://example.com/cb"
 
-    monkeypatch.setattr(hh_webhooks, "get_settings", lambda: Dummy())
+    monkeypatch.setattr(subscription, "get_settings", lambda: Dummy())
+    monkeypatch.setattr(routes, "get_settings", lambda: Dummy())
 
 
 def test_events_filtered(monkeypatch, caplog):
     _set_events(monkeypatch, "negotiation_created,invalid")
 
     with caplog.at_level("WARNING"):
-        actions = hh_webhooks._actions()
+        actions = subscription._actions()
 
     assert actions == [
         {"type": "NEW_NEGOTIATION_VACANCY", "settings": {"vacancies_only_mine": False}}
@@ -107,7 +108,7 @@ async def test_ensure_skips_when_no_valid_events(in_memory_db, monkeypatch):
         return ["1"]
 
     monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
-    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    monkeypatch.setattr(subscription, "_target_url", lambda: "http://example.com")
     _set_events(monkeypatch, "invalid")
 
     captured = []
@@ -117,7 +118,7 @@ async def test_ensure_skips_when_no_valid_events(in_memory_db, monkeypatch):
         return httpx.Response(200)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        await hh_webhooks.ensure_hh_webhook(client)
+        await routes.ensure_hh_webhook(client)
 
     assert captured == []
 
@@ -141,7 +142,7 @@ async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
         return ["1"]
 
     monkeypatch.setattr(DbTokenStore, "list_owners", staticmethod(fake_list_owners))
-    monkeypatch.setattr(hh_webhooks, "_target_url", lambda: "http://example.com")
+    monkeypatch.setattr(subscription, "_target_url", lambda: "http://example.com")
     _set_events(monkeypatch, "negotiation_created,invalid")
 
     captured = []
@@ -153,7 +154,7 @@ async def test_ensure_posts_only_valid_events(in_memory_db, monkeypatch):
         return httpx.Response(200, json={})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        await hh_webhooks.ensure_hh_webhook(client)
+        await routes.ensure_hh_webhook(client)
 
     assert len(captured) == 2
     assert json.loads(captured[1].content)["actions"] == [
