@@ -160,6 +160,37 @@ class RabbitMQClient:
             assert self._exch is not None
             await self._exch.publish(msg, routing_key="tasks.dlq")
 
+    async def requeue_dlq(self, count: int) -> int:
+        """Move up to ``count`` messages from the DLQ back to the main queue.
+
+        Returns the number of messages requeued.
+        """
+        if count <= 0:
+            return 0
+        if not self._conn or self._conn.is_closed or not self._chan or self._chan.is_closed:
+            await self._ensure()
+        s = self._s()
+        assert self._chan is not None
+        q_dlq = await self._chan.get_queue(s.RMQ_DLQ_QUEUE)
+        moved = 0
+        for _ in range(count):
+            try:
+                msg = await q_dlq.get(no_ack=False, fail=False)  # type: ignore[call-arg]
+            except aio_exc.QueueEmpty:
+                break
+            if msg is None:
+                break
+            try:
+                obj = json.loads(msg.body.decode())
+                payload = obj.get("payload") or {}
+            except Exception:  # pragma: no cover - defensive
+                payload = {}
+            if payload:
+                await self.publish_task(payload, attempts=0)
+                moved += 1
+            await msg.ack()
+        return moved
+
     async def consume(
         self, handler: Callable[..., Awaitable[None]], max_attempts: int = 10
     ) -> None:

@@ -4,7 +4,7 @@ import logging
 import time
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import RootModel
 
@@ -21,6 +21,17 @@ from app.db.db import get_session
 from app.db.models import Token
 from sqlalchemy import select
 from app.bootstrap import ensure_tokens
+from app.api._webhook_common import process_job_board_webhook
+from app.services.payload_parsers import (
+    parse_hh_payload,
+    extract_avito_payload,
+    parse_avito_payload,
+)
+from app.services.lead_processor import send_invite
+from app.models import IncomingPayload, Applicant
+from app.store import find_link
+from app.adapters.amo_client import AmoClient
+from app.services.hh_status_sync import sync_hh_status
 
 router = APIRouter()
 admin = APIRouter()
@@ -93,6 +104,84 @@ async def dedup_clean(hours: int = 72) -> dict:
     deleted = await cleanup_older_than(hours * 3600)
     logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
+
+
+@admin.post("/dlq/requeue")
+async def dlq_requeue(
+    n: int = 10, queue_client: RabbitMQClient = Depends(lambda: rabbitmq)
+) -> dict:
+    """Requeue up to ``n`` messages from the dead-letter queue."""
+
+    moved = await queue_client.requeue_dlq(n)
+    return {"ok": True, "requeued": moved}
+
+
+@admin.post("/replay/lead")
+async def replay_lead(
+    platform: str,
+    request: Request,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+) -> dict:
+    """Replay a missed job board webhook without deduplication."""
+
+    if platform not in {"hh", "avito"}:
+        raise HTTPException(status_code=400, detail="unknown platform")
+    parsers = {
+        "hh": parse_hh_payload,
+        "avito": lambda b: parse_avito_payload(extract_avito_payload(b)),
+    }
+    raw = await request.body()
+    parser = parsers[platform]
+    return await process_job_board_webhook(
+        platform, raw, http_client, parser, skip_dedup=True
+    )
+
+
+@admin.post("/replay/survey-invite")
+async def replay_survey_invite(
+    lead_id: int,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+) -> dict:
+    """Resend Telegram survey invite for the given lead."""
+
+    link = await find_link(lead_id)
+    if not link or not link.get("external_id"):
+        raise HTTPException(status_code=404, detail="lead link not found")
+    amo = await AmoClient.create(http_client)
+    lead = await amo.get_lead(lead_id)
+    s = get_settings()
+    pipeline_id = lead.get("pipeline_id")
+    kind = (
+        "master" if pipeline_id == s.AMO_PIPELINE_ID_MASTER else "operator"
+    )
+    payload = IncomingPayload(
+        platform=link["platform"],
+        owner_id=link.get("owner_id"),
+        vacancy_id=link.get("vacancy_id"),
+        applicant=Applicant(id=str(link["external_id"]), name="replay"),
+        kind=kind,
+    )
+    await send_invite(payload, lead_id)
+    return {"ok": True}
+
+
+@admin.post("/status-sync/lead")
+async def status_sync_lead(
+    lead_id: int,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+) -> dict:
+    """Synchronize the current lead status with HeadHunter."""
+
+    link = await find_link(lead_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="lead link not found")
+    amo = await AmoClient.create(http_client)
+    lead = await amo.get_lead(lead_id)
+    status_id = lead.get("status_id")
+    if not isinstance(status_id, int):
+        raise HTTPException(status_code=400, detail="invalid status")
+    await sync_hh_status(lead_id, status_id, link, http_client)
+    return {"ok": True, "status_id": status_id}
 
 
 @admin.get("/hh-states")
