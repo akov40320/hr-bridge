@@ -177,6 +177,7 @@ class RabbitMQClient:
 
         async def _worker() -> None:
             """Continuously fetch messages from the queue and process them."""
+            q: amqp_abc.AbstractQueue | None = None
             while True:
                 try:
                     if (
@@ -184,11 +185,13 @@ class RabbitMQClient:
                         or self._conn.is_closed
                         or not self._chan
                         or self._chan.is_closed
+                        or q is None
                     ):
                         await self._ensure()
+                        assert self._chan is not None
+                        q = await self._chan.get_queue(s.RMQ_TASK_QUEUE)
 
-                    assert self._chan is not None
-                    q = await self._chan.get_queue(s.RMQ_TASK_QUEUE)
+                    assert q is not None
                     async with q.iterator() as it:
                         async for message in it:
                             obj = None
@@ -239,6 +242,7 @@ class RabbitMQClient:
                     break
                 except aio_exc.AMQPError:  # pragma: no cover - network errors
                     logger.exception("RMQ connection lost, retrying ...")
+                    q = None
                     await asyncio.sleep(1)
                     await self._ensure()
 
