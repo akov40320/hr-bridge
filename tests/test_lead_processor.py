@@ -97,6 +97,7 @@ async def test_send_invite(queue_mock):
     assert "start=555" in link
     assert queue_mock and queue_mock[0]["platform"] == "hh"
     assert all("msg_key" in task for task in queue_mock)
+    assert all("payload" in task for task in queue_mock)
 
 
 @pytest.mark.asyncio
@@ -124,6 +125,7 @@ async def test_create_lead_reauth_has_msg_key(monkeypatch, queue_mock):
     assert lead_id is None
     assert kind == "master"
     assert queue_mock and "msg_key" in queue_mock[0]
+    assert "payload" in queue_mock[0]
 
 
 @pytest.mark.asyncio

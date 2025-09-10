@@ -37,11 +37,13 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
             {
                 "platform": "mirror",
                 "action": "bot_to_amo",
-                "text": text,
-                "user_id": user.id,
-                "user_name": user.username,
-                "conversation_id": conv_id,
-                "lead_id": lead_id,
+                "payload": {
+                    "text": text,
+                    "user_id": user.id,
+                    "user_name": user.username,
+                    "conversation_id": conv_id,
+                    "lead_id": lead_id,
+                },
                 "msg_key": msg_key,
             }
         )
@@ -107,12 +109,14 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
             {
                 "platform": "mirror",
                 "action": "tg_to_amo",
-                "lead_id": lead_id,
-                "text": text,
-                "tg_user_id": user.id,
-                "tg_user_name": user.username,
-                "conversation_id": conv_id,
-                "bot_kind": bot_kind,
+                "payload": {
+                    "lead_id": lead_id,
+                    "text": text,
+                    "tg_user_id": user.id,
+                    "tg_user_name": user.username,
+                    "conversation_id": conv_id,
+                    "bot_kind": bot_kind,
+                },
                 "msg_key": msg_key,
             }
         )

@@ -286,7 +286,7 @@ def test_webhook_creates_task(monkeypatch, queue_mock):
     r = client.post("/tg/webhook/master", json=update)
     assert r.status_code == 200
     assert queue_mock and queue_mock[0]["action"] == "bot_to_amo"
-    assert queue_mock[0]["lead_id"] == 42
+    assert queue_mock[0]["payload"]["lead_id"] == 42
 
 
 def test_webhook_operator_routing(monkeypatch, queue_mock):
@@ -325,5 +325,5 @@ def test_webhook_operator_routing(monkeypatch, queue_mock):
 
     r = client.post("/tg/webhook/operator", json=update)
     assert r.status_code == 200
-    assert queue_mock and queue_mock[0]["bot_kind"] == "operator"
-    assert queue_mock[0]["lead_id"] == 77
+    assert queue_mock and queue_mock[0]["payload"]["bot_kind"] == "operator"
+    assert queue_mock[0]["payload"]["lead_id"] == 77

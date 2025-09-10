@@ -167,9 +167,11 @@ async def publish_links(
             {
                 "platform": "mirror",
                 "action": "amo_to_tg",
-                "bot_kind": ln.bot_kind,
-                "user_id": ln.user_id,
-                "text": text,
+                "payload": {
+                    "bot_kind": ln.bot_kind,
+                    "user_id": ln.user_id,
+                    "text": text,
+                },
                 "msg_key": key_src,
             }
         )

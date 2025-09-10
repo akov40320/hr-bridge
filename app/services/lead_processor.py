@@ -12,6 +12,14 @@ from app.adapters.amo_client import ReauthRequired
 from app.api.oauth2 import OAuth2RefreshError
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
+from app.events import (
+    LeadCreated,
+    LeadCreatedPayload,
+    SendMessage,
+    SendMessagePayload,
+    UpdateStatus,
+    UpdateStatusPayload,
+)
 from app.store import save_link
 from app.api.utils import route_kind
 from app.services import amo_lead_enrichment
@@ -105,16 +113,15 @@ async def create_lead(
     try:
         created = await client.create_leads(body)
     except ReauthRequired:
-        msg_key = f"create_lead:{payload.platform}:{payload.applicant.id}:{payload.vacancy_id}"
-        await queue_client.publish_task(
-            {
-                "platform": payload.platform or "unknown",
-                "action": "amo_create_lead",
-                "lead_body": body,
-                "ts": int(time.time()),
-                "msg_key": msg_key,
-            }
+        msg_key = (
+            f"create_lead:{payload.platform}:{payload.applicant.id}:{payload.vacancy_id}"
         )
+        event = LeadCreated(
+            platform=payload.platform or "unknown",
+            payload=LeadCreatedPayload(lead_body=body, ts=int(time.time())),
+            msg_key=msg_key,
+        )
+        await queue_client.publish_task(event.model_dump(exclude_none=True))
         return None, kind
 
     lead_id = created["_embedded"]["leads"][0]["id"]
@@ -169,37 +176,48 @@ async def send_invite(
     negotiation_id = payload.applicant.id
 
     if platform == "avito" and negotiation_id:
-        msg_key = f"avito:{negotiation_id}:{hashlib.sha256(invite_text_avito.encode()).hexdigest()}"
-        await queue_client.publish_task({
-            "platform": "avito",
-            "action": "send_message",
-            "external_id": negotiation_id,
-            "text": invite_text_avito,
-            "owner_id": payload.owner_id,
-            "msg_key": msg_key,
-        })
+        msg_key = (
+            f"avito:{negotiation_id}:{hashlib.sha256(invite_text_avito.encode()).hexdigest()}"
+        )
+        event = SendMessage(
+            platform="avito",
+            payload=SendMessagePayload(
+                external_id=negotiation_id,
+                text=invite_text_avito,
+                owner_id=payload.owner_id,
+            ),
+            msg_key=msg_key,
+        )
+        await queue_client.publish_task(event.model_dump(exclude_none=True))
 
     if platform == "hh" and negotiation_id:
         # 1) Перевод в этап «Первичный контакт» через action
         state_key = f"hh:set_state:{negotiation_id}:phone_interview"
-        await queue_client.publish_task({
-            "platform": "hh",
-            "action": "set_state",
-            "negotiation_id": negotiation_id,
-            "action_id": "phone_interview",   # PUT /negotiations/phone_interview/{nid}
-            "owner_id": payload.owner_id,
-            "msg_key": state_key,
-        })
+        upd_event = UpdateStatus(
+            platform="hh",
+            action="set_state",
+            payload=UpdateStatusPayload(
+                external_id=negotiation_id,
+                action_id="phone_interview",  # PUT /negotiations/phone_interview/{nid}
+                owner_id=payload.owner_id,
+            ),
+            msg_key=state_key,
+        )
+        await queue_client.publish_task(upd_event.model_dump(exclude_none=True))
         # 2) Сообщение кандидату (form-urlencoded, HH-User-Agent на стороне воркера)
-        msg_key = f"hh:send_message:{negotiation_id}:{hashlib.sha256(invite_text_hh.encode()).hexdigest()}"
-        await queue_client.publish_task({
-            "platform": "hh",
-            "action": "send_message",
-            "negotiation_id": negotiation_id,
-            "text": invite_text_hh,
-            "owner_id": payload.owner_id,
-            "msg_key": msg_key,
-        })
+        msg_key = (
+            f"hh:send_message:{negotiation_id}:{hashlib.sha256(invite_text_hh.encode()).hexdigest()}"
+        )
+        msg_event = SendMessage(
+            platform="hh",
+            payload=SendMessagePayload(
+                external_id=negotiation_id,
+                text=invite_text_hh,
+                owner_id=payload.owner_id,
+            ),
+            msg_key=msg_key,
+        )
+        await queue_client.publish_task(msg_event.model_dump(exclude_none=True))
 
     return deep_link
 

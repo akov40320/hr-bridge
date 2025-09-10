@@ -94,7 +94,7 @@ async def test_start(monkeypatch, queue_mock):
 
     assert sent and "Здравствуйте" in sent[0]["text"]
     assert queue_mock[-1]["action"] == "bot_to_amo"
-    assert queue_mock[-1]["lead_id"] == 777
+    assert queue_mock[-1]["payload"]["lead_id"] == 777
 
 
 @pytest.mark.asyncio

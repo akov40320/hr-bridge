@@ -33,9 +33,11 @@ async def test_sync_hh_status_basic(monkeypatch):
         {
             "platform": "hh",
             "action": "set_state",
-            "external_id": "nid",
-            "target_state": "phone_interview",
-            "owner_id": "oid",
+            "payload": {
+                "external_id": "nid",
+                "target_state": "phone_interview",
+                "owner_id": "oid",
+            },
         }
     ]
 
@@ -63,4 +65,4 @@ async def test_sync_hh_status_refusal_mapping(monkeypatch):
         queue_client=q,
     )
 
-    assert q.tasks[0]["target_state"] == "discard_no_interaction"
+    assert q.tasks[0]["payload"]["target_state"] == "discard_no_interaction"

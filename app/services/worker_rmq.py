@@ -79,7 +79,10 @@ async def handle(
         handler = HANDLERS.get((plat, act))
         if not handler:
             raise RuntimeError(f"unknown task: {payload}")
-        await handler(payload)
+        data = payload.get("payload") or {}
+        if payload.get("msg_key") is not None:
+            data.setdefault("msg_key", payload["msg_key"])
+        await handler(data)
 
     except ReauthRequired as err:
         logger.warning("ReauthRequired: %s", err)

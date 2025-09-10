@@ -34,7 +34,6 @@ async def test_status_update_on_chat_creation(monkeypatch, queue_mock):
         {
             "platform": "amo",
             "action": "amo_update_status",
-            "lead_id": 123,
-            "status_id": 777,
+            "payload": {"lead_id": 123, "status_id": 777},
         }
     ]

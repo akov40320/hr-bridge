@@ -28,20 +28,26 @@ async def test_start(monkeypatch, queue_mock):
         {
             "platform": "amo",
             "action": "amo_add_note",
-            "lead_id": 10,
-            "text": "[master] Кандидат перешёл в бота (TG id:42).",
+            "payload": {
+                "lead_id": 10,
+                "text": "[master] Кандидат перешёл в бота (TG id:42).",
+            },
         },
         {
             "platform": "amo",
             "action": "amo_add_tags",
-            "lead_id": 10,
-            "tags": [settings.AMO_TAG_WENT_TO_BOT],
+            "payload": {
+                "lead_id": 10,
+                "tags": [settings.AMO_TAG_WENT_TO_BOT],
+            },
         },
         {
             "platform": "amo",
             "action": "amo_update_status",
-            "lead_id": 10,
-            "status_id": settings.AMO_STAGE_ID_MASTER_NEW,
+            "payload": {
+                "lead_id": 10,
+                "status_id": settings.AMO_STAGE_ID_MASTER_NEW,
+            },
         },
     ]
 
@@ -67,20 +73,26 @@ async def test_start_operator(monkeypatch, queue_mock):
         {
             "platform": "amo",
             "action": "amo_add_note",
-            "lead_id": 20,
-            "text": "[operator] Кандидат перешёл в бота (TG id:99).",
+            "payload": {
+                "lead_id": 20,
+                "text": "[operator] Кандидат перешёл в бота (TG id:99).",
+            },
         },
         {
             "platform": "amo",
             "action": "amo_add_tags",
-            "lead_id": 20,
-            "tags": [settings.AMO_TAG_WENT_TO_BOT],
+            "payload": {
+                "lead_id": 20,
+                "tags": [settings.AMO_TAG_WENT_TO_BOT],
+            },
         },
         {
             "platform": "amo",
             "action": "amo_update_status",
-            "lead_id": 20,
-            "status_id": settings.AMO_STAGE_ID_OPERATOR_NEW,
+            "payload": {
+                "lead_id": 20,
+                "status_id": settings.AMO_STAGE_ID_OPERATOR_NEW,
+            },
         },
     ]
 
@@ -128,20 +140,26 @@ async def test_finish(bot_kind, stage_attr, stage_value, monkeypatch, queue_mock
         {
             "platform": "amo",
             "action": "amo_add_tags",
-            "lead_id": 33,
-            "tags": [settings.AMO_TAG_SURVEY_DONE],
+            "payload": {
+                "lead_id": 33,
+                "tags": [settings.AMO_TAG_SURVEY_DONE],
+            },
         },
         {
             "platform": "amo",
             "action": "amo_add_note",
-            "lead_id": 33,
-            "text": f"[{bot_kind}] summary",
+            "payload": {
+                "lead_id": 33,
+                "text": f"[{bot_kind}] summary",
+            },
         },
         {
             "platform": "amo",
             "action": "amo_update_status",
-            "lead_id": 33,
-            "status_id": stage_value,
+            "payload": {
+                "lead_id": 33,
+                "status_id": stage_value,
+            },
         },
     ]
     assert deleted == [(3, bot_kind)]
