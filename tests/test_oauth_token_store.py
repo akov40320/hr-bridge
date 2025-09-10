@@ -4,6 +4,7 @@ import httpx
 
 from app.api import oauth2
 from app.db.token_store import DbTokenStore
+from app.core.crypto import encrypt
 from app.db.db import get_session
 from app.db import models
 from sqlalchemy import insert, select
@@ -65,8 +66,8 @@ async def test_ensure_fresh_access_refreshes_when_expired(in_memory_db):
                 id=1,
                 service="svc",
                 owner_id=None,
-                access_token="old",
-                refresh_token="r1",
+                access_token=encrypt("old"),
+                refresh_token=encrypt("r1"),
                 expires_at=now - 10,
             )
         )
@@ -111,8 +112,8 @@ async def test_ensure_fresh_access_uses_cached_token(in_memory_db, monkeypatch):
                 id=1,
                 service="svc",
                 owner_id=None,
-                access_token="cached",
-                refresh_token="r1",
+                access_token=encrypt("cached"),
+                refresh_token=encrypt("r1"),
                 expires_at=now + 1000,
             )
         )
@@ -168,3 +169,25 @@ async def test_tokens_encrypted_in_db(in_memory_db):
     data = await store.load()
     assert data["access_token"] == "plain"
     assert data["refresh_token"] == "plainr"
+
+
+@pytest.mark.asyncio
+async def test_load_raises_on_invalid_ciphertext(in_memory_db):
+    """Ensure ``load`` fails loudly when tokens cannot be decrypted."""
+
+    async with get_session() as s:
+        await s.execute(
+            insert(models.Token).values(
+                id=1,
+                service="svc",
+                owner_id=None,
+                access_token="bad",  # not a valid Fernet token
+                refresh_token="bad",
+                expires_at=0,
+            )
+        )
+        await s.commit()
+
+    store = DbTokenStore("svc")
+    with pytest.raises(RuntimeError):
+        await store.load()
