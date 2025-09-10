@@ -40,6 +40,25 @@ async def test_hh_send_message_idempotent(monkeypatch, in_memory_db):
 
 
 @pytest.mark.asyncio
+async def test_hh_send_message_dedup_by_nid(monkeypatch, in_memory_db):
+    calls = []
+
+    async def fake_send_message(response_id, text, employer_id, client):
+        calls.append((response_id, text))
+
+    monkeypatch.setattr(worker_hh.hh_adapt, "send_message", fake_send_message)
+    monkeypatch.setattr(worker_hh, "get_http_client", lambda: object())
+
+    payload1 = {"negotiation_id": "nid", "text": "hi", "msg_key": "k1"}
+    payload2 = {"negotiation_id": "nid", "text": "hi", "msg_key": "k2"}
+
+    await worker_hh.handle_hh_send_message(payload1)
+    await worker_hh.handle_hh_send_message(payload2)
+
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_hh_send_message_external_id(monkeypatch):
     calls = []
 

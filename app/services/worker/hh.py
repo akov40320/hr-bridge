@@ -26,8 +26,6 @@ async def handle_hh_send_message(payload: dict):
     text = payload["text"]
     owner_id = payload.get("owner_id")
 
-    msg_key = payload.get("msg_key")
-
     async def _op():
         logger.info("hh.send_message: %s text=%r", nid, text[:40])
         client = get_http_client()
@@ -38,12 +36,12 @@ async def handle_hh_send_message(payload: dict):
             client=client,
         )
 
-    if msg_key:
-        dedup = calc_key("hh_send_message", msg_key)
-        if not await once(dedup, 72 * 3600, _op):
-            return
-    else:
-        await _op()
+    # Дедупликация теперь основана на идентификаторе отклика,
+    # что предотвращает повторную отправку одинаковых сообщений
+    # одному и тому же кандидату.
+    dedup = calc_key("hh_send_message", nid)
+    if not await once(dedup, 72 * 3600, _op):
+        return
 
 
 async def handle_hh_set_state(payload: dict):
