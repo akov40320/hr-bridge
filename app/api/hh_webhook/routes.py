@@ -56,7 +56,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
             "Authorization": f"Bearer {access}",
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "hr-bridge/1.0 (+https://hr-bridge.onrender.com; ops@hr-bridge.onrender.com)",
+            "User-Agent": s.HH_USER_AGENT or "hr-bridge/1.0 (+https://hr-bridge.onrender.com)",
         }
 
         try:
