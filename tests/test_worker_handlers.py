@@ -40,6 +40,21 @@ async def test_hh_send_message_idempotent(monkeypatch, in_memory_db):
 
 
 @pytest.mark.asyncio
+async def test_hh_send_message_external_id(monkeypatch):
+    calls = []
+
+    async def fake_send_message(response_id, text, employer_id, client):
+        calls.append((response_id, text))
+
+    monkeypatch.setattr(worker_hh.hh_adapt, "send_message", fake_send_message)
+    monkeypatch.setattr(worker_hh, "get_http_client", lambda: object())
+
+    payload = {"external_id": "nid", "text": "hi"}
+    await worker_hh.handle_hh_send_message(payload)
+    assert calls == [("nid", "hi")]
+
+
+@pytest.mark.asyncio
 async def test_hh_set_state_idempotent(monkeypatch, in_memory_db):
     calls = []
 
@@ -53,6 +68,21 @@ async def test_hh_set_state_idempotent(monkeypatch, in_memory_db):
     await worker_hh.handle_hh_set_state(payload)
     await worker_hh.handle_hh_set_state(payload)
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_hh_set_state_external_id(monkeypatch):
+    calls = []
+
+    async def fake_set_state(response_id, target_state, employer_id, client):
+        calls.append((response_id, target_state))
+
+    monkeypatch.setattr(worker_hh.hh_adapt, "set_employer_state", fake_set_state)
+    monkeypatch.setattr(worker_hh, "get_http_client", lambda: object())
+
+    payload = {"external_id": "nid", "action_id": "state"}
+    await worker_hh.handle_hh_set_state(payload)
+    assert calls == [("nid", "state")]
 
 
 @pytest.mark.asyncio
