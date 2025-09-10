@@ -44,7 +44,6 @@ app = FastAPI(
 app.add_middleware(LoggingMiddleware)
 app.add_route("/metrics", metrics_endpoint)
 
-# Собираем публичные роуты тут (без агрегирующего импорта пакета app.api)
 public_router = APIRouter()
 public_router.include_router(oauth.router)
 public_router.include_router(hh_incoming.router)
@@ -82,13 +81,13 @@ async def register_webhook(bot_token: str, path_suffix: str) -> None:
             )
             info = await bot.get_webhook_info()
             log.info(
-                "%s webhook set -> %s (pending=%s)",
+                "%s вебхук установлен -> %s (в ожидании=%s)",
                 path_suffix.capitalize(),
                 info.url,
                 info.pending_update_count,
             )
     except Exception:
-        log.exception("Failed to set %s webhook", path_suffix)
+        log.exception("Не удалось установить вебхук %s", path_suffix)
 
 
 async def auto_register_telegram_webhooks() -> None:
@@ -134,16 +133,15 @@ async def on_startup():
         if amo_tok and amo_tok.get("access_token") and int(amo_tok.get("expires_at", 0)) > int(time.time()) + 30:
             if not load_hh_mapping():
                 await rabbitmq.publish_task({"platform": "system", "action": "hh_autofill", "payload": {}})
-                log.info("Queued hh_autofill on startup")
+                log.info("Задача hh_autofill поставлена при запуске")
     except Exception:
-        log.info("Amo token not ready on startup — hh_autofill will be queued after OAuth")
+        log.info("Токен Amo не готов при запуске — задача hh_autofill будет поставлена после OAuth")
 
-    # стартуем RMQ consumer
     try:
         app.state.rmq_task = asyncio.create_task(rabbitmq.consume(_handle_task, max_attempts=10))
-        log.info("RMQ consumer started")
+        log.info("Потребитель RMQ запущен")
     except Exception:
-        log.exception("Failed to start RMQ consumer")
+        log.exception("Не удалось запустить потребителя RMQ")
 
     client = get_http_client()
     await ensure_hh_webhook(client)

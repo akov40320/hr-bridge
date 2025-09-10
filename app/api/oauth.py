@@ -322,9 +322,9 @@ async def amo_callback(
 
         try:
             await queue_client.publish_task({"platform": "system", "action": "hh_autofill", "payload": {}})
-            logger.info("Queued hh_autofill after amo oauth")
+            logger.info("Задача hh_autofill поставлена после Amo OAuth")
         except aio_exc.AMQPError:
-            logger.exception("Failed to queue hh_autofill after amo oauth")
+            logger.exception("Не удалось поставить задачу hh_autofill после Amo OAuth")
 
     except SQLAlchemyError as e:
         return {
