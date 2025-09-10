@@ -3,6 +3,7 @@
 from typing import Any, Mapping, cast
 import json
 import logging
+import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -13,6 +14,7 @@ from app.services.hh_mapping import load as hh_map_load
 from app.services.queue import RabbitMQClient, rabbitmq
 from app.services.hh_status_sync import sync_hh_status
 from app.store import find_link
+from app.store_status import set_last_transition
 from .utils import events_from_form
 
 logger = logging.getLogger(__name__)
@@ -84,6 +86,7 @@ async def amo_webhook(
     events = await parse_status_events(request)
 
     for lead_id, status_id in events:
+        await set_last_transition(lead_id, status_id, int(time.time()))
         link = await find_link(lead_id)
         if not link:
             logger.warning("NO LINK FOR LEAD %s", lead_id)

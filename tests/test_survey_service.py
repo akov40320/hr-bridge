@@ -24,32 +24,29 @@ async def test_start(monkeypatch, queue_mock):
     await svc.start(1, "master", 10, "id:42")
 
     assert called == [(1, "master", 10)]
-    assert queue_mock == [
-        {
-            "platform": "amo",
-            "action": "amo_add_note",
-            "payload": {
-                "lead_id": 10,
-                "text": "[master] Кандидат перешёл в бота (TG id:42).",
-            },
+    assert len(queue_mock) == 3
+    assert queue_mock[0] == {
+        "platform": "amo",
+        "action": "amo_add_note",
+        "payload": {
+            "lead_id": 10,
+            "text": "[master] Кандидат перешёл в бота (TG id:42).",
         },
-        {
-            "platform": "amo",
-            "action": "amo_add_tags",
-            "payload": {
-                "lead_id": 10,
-                "tags": [settings.AMO_TAG_WENT_TO_BOT],
-            },
+    }
+    assert queue_mock[1] == {
+        "platform": "amo",
+        "action": "amo_add_tags",
+        "payload": {
+            "lead_id": 10,
+            "tags": [settings.AMO_TAG_WENT_TO_BOT],
         },
-        {
-            "platform": "amo",
-            "action": "amo_update_status",
-            "payload": {
-                "lead_id": 10,
-                "status_id": settings.AMO_STAGE_ID_MASTER_NEW,
-            },
-        },
-    ]
+    }
+    last = queue_mock[2]
+    assert last["platform"] == "amo"
+    assert last["action"] == "amo_update_status"
+    assert last["payload"]["lead_id"] == 10
+    assert last["payload"]["status_id"] == settings.AMO_STAGE_ID_MASTER_NEW
+    assert isinstance(last["payload"]["ts"], int)
 
 
 @pytest.mark.asyncio
@@ -69,32 +66,29 @@ async def test_start_operator(monkeypatch, queue_mock):
     await svc.start(2, "operator", 20, "id:99")
 
     assert called == [(2, "operator", 20)]
-    assert queue_mock == [
-        {
-            "platform": "amo",
-            "action": "amo_add_note",
-            "payload": {
-                "lead_id": 20,
-                "text": "[operator] Кандидат перешёл в бота (TG id:99).",
-            },
+    assert len(queue_mock) == 3
+    assert queue_mock[0] == {
+        "platform": "amo",
+        "action": "amo_add_note",
+        "payload": {
+            "lead_id": 20,
+            "text": "[operator] Кандидат перешёл в бота (TG id:99).",
         },
-        {
-            "platform": "amo",
-            "action": "amo_add_tags",
-            "payload": {
-                "lead_id": 20,
-                "tags": [settings.AMO_TAG_WENT_TO_BOT],
-            },
+    }
+    assert queue_mock[1] == {
+        "platform": "amo",
+        "action": "amo_add_tags",
+        "payload": {
+            "lead_id": 20,
+            "tags": [settings.AMO_TAG_WENT_TO_BOT],
         },
-        {
-            "platform": "amo",
-            "action": "amo_update_status",
-            "payload": {
-                "lead_id": 20,
-                "status_id": settings.AMO_STAGE_ID_OPERATOR_NEW,
-            },
-        },
-    ]
+    }
+    last = queue_mock[2]
+    assert last["platform"] == "amo"
+    assert last["action"] == "amo_update_status"
+    assert last["payload"]["lead_id"] == 20
+    assert last["payload"]["status_id"] == settings.AMO_STAGE_ID_OPERATOR_NEW
+    assert isinstance(last["payload"]["ts"], int)
 
 
 @pytest.mark.asyncio
@@ -135,31 +129,27 @@ async def test_finish(bot_kind, stage_attr, stage_value, monkeypatch, queue_mock
 
     svc = SurveyService()
     await svc.finish(3, bot_kind, 33, "summary")
-
-    assert queue_mock == [
-        {
-            "platform": "amo",
-            "action": "amo_add_tags",
-            "payload": {
-                "lead_id": 33,
-                "tags": [settings.AMO_TAG_SURVEY_DONE],
-            },
+    assert len(queue_mock) == 3
+    assert queue_mock[0] == {
+        "platform": "amo",
+        "action": "amo_add_tags",
+        "payload": {
+            "lead_id": 33,
+            "tags": [settings.AMO_TAG_SURVEY_DONE],
         },
-        {
-            "platform": "amo",
-            "action": "amo_add_note",
-            "payload": {
-                "lead_id": 33,
-                "text": f"[{bot_kind}] summary",
-            },
+    }
+    assert queue_mock[1] == {
+        "platform": "amo",
+        "action": "amo_add_note",
+        "payload": {
+            "lead_id": 33,
+            "text": f"[{bot_kind}] summary",
         },
-        {
-            "platform": "amo",
-            "action": "amo_update_status",
-            "payload": {
-                "lead_id": 33,
-                "status_id": stage_value,
-            },
-        },
-    ]
+    }
+    last = queue_mock[2]
+    assert last["platform"] == "amo"
+    assert last["action"] == "amo_update_status"
+    assert last["payload"]["lead_id"] == 33
+    assert last["payload"]["status_id"] == stage_value
+    assert isinstance(last["payload"]["ts"], int)
     assert deleted == [(3, bot_kind)]

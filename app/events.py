@@ -56,6 +56,7 @@ class UpdateStatusPayload(BaseModel):
     lead_id: int | None = None
     status_id: int | None = None
     owner_id: str | None = None
+    ts: int | None = None
 
 
 class UpdateStatus(EventBase):

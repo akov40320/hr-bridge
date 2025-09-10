@@ -6,12 +6,14 @@ to perform the actual API call.
 """
 
 import logging
+import time
 
 from httpx import HTTPStatusError
 
 from app.adapters.amo_client import AmoClient
 from app.http_client import get_http_client
 from app.services.dedup import calc_key, once
+from app.store_status import get_last_transition, set_last_transition
 
 logger = logging.getLogger(__name__)
 
@@ -79,15 +81,27 @@ async def handle_amo_update_status(payload: dict) -> None:
 
     Args:
         payload: Must contain ``lead_id`` and ``status_id`` specifying the new
-            status for the lead.
+            status for the lead. Optional ``ts`` marks when the change was
+            requested to avoid applying stale updates.
     """
 
-    logger.info("amo.update_status: %s", payload.get("lead_id"))
+    lead_id = int(payload["lead_id"])
+    status_id = int(payload["status_id"])
+    ts = int(payload.get("ts") or time.time())
+
+    last = await get_last_transition(lead_id)
+    if last and last.ts >= ts:
+        logger.info("amo.update_status: stale transition for lead %s", lead_id)
+        return
+
+    logger.info("amo.update_status: %s", lead_id)
     amo = await AmoClient.create(get_http_client())
     try:
-        await amo.update_status(int(payload["lead_id"]), int(payload["status_id"]))
+        await amo.update_status(lead_id, status_id)
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
             logger.warning("amo.update_status failed: %s", err)
         else:
             raise
+    else:
+        await set_last_transition(lead_id, status_id, ts)
