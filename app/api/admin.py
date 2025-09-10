@@ -4,8 +4,9 @@ import logging
 import time
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
+from pydantic import RootModel
 
 from app.http_client import get_http_client
 from app.core.config import get_settings
@@ -17,6 +18,12 @@ from app.db.token_store import DbTokenStore
 
 router = APIRouter()
 admin = APIRouter()
+
+
+class HHMapping(RootModel[dict[str, str]]):
+    """HeadHunter status mapping payload."""
+
+    pass
 
 
 logger = logging.getLogger(__name__)
@@ -50,10 +57,15 @@ async def get_hh_mapping() -> dict:
 
 
 @admin.put("/hh-mapping")
-async def put_hh_mapping(payload: dict) -> dict:
+async def put_hh_mapping(payload: HHMapping) -> dict:
     """Replace the HeadHunter mapping with ``payload``."""
 
-    return {"ok": True, "mapping": hh_map_set(payload)}
+    try:
+        new_mapping = hh_map_set(payload.model_dump())
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("invalid hh mapping payload: %s", exc)
+        raise HTTPException(status_code=400, detail=f"invalid mapping: {exc}")
+    return {"ok": True, "mapping": new_mapping}
 
 
 @admin.post("/rmq-test")
