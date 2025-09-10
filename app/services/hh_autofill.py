@@ -10,7 +10,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
-from app.db.token_store import DbTokenStore
+from app.adapters.amo_client import AmoClient
 from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 
 log = logging.getLogger(__name__)
@@ -37,25 +37,13 @@ async def _fetch_pipeline_statuses(
     client: httpx.AsyncClient,
 ) -> list[dict]:
     try:
-        tok = await DbTokenStore("amo").load()
+        amo = await AmoClient.create(client)
     except (RuntimeError, SQLAlchemyError) as e:
         log.warning("hh-autofill: no amo token: %s", e)
         return []
 
-    s = get_settings()
-    url = s.AMO_BASE_URL.rstrip("/") + f"/api/v4/leads/pipelines/{pipeline_id}"
     try:
-        r = await client.get(
-            url,
-            headers={
-                "Authorization": f"Bearer {tok['access_token']}",
-                "Accept": "application/json",
-            },
-            timeout=20,
-        )
-        r.raise_for_status()
-        pj = r.json() or {}
-        return (pj.get("_embedded") or {}).get("statuses") or []
+        return await amo.get_pipeline_statuses(int(pipeline_id))
     except (httpx.HTTPError, ValueError) as e:
         log.warning("hh-autofill: cannot fetch pipeline %s: %s", pipeline_id, e)
         return []

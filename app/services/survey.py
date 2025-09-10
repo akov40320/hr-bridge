@@ -6,9 +6,6 @@ prompts and summaries for a short survey and formatting Telegram identities.
 
 from aiogram.types import Message
 
-from app.core.config import get_settings
-from app.services.queue import rabbitmq, RabbitMQClient
-
 
 def parse_start_arg(text: str) -> int | None:
     """Extract integer ``/start`` argument from ``text``.
@@ -56,39 +53,3 @@ def pretty_tg_identity(m: Message) -> str:
     if not user:
         return "id:unknown"
     return f"@{user.username}" if user.username else f"id:{user.id}"
-
-
-async def mark_went_to_bot_async(
-    lead_id: int,
-    bot_kind: str,
-    identity: str,
-    queue_client: RabbitMQClient = rabbitmq,
-):
-    """Переносим на воркер: добавляем заметку и тег через RMQ."""
-    s = get_settings()
-
-    await queue_client.publish_task({
-        "platform": "amo",
-        "action": "amo_add_note",
-        "lead_id": lead_id,
-        "text": f"[{bot_kind}] Кандидат перешёл в бота (TG {identity}).",
-    })
-    await queue_client.publish_task({
-        "platform": "amo",
-        "action": "amo_add_tags",
-        "lead_id": lead_id,
-        "tags": [s.AMO_TAG_WENT_TO_BOT],
-    })
-    stage_id = (
-        s.AMO_STAGE_ID_MASTER_NEW
-        if bot_kind == "master"
-        else s.AMO_STAGE_ID_OPERATOR_NEW
-    )
-    await queue_client.publish_task(
-        {
-            "platform": "amo",
-            "action": "amo_update_status",
-            "lead_id": lead_id,
-            "status_id": stage_id,
-        }
-    )

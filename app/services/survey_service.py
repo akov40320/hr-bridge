@@ -14,7 +14,13 @@ from app.store_survey import (
     store_answer_and_advance,
     delete_survey,
 )
-from app.services.survey import mark_went_to_bot_async
+
+
+async def _publish_tasks(queue_client: RabbitMQClient, tasks: list[dict]) -> None:
+    """Publish a sequence of tasks to the queue client."""
+
+    for payload in tasks:
+        await queue_client.publish_task(payload)
 
 
 class SurveyService:
@@ -27,7 +33,35 @@ class SurveyService:
     async def start(self, user_id: int, bot_kind: str, lead_id: int, identity: str) -> None:
         """Start or reset survey and mark that user went to bot."""
         await start_or_reset_survey(user_id, bot_kind, lead_id)
-        await mark_went_to_bot_async(lead_id, bot_kind, identity, self.queue_client)
+        s = get_settings()
+        stage_id = (
+            s.AMO_STAGE_ID_MASTER_NEW
+            if bot_kind == "master"
+            else s.AMO_STAGE_ID_OPERATOR_NEW
+        )
+        await _publish_tasks(
+            self.queue_client,
+            [
+                {
+                    "platform": "amo",
+                    "action": "amo_add_note",
+                    "lead_id": lead_id,
+                    "text": f"[{bot_kind}] Кандидат перешёл в бота (TG {identity}).",
+                },
+                {
+                    "platform": "amo",
+                    "action": "amo_add_tags",
+                    "lead_id": lead_id,
+                    "tags": [s.AMO_TAG_WENT_TO_BOT],
+                },
+                {
+                    "platform": "amo",
+                    "action": "amo_update_status",
+                    "lead_id": lead_id,
+                    "status_id": stage_id,
+                },
+            ],
+        )
 
     async def get(self, user_id: int, bot_kind: str):
         """Fetch the current survey state for the given user and bot."""
@@ -40,29 +74,32 @@ class SurveyService:
     async def finish(self, user_id: int, bot_kind: str, lead_id: int, summary: str) -> None:
         """Finalize the survey and send results to the queue client."""
         s = get_settings()
-        await self.queue_client.publish_task({
-            "platform": "amo",
-            "action": "amo_add_tags",
-            "lead_id": lead_id,
-            "tags": [s.AMO_TAG_SURVEY_DONE],
-        })
-        await self.queue_client.publish_task({
-            "platform": "amo",
-            "action": "amo_add_note",
-            "lead_id": lead_id,
-            "text": f"[{bot_kind}] {summary}",
-        })
         stage_id = (
             s.AMO_STAGE_ID_MASTER_SURVEY
             if bot_kind == "master"
             else s.AMO_STAGE_ID_OPERATOR_SURVEY
         )
-        await self.queue_client.publish_task(
-            {
-                "platform": "amo",
-                "action": "amo_update_status",
-                "lead_id": lead_id,
-                "status_id": stage_id,
-            }
+        await _publish_tasks(
+            self.queue_client,
+            [
+                {
+                    "platform": "amo",
+                    "action": "amo_add_tags",
+                    "lead_id": lead_id,
+                    "tags": [s.AMO_TAG_SURVEY_DONE],
+                },
+                {
+                    "platform": "amo",
+                    "action": "amo_add_note",
+                    "lead_id": lead_id,
+                    "text": f"[{bot_kind}] {summary}",
+                },
+                {
+                    "platform": "amo",
+                    "action": "amo_update_status",
+                    "lead_id": lead_id,
+                    "status_id": stage_id,
+                },
+            ],
         )
         await delete_survey(user_id, bot_kind)

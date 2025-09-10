@@ -40,3 +40,27 @@ async def test_update_status(monkeypatch):
     assert captured["method"] == "PATCH"
     assert captured["url"].path == "/api/v4/leads"
     assert captured["json"] == [{"id": 123, "status_id": 456}]
+
+
+@pytest.mark.asyncio
+async def test_get_pipeline_statuses(monkeypatch):
+    class DummySettings:
+        AMO_BASE_URL = "https://example.com"
+
+    monkeypatch.setattr(amo_client_module, "get_settings", lambda: DummySettings())
+
+    tokens = {"access_token": "acc", "refresh_token": "ref", "expires_at": 10**10}
+    captured = {}
+
+    def handler(request):
+        captured["method"] = request.method
+        captured["url"] = request.url
+        return httpx.Response(200, json={"_embedded": {"statuses": [{"id": 1}]}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        amo = AmoClient(tokens, DummyStore(), client)
+        statuses = await amo.get_pipeline_statuses(321)
+
+    assert captured["method"] == "GET"
+    assert captured["url"].path == "/api/v4/leads/pipelines/321"
+    assert statuses == [{"id": 1}]
