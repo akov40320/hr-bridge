@@ -7,6 +7,7 @@ from app.adapters.amo_client import AmoClient
 from app.services.hh_autofill import autofill_hh_mapping
 from app.db.token_store import DbTokenStore
 from app.http_client import get_http_client
+from app.services.worker.mirror import handle_mirror_bot_to_amo
 
 
 async def handle_task(p: dict, attempts: int = 0):
@@ -71,6 +72,10 @@ async def handle_task(p: dict, attempts: int = 0):
     if p["platform"] == "amo" and p["action"] == "amo_create_lead":
         amo = await AmoClient.create(get_http_client())
         await amo.create_leads(payload["lead_body"])
+        return
+
+    if p.get("platform") == "mirror" and p.get("action") == "bot_to_amo":
+        await handle_mirror_bot_to_amo(payload)
         return
 
     raise RuntimeError(f"Unknown task: {p}")
