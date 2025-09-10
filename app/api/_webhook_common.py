@@ -23,14 +23,19 @@ async def process_job_board_webhook(
     raw: bytes,
     http_client: httpx.AsyncClient,
     parse_payload: Callable[[bytes], IncomingPayload],
+    *,
+    skip_dedup: bool = False,
 ) -> dict:
     """Process an incoming job board webhook.
 
-    Handles deduplication, payload parsing and lead processing.
+    Handles optional deduplication, payload parsing and lead processing.
+    When ``skip_dedup`` is ``True`` the deduplication step is bypassed which is
+    useful for manual replays via administrative endpoints.
     """
-    key = calc_key(platform, raw)
-    if not await check_and_store(key):
-        return {"ok": True, "duplicate": True}
+    if not skip_dedup:
+        key = calc_key(platform, raw)
+        if not await check_and_store(key):
+            return {"ok": True, "duplicate": True}
 
     try:
         payload = parse_payload(raw)
