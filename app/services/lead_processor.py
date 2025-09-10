@@ -47,11 +47,11 @@ async def enrich_applicant(
                     if payload.applicant.name and payload.applicant.name != "кандидат"
                     else extra.get("name") or payload.applicant.name
                 )
-        except (httpx.HTTPError, json.JSONDecodeError, RuntimeError, OAuth2RefreshError) as e:  # pragma: no cover
+        except (httpx.HTTPError, json.JSONDecodeError, RuntimeError, OAuth2RefreshError) as e:
             logger.warning(
-                "HH: обогащение кандидата %s не удалось: %s",
+                "HH: обогащение кандидата %s не удалось. Причина: %s", 
                 payload.applicant.id,
-                type(e).__name__,
+                e, 
             )
         if payload.vacancy_id and not (payload.vacancy_desc or "").strip():
             try:
@@ -60,11 +60,11 @@ async def enrich_applicant(
                 )
                 if desc:
                     payload.vacancy_desc = desc
-            except (httpx.HTTPError, json.JSONDecodeError, RuntimeError, OAuth2RefreshError) as e:  # pragma: no cover
+            except (httpx.HTTPError, json.JSONDecodeError, RuntimeError, OAuth2RefreshError) as e:
                 logger.warning(
-                    "HH: описание вакансии %s не получено: %s",
+                    "HH: описание вакансии %s не получено. Причина: %s", 
                     payload.vacancy_id,
-                    type(e).__name__,
+                    e,
                 )
     return payload
 
