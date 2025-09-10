@@ -77,6 +77,34 @@ async def test_send_invite(queue_mock):
     link = await lead_processor.send_invite(payload, 555)
     assert "start=555" in link
     assert queue_mock and queue_mock[0]["platform"] == "hh"
+    assert all("msg_key" in task for task in queue_mock)
+
+
+@pytest.mark.asyncio
+async def test_create_lead_reauth_has_msg_key(monkeypatch, queue_mock):
+    payload = IncomingPayload(
+        platform="hh",
+        vacancy_title="Title",
+        vacancy_desc="",
+        raw_text="",
+        applicant=Applicant(id="1", name="John"),
+        owner_id="own",
+        vacancy_id="vac",
+    )
+
+    monkeypatch.setattr(lead_processor, "route_kind", lambda **kw: "master")
+
+    class DummyClient:
+        async def create_leads(self, body):
+            raise lead_processor.ReauthRequired("oops")
+
+        async def add_tags(self, *a, **kw):
+            pass
+
+    lead_id, kind = await lead_processor.create_lead(payload, DummyClient())
+    assert lead_id is None
+    assert kind == "master"
+    assert queue_mock and "msg_key" in queue_mock[0]
 
 
 @pytest.mark.asyncio
