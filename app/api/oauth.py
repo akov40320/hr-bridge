@@ -58,7 +58,7 @@ async def hh_callback(
 
     try:
         r = await http_client.post(
-            "https://api.hh.ru/token",
+            s.HH_TOKEN_URL,
             data=data,
             headers={"Accept": "application/json"},
             timeout=30,
