@@ -5,9 +5,11 @@ from typing import Optional, TypedDict
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import SQLAlchemyError
+from cryptography.fernet import InvalidToken
 
 from .db import get_session
 from .models import Token
+from app.core.crypto import encrypt, decrypt
 
 
 class TokenData(TypedDict):
@@ -47,9 +49,16 @@ class DbTokenStore:
                 raise RuntimeError(
                     f"Token for service={self.service} owner={self.owner_id or '-'} not found"
                 )
+            access = row.access_token
+            refresh = row.refresh_token
+            try:
+                access = decrypt(access)
+                refresh = decrypt(refresh)
+            except InvalidToken:
+                pass
             return {
-                "access_token": row.access_token,
-                "refresh_token": row.refresh_token,
+                "access_token": access,
+                "refresh_token": refresh,
                 "expires_at": row.expires_at,
             }
 
@@ -67,8 +76,8 @@ class DbTokenStore:
             values = {
                 "service": self.service,
                 "owner_id": self.owner_id,
-                "access_token": data["access_token"],
-                "refresh_token": data["refresh_token"],
+                "access_token": encrypt(data["access_token"]),
+                "refresh_token": encrypt(data["refresh_token"]),
                 "expires_at": data["expires_at"],
             }
 

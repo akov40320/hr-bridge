@@ -6,7 +6,7 @@ from app.api import oauth2
 from app.db.token_store import DbTokenStore
 from app.db.db import get_session
 from app.db import models
-from sqlalchemy import insert
+from sqlalchemy import insert, select
 
 
 @pytest.mark.asyncio
@@ -137,3 +137,34 @@ async def test_ensure_fresh_access_uses_cached_token(in_memory_db, monkeypatch):
 
     assert token == "cached"
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_tokens_encrypted_in_db(in_memory_db):
+    async with get_session() as s:
+        await s.execute(
+            insert(models.Token).values(
+                id=1,
+                service="svc",
+                owner_id=None,
+                access_token="x",
+                refresh_token="y",
+                expires_at=0,
+            )
+        )
+        await s.commit()
+
+    store = DbTokenStore("svc")
+    await store.save(
+        {"access_token": "plain", "refresh_token": "plainr", "expires_at": 1}
+    )
+
+    async with get_session() as s:
+        row = (
+            await s.execute(select(models.Token).where(models.Token.service == "svc"))
+        ).scalar_one()
+        assert row.access_token != "plain" and row.refresh_token != "plainr"
+
+    data = await store.load()
+    assert data["access_token"] == "plain"
+    assert data["refresh_token"] == "plainr"
