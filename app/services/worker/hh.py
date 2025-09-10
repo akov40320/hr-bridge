@@ -7,7 +7,7 @@ import logging
 
 from app.adapters import hh as hh_adapt
 from app.http_client import get_http_client
-from app.services.dedup import calc_key, check_and_store
+from app.services.dedup import calc_key, once
 
 logger = logging.getLogger(__name__)
 
@@ -25,20 +25,23 @@ async def handle_hh_send_message(payload: dict):
     owner_id = payload.get("owner_id")
 
     msg_key = payload.get("msg_key")
+
+    async def _op():
+        logger.info("hh.send_message: %s text=%r", nid, text[:40])
+        client = get_http_client()
+        await hh_adapt.send_message(
+            response_id=nid,
+            text=text,
+            employer_id=owner_id,
+            client=client,
+        )
+
     if msg_key:
         dedup = calc_key("hh_send_message", msg_key)
-        if not await check_and_store(dedup):
-            logger.info("hh.send_message: duplicate %s -> skip", dedup)
+        if not await once(dedup, 72 * 3600, _op):
             return
-
-    logger.info("hh.send_message: %s text=%r", nid, text[:40])
-    client = get_http_client()
-    await hh_adapt.send_message(
-        response_id=nid,
-        text=text,
-        employer_id=owner_id,
-        client=client,
-    )
+    else:
+        await _op()
 
 
 async def handle_hh_set_state(payload: dict):
@@ -54,17 +57,20 @@ async def handle_hh_set_state(payload: dict):
     owner_id = payload.get("owner_id")
 
     msg_key = payload.get("msg_key")
+
+    async def _op():
+        logger.info("hh.set_state: %s -> %s", nid, action_id)
+        client = get_http_client()
+        await hh_adapt.set_employer_state(
+            response_id=nid,
+            target_state=action_id,
+            employer_id=owner_id,
+            client=client,
+        )
+
     if msg_key:
         dedup = calc_key("hh_set_state", msg_key)
-        if not await check_and_store(dedup):
-            logger.info("hh.set_state: duplicate %s -> skip", dedup)
+        if not await once(dedup, 72 * 3600, _op):
             return
-
-    logger.info("hh.set_state: %s -> %s", nid, action_id)
-    client = get_http_client()
-    await hh_adapt.set_employer_state(
-        response_id=nid,
-        target_state=action_id,
-        employer_id=owner_id,
-        client=client,
-    )
+    else:
+        await _op()
