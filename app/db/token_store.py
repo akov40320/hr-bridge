@@ -54,8 +54,13 @@ class DbTokenStore:
             try:
                 access = decrypt(access)
                 refresh = decrypt(refresh)
-            except InvalidToken:
-                pass
+            except InvalidToken as e:
+                # If tokens can't be decrypted we shouldn't return the raw ciphertext,
+                # otherwise callers will unknowingly send garbage to upstream APIs.
+                # Raising an explicit error makes the problem visible and allows
+                # callers to trigger a re-authentication flow instead of using an
+                # invalid token.
+                raise RuntimeError("Failed to decrypt stored token") from e
             return {
                 "access_token": access,
                 "refresh_token": refresh,
