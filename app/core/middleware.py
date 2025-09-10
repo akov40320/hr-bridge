@@ -28,39 +28,44 @@ class LoggingMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-m
         except Exception:  # pylint: disable=broad-except
             process_time = time.time() - start_time
             status_code = 500
+            route = request.scope.get("route")
+            path_template = getattr(route, "path", request.url.path)
             log.exception(
                 "request",
                 extra={
                     "method": request.method,
-                    "path": request.url.path,
+                    "path": path_template,
                     "status_code": status_code,
                     "duration": process_time,
                 },
             )
             REQUEST_COUNT.labels(
-                request.method, request.url.path, str(status_code)
+                request.method, path_template, str(status_code)
             ).inc()
-            REQUEST_LATENCY.labels(request.method, request.url.path).observe(
+            REQUEST_LATENCY.labels(request.method, path_template).observe(
                 process_time
             )
             raise
 
         process_time = time.time() - start_time
 
+        route = request.scope.get("route")
+        path_template = getattr(route, "path", request.url.path)
+
         log.info(
             "request",
             extra={
                 "method": request.method,
-                "path": request.url.path,
+                "path": path_template,
                 "status_code": response.status_code,
                 "duration": process_time,
             },
         )
 
         REQUEST_COUNT.labels(
-            request.method, request.url.path, str(response.status_code)
+            request.method, path_template, str(response.status_code)
         ).inc()
-        REQUEST_LATENCY.labels(request.method, request.url.path).observe(process_time)
+        REQUEST_LATENCY.labels(request.method, path_template).observe(process_time)
         return response
 
 
