@@ -17,6 +17,10 @@ from app.api.oauth2 import OAuth2Config, ensure_fresh_access
 from app.db.token_store import DbTokenStore
 from app.api.hh_webhook import ensure_hh_webhook
 from app.api.avito_webhooks import ensure_avito_webhooks
+from app.db.db import get_session
+from app.db.models import Token
+from sqlalchemy import select
+from app.bootstrap import ensure_tokens
 
 router = APIRouter()
 admin = APIRouter()
@@ -156,6 +160,89 @@ async def avito_webhook_ensure(http_client: httpx.AsyncClient = Depends(get_http
     """Trigger idempotent Avito webhook registration."""
 
     await ensure_avito_webhooks(http_client)
+    return {"ok": True}
+
+
+@admin.get("/tokens/owners")
+async def tokens_owners() -> dict:
+    """Return all token owners with service and expiration."""
+
+    async with get_session() as s:
+        rows = (await s.execute(select(Token.service, Token.owner_id, Token.expires_at))).all()
+    items = [
+        {"service": r[0], "owner_id": r[1], "expires_at": r[2]} for r in rows
+    ]
+    return {"ok": True, "items": items}
+
+
+@admin.post("/tokens/refresh")
+async def tokens_refresh(
+    platform: str,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+) -> dict:
+    """Refresh access tokens for all owners of *platform*."""
+
+    if platform not in {"hh", "avito", "amo"}:
+        raise HTTPException(status_code=400, detail="unknown platform")
+
+    s = get_settings()
+    cfg: dict[str, object] = {
+        "token_url": "",
+        "client_id": "",
+        "client_secret": "",
+        "redirect_uri": None,
+        "use_basic_auth": False,
+    }
+    if platform == "hh":
+        cfg.update(
+            {
+                "token_url": s.HH_TOKEN_URL,
+                "client_id": s.HH_CLIENT_ID,
+                "client_secret": s.HH_CLIENT_SECRET.get_secret_value(),
+                "redirect_uri": s.HH_REDIRECT_URI,
+            }
+        )
+    elif platform == "avito":
+        cfg.update(
+            {
+                "token_url": s.AVITO_TOKEN_URL,
+                "client_id": s.AVITO_CLIENT_ID,
+                "client_secret": s.AVITO_CLIENT_SECRET.get_secret_value(),
+                "redirect_uri": s.AVITO_REDIRECT_URI,
+                "use_basic_auth": True,
+            }
+        )
+    else:  # amo
+        cfg.update(
+            {
+                "token_url": s.AMO_BASE_URL.rstrip("/") + "/oauth2/access_token",
+                "client_id": s.AMO_CLIENT_ID,
+                "client_secret": s.AMO_CLIENT_SECRET.get_secret_value(),
+                "redirect_uri": s.AMO_REDIRECT_URI,
+            }
+        )
+
+    owners = [None] if platform == "amo" else await DbTokenStore.list_owners(platform)
+    refreshed: list[str | None] = []
+    errors: dict[str, str] = {}
+    for owner_id in owners:
+        try:
+            await ensure_fresh_access(
+                config=OAuth2Config(service=platform, owner_id=owner_id, **cfg),
+                margin_sec=10**9,
+                http_client=http_client,
+            )
+            refreshed.append(owner_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            errors[str(owner_id)] = str(exc)
+    return {"ok": True, "refreshed": refreshed, "errors": errors}
+
+
+@admin.post("/tokens/ensure")
+async def tokens_ensure() -> dict:
+    """Reload tokens from environment variables."""
+
+    await ensure_tokens()
     return {"ok": True}
 
 
