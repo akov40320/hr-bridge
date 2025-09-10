@@ -2,8 +2,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from aiogram import Bot
+from types import SimpleNamespace
 
 from app.api import tg_webhooks
+from app import tg_router
 
 
 class DummyDP:
@@ -216,3 +219,111 @@ def test_webhook_info(monkeypatch):
     assert len(DummyBot.instances) == 1
     call = DummyBot.instances[0].calls[0]
     assert call[0] == "get_webhook_info"
+
+
+class DummySurveyService:
+    """Minimal survey service used to track start calls."""
+
+    def __init__(self):
+        self.data = {}
+
+    async def start(self, user_id: int, bot_kind: str, lead_id: int, identity: str):
+        self.data[user_id] = {"lead_id": lead_id}
+
+    async def get(self, user_id: int, bot_kind: str):
+        return None
+
+
+class DummySession:
+    def __init__(self):
+        self.sent = []
+
+    async def __call__(self, bot, method, timeout=None):
+        self.sent.append({"chat_id": getattr(method, "chat_id", None), "text": getattr(method, "text", "")})
+        return True
+
+    async def close(self):
+        pass
+
+
+def make_bot():
+    session = DummySession()
+    bot = Bot("42:TEST", session=session)
+    return bot, session.sent
+
+
+def test_webhook_creates_task(monkeypatch, queue_mock):
+    svc = DummySurveyService()
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
+
+    async def dummy_upsert(*a, **k):
+        return None
+
+    monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
+
+    bot, _ = make_bot()
+    dp = tg_router.make_router("master")
+
+    # ensure webhook uses our dispatcher
+    monkeypatch.setattr(tg_webhooks, "make_router", lambda k: dp)
+    monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", SecretStr(""))
+
+    app = FastAPI()
+    app.post("/tg/webhook/master")(tg_webhooks.make_tg_webhook(bot, "master"))
+    client = TestClient(app)
+
+    update = {
+        "update_id": 1,
+        "message": {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 1, "type": "private"},
+            "text": "/start 42",
+            "from": {"id": 1, "is_bot": False, "username": "u", "first_name": "U"},
+        },
+    }
+
+    r = client.post("/tg/webhook/master", json=update)
+    assert r.status_code == 200
+    assert queue_mock and queue_mock[0]["action"] == "bot_to_amo"
+    assert queue_mock[0]["lead_id"] == 42
+
+
+def test_webhook_operator_routing(monkeypatch, queue_mock):
+    svc = DummySurveyService()
+    monkeypatch.setattr(tg_router, "SurveyService", lambda *a, **k: svc)
+
+    async def dummy_upsert(*a, **k):
+        return None
+
+    async def dummy_get_by_user(user_id, bot_kind):
+        return SimpleNamespace(lead_id=77, conversation_id=None)
+
+    monkeypatch.setattr(tg_router, "upsert_tg_link", dummy_upsert)
+    monkeypatch.setattr(tg_router, "get_by_user", dummy_get_by_user)
+
+    bot, _ = make_bot()
+    dp = tg_router.make_router("operator")
+
+    monkeypatch.setattr(tg_webhooks, "make_router", lambda k: dp)
+    monkeypatch.setattr(tg_webhooks.settings, "TELEGRAM_WEBHOOK_SECRET", SecretStr(""))
+
+    app = FastAPI()
+    app.post("/tg/webhook/operator")(tg_webhooks.make_tg_webhook(bot, "operator"))
+    client = TestClient(app)
+
+    update = {
+        "update_id": 2,
+        "message": {
+            "message_id": 2,
+            "date": 0,
+            "chat": {"id": 1, "type": "private"},
+            "text": "hi",
+            "from": {"id": 1, "is_bot": False, "username": "u", "first_name": "U"},
+        },
+    }
+
+    r = client.post("/tg/webhook/operator", json=update)
+    assert r.status_code == 200
+    assert queue_mock and queue_mock[0]["bot_kind"] == "operator"
+    assert queue_mock[0]["lead_id"] == 77
