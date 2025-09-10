@@ -102,7 +102,7 @@ async def create_lead(
     lead_name = (f"{payload.vacancy_title or ''} — {payload.applicant.name or 'кандидат'}").strip(" —")
 
     logger.info(
-        "lead:create platform=%s -> name=%s pipeline=%s stage=%s",
+        "создание лида: платформа=%s -> имя=%s воронка=%s этап=%s",
         payload.platform,
         lead_name,
         pipeline_id,

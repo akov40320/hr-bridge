@@ -1,4 +1,4 @@
-"""Telegram bot router for mirroring messages and collecting survey responses."""
+"""Маршрутизатор Telegram-бота для зеркалирования сообщений и сбора ответов опроса."""
 
 import logging
 
@@ -20,14 +20,14 @@ logger = logging.getLogger("tg.router")
 
 
 def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:
-    """Create a dispatcher with handlers for Telegram survey bots."""
+    """Создать диспетчер с обработчиками для Telegram-ботов опроса."""
     dp = Dispatcher()
     svc = SurveyService(queue_client)
 
     async def _answer_and_mirror(
         m: Message, text: str, lead_id: int, conv_id: str | None
     ) -> None:
-        """Reply to user and mirror message to the CRM queue."""
+        """Ответить пользователю и продублировать сообщение в очередь CRM."""
         user = m.from_user
         if user is None:
             return
@@ -50,7 +50,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
 
     @dp.message(CommandStart())
     async def on_start(m: Message) -> None:
-        """Handle /start command to register user and start survey."""
+        """Обработать команду /start, чтобы зарегистрировать пользователя и начать опрос."""
         user = m.from_user
         if user is None:
             return
@@ -80,7 +80,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
 
     @dp.message(F.text)
     async def on_text(m: Message) -> None:
-        """Process text messages, mirror to CRM, and advance survey."""
+        """Обработать текстовые сообщения, отправить их в CRM и продвинуть опрос."""
         user = m.from_user
         if user is None:
             return
@@ -152,7 +152,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                     conv_id,
                 )
                 logger.info(
-                    "[%s] survey finished user_id=%s lead_id=%s",
+                    "[%s] опрос завершён user_id=%s lead_id=%s",
                     bot_kind,
                     user.id,
                     lead_id,

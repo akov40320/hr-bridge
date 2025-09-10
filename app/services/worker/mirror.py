@@ -1,9 +1,8 @@
-"""Handlers that mirror messages between AMO CRM and Telegram bots.
+"""Модуль содержит асинхронные обработчики, пересылающие сообщения между AMO CRM и Telegram.
 
-This module provides asynchronous worker handlers used to forward messages
-from AMO CRM to Telegram chats, relay Telegram messages back to AMO, and send
-bot-generated messages into AMO chats. All handlers accept a ``payload``
-dictionary with details specific to the direction of the mirror.
+Он отправляет сообщения из AMO в Telegram, зеркалирует сообщения из Telegram в AMO
+и пересылает в AMO чаты сообщения, созданные ботом. Все обработчики принимают
+словарь ``payload`` с деталями, зависящими от направления зеркалирования.
 """
 
 import logging
@@ -25,17 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_mirror_amo_to_tg(payload: dict):
-    """Forward a message from AMO CRM to a Telegram user.
+    """Переслать сообщение из AMO CRM пользователю Telegram.
 
     Args:
-        payload: Mapping containing message details. Expected keys are
-            ``bot_kind`` (``"master"`` or ``"operator"``) to choose a bot,
-            ``user_id`` for the Telegram recipient, ``text`` with the message
-            body and optional ``msg_key`` used for deduplication.
+        payload: словарь с деталями сообщения. Ожидаются ключи
+            ``bot_kind`` (``"master"`` или ``"operator"``) для выбора бота,
+            ``user_id`` получателя, ``text`` с текстом и опциональный ``msg_key``
+            для дедупликации.
 
-    Behaviour:
-        Uses the appropriate Telegram bot to deliver the text. When ``msg_key``
-        is provided and already processed, the message is skipped.
+    Поведение:
+        Использует подходящего Telegram-бота для доставки текста. Если ``msg_key``
+        уже обработан, сообщение пропускается.
 
     Returns:
         None
@@ -44,7 +43,7 @@ async def handle_mirror_amo_to_tg(payload: dict):
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
-            logger.info("mirror: duplicate %s -> skip", dedup)
+            logger.info("mirror: дубликат %s -> пропуск", dedup)
             return
 
     bot_kind = payload["bot_kind"]
@@ -64,18 +63,17 @@ async def handle_mirror_amo_to_tg(payload: dict):
 
 
 async def handle_mirror_tg_to_amo(payload: dict):
-    """Mirror a Telegram message into AMO CRM.
+    """Отразить сообщение Telegram в AMO CRM.
 
     Args:
-        payload: Mapping with message information. Required keys include
-            ``lead_id``, ``text``, ``tg_user_id`` and ``bot_kind``; optional
-            keys are ``tg_user_name``, ``conversation_id`` and ``msg_key`` for
-            deduplication.
+        payload: словарь с информацией о сообщении. Обязательные ключи:
+            ``lead_id``, ``text``, ``tg_user_id`` и ``bot_kind``; необязательные —
+            ``tg_user_name``, ``conversation_id`` и ``msg_key`` для дедупликации.
 
-    Behaviour:
-        Adds the message as a note in AMO and forwards it through the
-        ``send_text_from_client`` adapter. If a new conversation identifier is
-        returned, it is stored for later use.
+    Поведение:
+        Добавляет сообщение как заметку в AMO и пересылает его через адаптер
+        ``send_text_from_client``. Если возвращён новый идентификатор переписки,
+        он сохраняется для последующего использования.
 
     Returns:
         None
@@ -84,7 +82,7 @@ async def handle_mirror_tg_to_amo(payload: dict):
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
-            logger.info("mirror: duplicate %s -> skip", dedup)
+            logger.info("mirror: дубликат %s -> пропуск", dedup)
             return
 
     lead_id = int(payload["lead_id"])
@@ -123,17 +121,16 @@ async def handle_mirror_tg_to_amo(payload: dict):
 
 
 async def handle_mirror_bot_to_amo(payload: dict):
-    """Forward a bot-generated message to AMO chat.
+    """Переслать сгенерированное ботом сообщение в чат AMO.
 
     Args:
-        payload: Mapping that contains ``text`` and ``user_id``. Optional keys
-            are ``user_name``, ``conversation_id``, ``lead_id`` and ``msg_key``
-            used for deduplication.
+        payload: словарь, содержащий ``text`` и ``user_id``. Необязательные ключи:
+            ``user_name``, ``conversation_id``, ``lead_id`` и ``msg_key`` для дедупликации.
 
-    Behaviour:
-        Ensures an AMO chat conversation exists for the Telegram user and
-        sends the text as a manager message. Duplicate payloads are ignored
-        when ``msg_key`` has already been processed.
+    Поведение:
+        Гарантирует существование беседы AMO для пользователя Telegram и
+        отправляет текст как сообщение менеджера. Если ``msg_key`` уже
+        обработан, дубликаты игнорируются.
 
     Returns:
         None
@@ -142,7 +139,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
-            logger.info("mirror: duplicate %s -> skip", dedup)
+            logger.info("mirror: дубликат %s -> пропуск", dedup)
             return
 
     text = payload["text"]
@@ -161,7 +158,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
         try:
             amo = await AmoClient.create(http_client)
         except RuntimeError:
-            logger.warning("Amo token not available, skipping contact fetch")
+            logger.warning("токен Amo недоступен, пропускаю получение контакта")
         contact_id: int | None = None
         if amo is not None:
             try:
@@ -171,7 +168,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
                 if contacts:
                     contact_id = int(contacts[0]["id"])
             except Exception:
-                logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
+                logger.warning("не удалось получить контакт для лида %s", lead_id, exc_info=True)
 
         conv_id = await with_retry(
             lambda: ensure_chat_created(

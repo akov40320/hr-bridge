@@ -38,7 +38,7 @@ admin = APIRouter()
 
 
 class HHMapping(RootModel[dict[str, str]]):
-    """HeadHunter status mapping payload."""
+    """Тело сопоставления статусов HeadHunter."""
 
     pass
 
@@ -52,7 +52,7 @@ def _s():
 
 @router.get("/health")
 async def health() -> dict[str, object]:
-    """Return service health information."""
+    """Вернуть информацию о состоянии сервиса."""
 
     info: dict[str, object] = {"ok": True}
     try:
@@ -68,19 +68,19 @@ async def health() -> dict[str, object]:
 
 @admin.get("/hh-mapping")
 async def get_hh_mapping() -> dict:
-    """Return the current HeadHunter mapping."""
+    """Вернуть текущее сопоставление HeadHunter."""
 
     return {"ok": True, "mapping": hh_map_load()}
 
 
 @admin.put("/hh-mapping")
 async def put_hh_mapping(payload: HHMapping) -> dict:
-    """Replace the HeadHunter mapping with ``payload``."""
+    """Заменить сопоставление HeadHunter на ``payload``."""
 
     try:
         new_mapping = hh_map_set(payload.model_dump())
     except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("invalid hh mapping payload: %s", exc)
+        logger.exception("некорректный payload сопоставления hh: %s", exc)
         raise HTTPException(status_code=400, detail=f"invalid mapping: {exc}")
     return {"ok": True, "mapping": new_mapping}
 
@@ -90,7 +90,7 @@ async def rmq_test(
     payload: dict | None = None,
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """Publish a test message to RabbitMQ."""
+    """Опубликовать тестовое сообщение в RabbitMQ."""
 
     msg = (payload or {}).get("msg", "hi")
     await queue_client.publish_task({"platform": "debug", "action": "echo", "payload": {"msg": msg}})
@@ -99,10 +99,10 @@ async def rmq_test(
 
 @admin.post("/dedup-clean")
 async def dedup_clean(hours: int = 72) -> dict:
-    """Clean deduplication entries older than ``hours``."""
+    """Очистить записи дедупликации старше ``hours`` часов."""
 
     deleted = await cleanup_older_than(hours * 3600)
-    logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
+    logger.info("очистка дедупликации удалено=%s часов=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
 
 
@@ -110,7 +110,7 @@ async def dedup_clean(hours: int = 72) -> dict:
 async def dlq_requeue(
     n: int = 10, queue_client: RabbitMQClient = Depends(lambda: rabbitmq)
 ) -> dict:
-    """Requeue up to ``n`` messages from the dead-letter queue."""
+    """Вернуть в очередь до ``n`` сообщений из DLQ."""
 
     moved = await queue_client.requeue_dlq(n)
     return {"ok": True, "requeued": moved}
@@ -122,7 +122,7 @@ async def replay_lead(
     request: Request,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ) -> dict:
-    """Replay a missed job board webhook without deduplication."""
+    """Повторить пропущенный вебхук job-площадки без дедупликации."""
 
     if platform not in {"hh", "avito"}:
         raise HTTPException(status_code=400, detail="unknown platform")
@@ -142,7 +142,7 @@ async def replay_survey_invite(
     lead_id: int,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ) -> dict:
-    """Resend Telegram survey invite for the given lead."""
+    """Отправить повторное приглашение на опрос в Telegram для указанного лида."""
 
     link = await find_link(lead_id)
     if not link or not link.get("external_id"):
@@ -170,7 +170,7 @@ async def status_sync_lead(
     lead_id: int,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ) -> dict:
-    """Synchronize the current lead status with HeadHunter."""
+    """Синхронизировать текущий статус лида с HeadHunter."""
 
     link = await find_link(lead_id)
     if not link:
@@ -190,7 +190,7 @@ async def hh_states(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
-    """Return the HeadHunter negotiation states."""
+    """Вернуть состояния переговоров HeadHunter."""
 
     try:
         access = await ensure_fresh_access(
@@ -230,7 +230,7 @@ async def hh_states(
 async def hh_autofill_admin(
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """Queue a task that triggers HH autofill."""
+    """Поставить задачу, запускающую HH autofill."""
 
     await queue_client.publish_task({"platform": "system", "action": "hh_autofill", "payload": {}})
     return {"ok": True, "queued": True}
@@ -246,7 +246,7 @@ async def hh_webhook_ensure(http_client: httpx.AsyncClient = Depends(get_http_cl
 
 @admin.post("/avito-webhook/ensure")
 async def avito_webhook_ensure(http_client: httpx.AsyncClient = Depends(get_http_client)) -> dict:
-    """Trigger idempotent Avito webhook registration."""
+    """Идемпотентно зарегистрировать вебхуки Avito."""
 
     await ensure_avito_webhooks(http_client)
     return {"ok": True}
@@ -254,7 +254,7 @@ async def avito_webhook_ensure(http_client: httpx.AsyncClient = Depends(get_http
 
 @admin.get("/tokens/owners")
 async def tokens_owners() -> dict:
-    """Return all token owners with service and expiration."""
+    """Вернуть всех владельцев токенов с сервисом и сроком действия."""
 
     async with get_session() as s:
         rows = (await s.execute(select(Token.service, Token.owner_id, Token.expires_at))).all()
@@ -269,7 +269,7 @@ async def tokens_refresh(
     platform: str,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ) -> dict:
-    """Refresh access tokens for all owners of *platform*."""
+    """Обновить access-токены для всех владельцев платформы *platform*."""
 
     if platform not in {"hh", "avito", "amo"}:
         raise HTTPException(status_code=400, detail="unknown platform")
@@ -329,7 +329,7 @@ async def tokens_refresh(
 
 @admin.post("/tokens/ensure")
 async def tokens_ensure() -> dict:
-    """Reload tokens from environment variables."""
+    """Перечитать токены из переменных окружения."""
 
     await ensure_tokens()
     return {"ok": True}

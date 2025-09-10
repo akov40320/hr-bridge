@@ -1,4 +1,4 @@
-"""Shared logic for processing job board webhooks."""
+"""Общая логика обработки вебхуков от job-площадок."""
 
 import logging
 from typing import Callable
@@ -26,11 +26,12 @@ async def process_job_board_webhook(
     *,
     skip_dedup: bool = False,
 ) -> dict:
-    """Process an incoming job board webhook.
+    """Обработать входящий вебхук от job-площадки.
 
-    Handles optional deduplication, payload parsing and lead processing.
-    When ``skip_dedup`` is ``True`` the deduplication step is bypassed which is
-    useful for manual replays via administrative endpoints.
+    Выполняет при необходимости дедупликацию, парсинг полезной нагрузки и
+    создание лида. Если ``skip_dedup`` установлен в ``True``, шаг дедупликации
+    пропускается, что полезно при ручном повторе через административные
+    эндпоинты.
     """
     if not skip_dedup:
         key = calc_key(platform, raw)
@@ -40,8 +41,8 @@ async def process_job_board_webhook(
     try:
         payload = parse_payload(raw)
     except ValueError as exc:
-        logger.warning("%s webhook: %s", platform, exc)
-        logger.debug("%s webhook body: %s", platform, raw)
+        logger.warning("вебхук %s: %s", platform, exc)
+        logger.debug("тело вебхука %s: %s", platform, raw)
         return {"ok": True, "skipped": True}
 
     try:
@@ -60,7 +61,7 @@ async def process_job_board_webhook(
 
         return {"ok": True, "lead_id": lead_id}
     except Exception:
-        logger.exception("%s webhook: internal error", platform)
+        logger.exception("вебхук %s: внутренняя ошибка", platform)
         return {"ok": False, "error": "internal_error"}
 
 

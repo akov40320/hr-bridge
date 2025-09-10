@@ -1,9 +1,9 @@
-"""Simple scheduler for periodic maintenance tasks.
+"""Простой планировщик для периодических служебных задач.
 
-This module provides a standalone runner that periodically refreshes
-OAuth tokens, cleans up deduplication tables and retries tasks that
-ended up in the dead-letter queue. It is intended to be executed as a
-separate service (see ``docker-compose.yml``).
+Модуль предоставляет автономный процесс, который периодически обновляет
+OAuth-токены, очищает таблицы дедупликации и повторяет задачи,
+попавшие в очередь мёртвых писем. Предполагается, что он запускается как
+отдельный сервис (см. ``docker-compose.yml``).
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 async def _refresh_for_service(
     service: str, owner_ids: Iterable[str | None]
 ) -> None:
-    """Refresh tokens for *service* owners when near expiration."""
+    """Обновить токены для владельцев *service* при приближении срока истечения."""
 
     s = get_settings()
     cfg_common = {
@@ -75,15 +75,15 @@ async def _refresh_for_service(
                 continue
             data = await store.load()
         except Exception:  # pragma: no cover - defensive
-            logger.exception("failed to load token for %s/%s", service, owner_id)
+            logger.exception("не удалось загрузить токен для %s/%s", service, owner_id)
             continue
 
         config = OAuth2Config(service=service, owner_id=owner_id, **cfg_common)
         try:
             await refresh_tokens(config=config, refresh_token=data["refresh_token"], http_client=get_http_client())
-            logger.info("refreshed %s token for %s", service, owner_id or "default")
+            logger.info("обновлён токен %s для %s", service, owner_id or "default")
         except Exception:  # pragma: no cover - defensive
-            logger.exception("failed to refresh token for %s/%s", service, owner_id)
+            logger.exception("не удалось обновить токен для %s/%s", service, owner_id)
 
 
 TOKEN_REFRESH_INTERVAL = 300  # seconds
@@ -92,7 +92,7 @@ RETRY_INTERVAL = 60
 
 
 async def refresh_tokens_loop() -> None:
-    """Periodically refresh OAuth tokens for all services."""
+    """Периодически обновлять OAuth-токены для всех сервисов."""
 
     while True:
         try:
@@ -103,25 +103,25 @@ async def refresh_tokens_loop() -> None:
             await _refresh_for_service("hh", hh_owners)
             await _refresh_for_service("avito", avito_owners)
         except Exception:  # pragma: no cover - defensive
-            logger.exception("token refresh loop failed")
+            logger.exception("сбой цикла обновления токенов")
         await asyncio.sleep(TOKEN_REFRESH_INTERVAL)
 
 
 async def dedup_cleanup_loop() -> None:
-    """Periodically remove old dedup entries."""
+    """Периодически удалять устаревшие записи дедупликации."""
 
     while True:
         try:
             removed = await cleanup_older_than()
             if removed:
-                logger.info("dedup cleanup removed=%s", removed)
+                logger.info("очистка дедупликации удалено=%s", removed)
         except Exception:  # pragma: no cover - defensive
-            logger.exception("dedup cleanup failed")
+            logger.exception("сбой очистки дедупликации")
         await asyncio.sleep(DEDUP_INTERVAL)
 
 
 async def _republish_from_queue(queue_name: str) -> int:
-    """Republish all messages from ``queue_name`` back to the task queue."""
+    """Перепубликовать все сообщения из ``queue_name`` обратно в очередь задач."""
 
     await rabbitmq.connect()
     chan = rabbitmq._chan  # type: ignore[attr-defined]
@@ -146,7 +146,7 @@ async def _republish_from_queue(queue_name: str) -> int:
 
 
 async def retry_tasks_loop() -> None:
-    """Periodically retry tasks from the dead-letter queue."""
+    """Периодически повторять задачи из очереди мёртвых писем."""
 
     s = get_settings()
     queue_name = s.RMQ_DLQ_QUEUE
@@ -154,14 +154,14 @@ async def retry_tasks_loop() -> None:
         try:
             cnt = await _republish_from_queue(queue_name)
             if cnt:
-                logger.info("republished %s tasks from DLQ", cnt)
+                logger.info("перепубликовано %s задач из DLQ", cnt)
         except Exception:  # pragma: no cover - defensive
-            logger.exception("retry loop failed")
+            logger.exception("сбой цикла повторов")
         await asyncio.sleep(RETRY_INTERVAL)
 
 
 async def main() -> None:
-    """Entry point running all scheduler loops."""
+    """Точка входа, запускающая все циклы планировщика."""
 
     setup_logging("INFO")
     await init_db()

@@ -1,8 +1,8 @@
-"""Telegram webhook endpoints.
+"""Вебхуки Telegram.
 
-This module exposes FastAPI handlers used by Telegram bots to deliver
-webhook updates.  The same handlers are also utilised in tests where bot
-instances are provided directly.
+Модуль предоставляет обработчики FastAPI, которые Telegram-боты используют
+для доставки обновлений. Те же обработчики применяются в тестах, где боты
+передаются напрямую.
 """
 
 import logging
@@ -35,7 +35,8 @@ tokens: dict[str, object] = {
 
 
 def make_tg_webhook(key: object, kind: str | None = None):
-    """
+    """Создать обработчик вебхука Telegram.
+
     key:
       - str -> имя ключа в tokens (прод)
       - object|None -> явный бот-объект (тесты). Если None — считаем, что бота нет и возвращаем 503.
@@ -49,7 +50,7 @@ def make_tg_webhook(key: object, kind: str | None = None):
             else ""
         )
         if secret and secret_hdr != secret:
-            logger.warning("%s webhook: bad secret -> 401", kind or key)
+            logger.warning("вебхук %s: неверный секрет -> 401", kind or key)
             return Response(status_code=401)
 
         # 2) парсим апдейт
@@ -57,7 +58,7 @@ def make_tg_webhook(key: object, kind: str | None = None):
             payload = await request.json()
             upd = Update.model_validate(payload)
         except (ValueError, ValidationError):
-            logger.exception("%s webhook: invalid json/update", kind or key)
+            logger.exception("вебхук %s: некорректный json/обновление", kind or key)
             return Response(status_code=400)
 
         dp = make_router(kind or (key if isinstance(key, str) else "master"))
@@ -66,19 +67,19 @@ def make_tg_webhook(key: object, kind: str | None = None):
         if not isinstance(key, str):
             # Явно переданный бот-объект (тестовый путь)
             if key is None:
-                logger.warning("%s webhook called, but bot is None -> 503", kind or "unknown")
+                logger.warning("вебхук %s вызван, но бот отсутствует -> 503", kind or "unknown")
                 return Response(status_code=503)
             await dp.feed_update(bot=cast(Bot, key), update=upd)
         else:
             # Продовый путь по токену
             token = tokens.get(key)
             if not isinstance(token, str) or not token:
-                logger.warning("%s webhook called, but token is empty -> 503", key)
+                logger.warning("вебхук %s вызван, но токен пуст -> 503", key)
                 return Response(status_code=503)
             async with Bot(token) as bot:
                 await dp.feed_update(bot=bot, update=upd)
 
-        logger.info("%s webhook ok: update_id=%s", kind or key, getattr(upd, "update_id", None))
+        logger.info("вебхук %s ok: update_id=%s", kind or key, getattr(upd, "update_id", None))
         return {"ok": True}
 
     return _handler
@@ -93,7 +94,7 @@ for _kind in ("master", "operator"):
 
 @admin_tg.post("/set-webhooks")
 async def set_webhooks():
-    """Register webhooks for all configured bots."""
+    """Зарегистрировать вебхуки для всех настроенных ботов."""
     base = (settings.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
     if not base:
         return {"ok": False, "error": "TELEGRAM_WEBHOOK_BASE is empty"}
@@ -119,7 +120,7 @@ async def set_webhooks():
 
 @admin_tg.post("/delete-webhooks")
 async def delete_webhooks():
-    """Remove webhooks for all configured bots."""
+    """Удалить вебхуки для всех настроенных ботов."""
     results = {}
     for kind, value in tokens.items():
         if isinstance(value, str) and value:
@@ -130,7 +131,7 @@ async def delete_webhooks():
 
 @admin_tg.get("/webhook-info")
 async def webhook_info():
-    """Fetch webhook information for all configured bots."""
+    """Получить информацию о вебхуках для всех настроенных ботов."""
     res = {}
     for kind, value in tokens.items():
         if isinstance(value, str) and value:
