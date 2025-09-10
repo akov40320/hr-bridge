@@ -16,10 +16,11 @@ log = logging.getLogger(__name__)
 
 async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
     """Создать/обновить подписку HH, идемпотентно (POST/PUT/DELETE при необходимости)."""
-    url = wh_sub._target_url()
-    if not url:
+    url_base = wh_sub._target_url()
+    if not url_base:
         log.info("HH webhook: HH_WEBHOOK_URL пуст — пропускаю регистрацию")
         return
+    url_base = url_base.rstrip("/")
 
     try:
         owners = await DbTokenStore.list_owners("hh")
@@ -36,6 +37,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
 
     s = get_settings()
     for employer_id in owners:
+        url = f"{url_base}/{employer_id}"
         try:
             access = await ensure_fresh_access(
                 config=OAuth2Config(

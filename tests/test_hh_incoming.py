@@ -38,7 +38,7 @@ def test_webhook_success(monkeypatch, client):
     monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
     monkeypatch.setattr(_webhook_common, "tag_lead", fake_tag_lead)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": True, "lead_id": 777}
     assert called["invite"] == 777
@@ -60,7 +60,7 @@ def test_webhook_duplicate(monkeypatch, client):
 
     monkeypatch.setattr(hh_incoming, "parse_hh_payload", fake_parse)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": True, "duplicate": True}
     assert not called
@@ -77,7 +77,7 @@ def test_webhook_bad_payload(monkeypatch, client):
 
     monkeypatch.setattr(hh_incoming, "parse_hh_payload", fake_parse)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": True, "skipped": True}
 
@@ -112,7 +112,7 @@ def test_webhook_ignored(monkeypatch, client):
     monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
     monkeypatch.setattr(_webhook_common, "tag_lead", fake_tag_lead)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": True, "ignored": True, "reason": "no-keywords"}
 
@@ -147,7 +147,7 @@ def test_webhook_queued(monkeypatch, client):
     monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
     monkeypatch.setattr(_webhook_common, "tag_lead", fake_tag_lead)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": True, "queued": True, "reason": "reauth_required"}
 
@@ -164,7 +164,7 @@ def test_webhook_enrich_error(monkeypatch, client):
 
     monkeypatch.setattr(_webhook_common, "enrich_applicant", boom)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": False, "error": "internal_error"}
 
@@ -191,7 +191,7 @@ def test_webhook_create_lead_error(monkeypatch, client):
 
     monkeypatch.setattr(_webhook_common, "create_lead", boom)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": False, "error": "internal_error"}
 
@@ -229,7 +229,7 @@ def test_webhook_tag_error(monkeypatch, client):
     monkeypatch.setattr(_webhook_common, "send_invite", fake_send_invite)
     monkeypatch.setattr(_webhook_common, "tag_lead", boom)
 
-    r = client.post("/webhooks/hh", data=b"{}")
+    r = client.post("/webhooks/hh/1", data=b"{}")
     assert r.status_code == 200
     assert r.json() == {"ok": False, "error": "internal_error"}
     assert called["invite"] == 123
