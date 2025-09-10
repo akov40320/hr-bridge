@@ -1,0 +1,9 @@
+.git
+.github
+.env
+.env.*
+tests
+Dockerfile
+docker-compose.yml
+Procfile
+README.md
