@@ -15,6 +15,7 @@ from app.adapters.amo_client import AmoClient
 from app.core.config import get_settings
 from app.services.hh_mapping import get as hh_map_get
 from app.services.queue import RabbitMQClient, rabbitmq
+from app.events import UpdateStatus, UpdateStatusPayload
 from app.api.utils import (
     REFUSAL_TEXT_TO_HH,
     is_refusal_code,
@@ -86,15 +87,16 @@ async def sync_hh_status(
                 except httpx.HTTPError:
                     logger.warning("Failed to copy refusal text")
 
-    await queue_client.publish_task(
-        {
-            "platform": "hh",
-            "action": "set_state",
-            "external_id": ext_id,
-            "target_state": final_state,
-            "owner_id": owner_id,
-        }
+    event = UpdateStatus(
+        platform="hh",
+        action="set_state",
+        payload=UpdateStatusPayload(
+            external_id=ext_id,
+            target_state=final_state,
+            owner_id=owner_id,
+        ),
     )
+    await queue_client.publish_task(event.model_dump(exclude_none=True))
 
 
 __all__ = ["sync_hh_status"]

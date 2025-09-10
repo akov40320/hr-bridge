@@ -321,7 +321,7 @@ async def amo_callback(
         )
 
         try:
-            await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
+            await queue_client.publish_task({"platform": "system", "action": "hh_autofill", "payload": {}})
             logger.info("Queued hh_autofill after amo oauth")
         except aio_exc.AMQPError:
             logger.exception("Failed to queue hh_autofill after amo oauth")

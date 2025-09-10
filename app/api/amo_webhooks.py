@@ -60,8 +60,10 @@ async def handle_avito_event(
         {
             "platform": "avito",
             "action": "mark_read",
-            "external_id": ext_id,
-            "owner_id": owner_id,
+            "payload": {
+                "external_id": ext_id,
+                "owner_id": owner_id,
+            },
         }
     )
 

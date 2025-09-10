@@ -45,20 +45,26 @@ class SurveyService:
                 {
                     "platform": "amo",
                     "action": "amo_add_note",
-                    "lead_id": lead_id,
-                    "text": f"[{bot_kind}] Кандидат перешёл в бота (TG {identity}).",
+                    "payload": {
+                        "lead_id": lead_id,
+                        "text": f"[{bot_kind}] Кандидат перешёл в бота (TG {identity}).",
+                    },
                 },
                 {
                     "platform": "amo",
                     "action": "amo_add_tags",
-                    "lead_id": lead_id,
-                    "tags": [s.AMO_TAG_WENT_TO_BOT],
+                    "payload": {
+                        "lead_id": lead_id,
+                        "tags": [s.AMO_TAG_WENT_TO_BOT],
+                    },
                 },
                 {
                     "platform": "amo",
                     "action": "amo_update_status",
-                    "lead_id": lead_id,
-                    "status_id": stage_id,
+                    "payload": {
+                        "lead_id": lead_id,
+                        "status_id": stage_id,
+                    },
                 },
             ],
         )
@@ -85,20 +91,26 @@ class SurveyService:
                 {
                     "platform": "amo",
                     "action": "amo_add_tags",
-                    "lead_id": lead_id,
-                    "tags": [s.AMO_TAG_SURVEY_DONE],
+                    "payload": {
+                        "lead_id": lead_id,
+                        "tags": [s.AMO_TAG_SURVEY_DONE],
+                    },
                 },
                 {
                     "platform": "amo",
                     "action": "amo_add_note",
-                    "lead_id": lead_id,
-                    "text": f"[{bot_kind}] {summary}",
+                    "payload": {
+                        "lead_id": lead_id,
+                        "text": f"[{bot_kind}] {summary}",
+                    },
                 },
                 {
                     "platform": "amo",
                     "action": "amo_update_status",
-                    "lead_id": lead_id,
-                    "status_id": stage_id,
+                    "payload": {
+                        "lead_id": lead_id,
+                        "status_id": stage_id,
+                    },
                 },
             ],
         )

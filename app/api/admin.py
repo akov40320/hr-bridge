@@ -76,7 +76,7 @@ async def rmq_test(
     """Publish a test message to RabbitMQ."""
 
     msg = (payload or {}).get("msg", "hi")
-    await queue_client.publish_task({"platform": "debug", "action": "echo", "msg": msg})
+    await queue_client.publish_task({"platform": "debug", "action": "echo", "payload": {"msg": msg}})
     return {"ok": True}
 
 
@@ -137,7 +137,7 @@ async def hh_autofill_admin(
 ):
     """Queue a task that triggers HH autofill."""
 
-    await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
+    await queue_client.publish_task({"platform": "system", "action": "hh_autofill", "payload": {}})
     return {"ok": True, "queued": True}
 
 

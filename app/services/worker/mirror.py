@@ -18,6 +18,7 @@ from app.core.retry import with_retry
 from app.http_client import get_http_client
 from app.adapters.amo_client import AmoClient
 from app.services.queue import rabbitmq
+from app.events import UpdateStatus, UpdateStatusPayload
 
 logger = logging.getLogger(__name__)
 
@@ -191,14 +192,15 @@ async def handle_mirror_bot_to_amo(payload: dict):
         if status_id is not None:
             dedup = calc_key("chat_status", f"{lead_id}:{status_id}")
             if await check_and_store(dedup):
-                await rabbitmq.publish_task(
-                    {
-                        "platform": "amo",
-                        "action": "amo_update_status",
-                        "lead_id": int(lead_id),
-                        "status_id": int(status_id),
-                    }
+                event = UpdateStatus(
+                    platform="amo",
+                    action="amo_update_status",
+                    payload=UpdateStatusPayload(
+                        lead_id=int(lead_id),
+                        status_id=int(status_id),
+                    ),
                 )
+                await rabbitmq.publish_task(event.model_dump(exclude_none=True))
 
     if not conv_id:
         raise RuntimeError("bot_to_amo: no conversation_id and no lead_id to create one")
