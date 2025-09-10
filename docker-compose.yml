@@ -54,6 +54,18 @@ services:
       - app
     restart: unless-stopped
 
+  scheduler:
+    build: .
+    command: python -u -m app.services.scheduler
+    environment:
+      <<: *common-env
+    depends_on:
+      - rabbitmq
+      - postgres
+    networks:
+      - app
+    restart: unless-stopped
+
   rabbitmq:
     image: rabbitmq:3-management
     environment:
