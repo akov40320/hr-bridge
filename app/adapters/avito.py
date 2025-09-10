@@ -22,7 +22,7 @@ async def _access_token(owner_id: Optional[str], client: httpx.AsyncClient) -> s
         service="avito",
         token_url=s.AVITO_TOKEN_URL,
         client_id=s.AVITO_CLIENT_ID,
-        client_secret=s.AVITO_CLIENT_SECRET,
+        client_secret=s.AVITO_CLIENT_SECRET.get_secret_value(),
         redirect_uri=s.AVITO_REDIRECT_URI,
         use_basic_auth=True,
         owner_id=owner_id,

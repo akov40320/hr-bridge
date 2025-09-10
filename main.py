@@ -51,7 +51,11 @@ app.include_router(tg_wh_router)
 async def register_webhook(bot_token: str, path_suffix: str) -> None:
     s = get_settings()
     base = (s.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
-    secret = s.TELEGRAM_WEBHOOK_SECRET or None
+    secret = (
+        s.TELEGRAM_WEBHOOK_SECRET.get_secret_value()
+        if s.TELEGRAM_WEBHOOK_SECRET
+        else None
+    )
     allowed = ["message"]
 
     try:
@@ -81,8 +85,18 @@ async def auto_register_telegram_webhooks() -> None:
         return
 
     bot_configs = [
-        (s.TELEGRAM_MASTER_BOT_TOKEN, "master"),
-        (s.TELEGRAM_OPERATOR_BOT_TOKEN, "operator"),
+        (
+            s.TELEGRAM_MASTER_BOT_TOKEN.get_secret_value()
+            if s.TELEGRAM_MASTER_BOT_TOKEN
+            else "",
+            "master",
+        ),
+        (
+            s.TELEGRAM_OPERATOR_BOT_TOKEN.get_secret_value()
+            if s.TELEGRAM_OPERATOR_BOT_TOKEN
+            else "",
+            "operator",
+        ),
     ]
     for token, suffix in bot_configs:
         if token:

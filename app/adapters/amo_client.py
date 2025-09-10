@@ -43,7 +43,7 @@ class AmoClient:
         url = f"{self.base}/oauth2/access_token"
         payload = {
             "client_id": self._s.AMO_CLIENT_ID,
-            "client_secret": self._s.AMO_CLIENT_SECRET,
+            "client_secret": self._s.AMO_CLIENT_SECRET.get_secret_value(),
             "grant_type": "refresh_token",
             "refresh_token": self._refresh,
             "redirect_uri": self._s.AMO_REDIRECT_URI,

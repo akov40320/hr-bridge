@@ -15,7 +15,7 @@ if config.config_file_name:
 target_metadata = Base.metadata
 settings = get_settings()
 
-url = settings.DATABASE_URL
+url = settings.DATABASE_URL.get_secret_value()
 if not url:
     raise RuntimeError("DATABASE_URL не задан (ни в ENV, ни в .env).")
 

@@ -35,7 +35,8 @@ def _events() -> list[str]:
 
 def _secret() -> str | None:
     s = get_settings()
-    v = (getattr(s, "AVITO_WEBHOOK_SECRET", "") or "").strip()
+    raw = getattr(s, "AVITO_WEBHOOK_SECRET", None)
+    v = raw.get_secret_value().strip() if raw else ""
     return v or None
 
 
@@ -47,7 +48,7 @@ async def _auth_headers(owner_id: str, client: httpx.AsyncClient) -> dict[str, s
             service="avito",
             token_url=s.AVITO_TOKEN_URL,
             client_id=s.AVITO_CLIENT_ID,
-            client_secret=s.AVITO_CLIENT_SECRET,
+            client_secret=s.AVITO_CLIENT_SECRET.get_secret_value(),
             redirect_uri=s.AVITO_REDIRECT_URI,
             use_basic_auth=True,  # у Avito токен-эндпоинт обычно в basic, оставь так если у тебя уже так
             owner_id=owner_id,

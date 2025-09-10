@@ -1,14 +1,17 @@
-import os, hmac, hashlib
+import hmac, hashlib
 import httpx
 from fastapi import APIRouter, Depends, Request, HTTPException
 
 from app.api._webhook_common import process_job_board_webhook
 from app.http_client import get_http_client
+from app.core.config import get_settings
 import time, logging
 
 router = APIRouter()
-_AVITO_SECRET = os.getenv("AVITO_WEBHOOK_SECRET", "").strip()
-_SIG_HEADER = os.getenv("AVITO_SIGNATURE_HEADER", "X-Avito-Signature")
+settings = get_settings()
+secret_field = getattr(settings, "AVITO_WEBHOOK_SECRET", None)
+_AVITO_SECRET = secret_field.get_secret_value().strip() if secret_field else ""
+_SIG_HEADER = getattr(settings, "AVITO_SIGNATURE_HEADER", "X-Avito-Signature")
 
 logger = logging.getLogger(__name__)
 

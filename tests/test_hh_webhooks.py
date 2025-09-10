@@ -2,6 +2,7 @@ import json
 import pytest
 import httpx
 from sqlalchemy import insert
+from pydantic import SecretStr
 
 from app.api import hh_webhooks
 from app.db.db import get_session
@@ -69,7 +70,7 @@ def _set_events(monkeypatch, value: str):
         HH_WEBHOOK_EVENTS = value
         HH_TOKEN_URL = "https://example.com/token"
         HH_CLIENT_ID = "id"
-        HH_CLIENT_SECRET = "secret"
+        HH_CLIENT_SECRET = SecretStr("secret")
         HH_REDIRECT_URI = "http://example.com/cb"
 
     monkeypatch.setattr(hh_webhooks, "get_settings", lambda: Dummy())

@@ -26,9 +26,10 @@ class AmoChatsClient:  # pylint: disable=too-few-public-methods
     """Helper validating required AmoChats settings once."""
 
     def __init__(self) -> None:
+        secret_field = getattr(settings, "AMO_CHATS_SECRET", None)
         req = {
             "AMO_CHATS_SCOPE_ID": getattr(settings, "AMO_CHATS_SCOPE_ID", None),
-            "AMO_CHATS_SECRET": getattr(settings, "AMO_CHATS_SECRET", None),
+            "AMO_CHATS_SECRET": secret_field.get_secret_value() if secret_field else None,
             "AMO_CHATS_ACCOUNT_ID": getattr(settings, "AMO_CHATS_ACCOUNT_ID", None),
             "AMO_CHATS_CHANNEL_ID": getattr(settings, "AMO_CHATS_CHANNEL_ID", None),
             "AMO_CHATS_SENDER_USER_AMOJO_ID": getattr(

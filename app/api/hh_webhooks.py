@@ -139,7 +139,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
                     service="hh",
                     token_url=s.HH_TOKEN_URL,
                     client_id=s.HH_CLIENT_ID,
-                    client_secret=s.HH_CLIENT_SECRET,
+                    client_secret=s.HH_CLIENT_SECRET.get_secret_value(),
                     redirect_uri=s.HH_REDIRECT_URI,
                     use_basic_auth=False,
                     owner_id=employer_id,
