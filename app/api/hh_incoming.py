@@ -10,12 +10,14 @@ from app.services.payload_parsers import parse_hh_payload
 
 
 router = APIRouter()
-log = logging.getLogger(__name__)  
+log = logging.getLogger(__name__)
 
 
-@router.post("/webhooks/hh")
+@router.post("/webhooks/hh/{owner_id}")
 async def webhook_hh(
-    request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
+    owner_id: str,
+    request: Request,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
 ):
     """Handle HeadHunter webhook events.
 
@@ -27,7 +29,9 @@ async def webhook_hh(
         log.info("HH webhook received raw: %s", raw.decode("utf-8"))
     except Exception:
         log.info("HH webhook received raw (binary): %s", raw)
-    return await process_job_board_webhook("hh", raw, http_client, parse_hh_payload)
+    return await process_job_board_webhook(
+        "hh", raw, http_client, lambda raw: parse_hh_payload(raw, owner_id)
+    )
 
 
 __all__ = ["router"]

@@ -32,6 +32,10 @@ class _DBState:
 
 _STATE = _DBState()
 
+# Backward-compatible globals overridden in tests
+engine: AsyncEngine | None = None
+SessionLocal: async_sessionmaker[AsyncSession] | None = None
+
 
 def _is_sqlite_memory_url(url: str) -> bool:
     """Return ``True`` if the URL points to an in-memory SQLite database."""
@@ -42,6 +46,9 @@ def _is_sqlite_memory_url(url: str) -> bool:
 def get_engine() -> AsyncEngine:
     """Return a cached :class:`~sqlalchemy.ext.asyncio.AsyncEngine` instance."""
 
+    global engine
+    if engine is not None:
+        return engine
     if _STATE.engine is None:
         settings = get_settings()
         url = settings.DATABASE_URL
@@ -50,17 +57,22 @@ def get_engine() -> AsyncEngine:
             _STATE.sqlite_memory = True
             kwargs["poolclass"] = StaticPool
         _STATE.engine = create_async_engine(url, **kwargs)
-    return _STATE.engine
+    engine = _STATE.engine
+    return engine
 
 
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     """Return a cached async session factory."""
 
+    global SessionLocal
+    if SessionLocal is not None:
+        return SessionLocal
     if _STATE.session_maker is None:
         _STATE.session_maker = async_sessionmaker(
             get_engine(), expire_on_commit=False, class_=AsyncSession
         )
-    return _STATE.session_maker
+    SessionLocal = _STATE.session_maker
+    return SessionLocal
 
 
 async def _ensure_tables_created_once() -> None:

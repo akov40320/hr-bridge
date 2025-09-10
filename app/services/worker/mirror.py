@@ -152,9 +152,9 @@ async def handle_mirror_bot_to_amo(payload: dict):
 
     if not conv_id and lead_id:
 
-        amo = await AmoClient.create(http_client)
         contact_id: int | None = None
         try:
+            amo = await AmoClient.create(http_client)
             lead = await amo.get_lead_with_contacts(int(lead_id))
             emb = (lead or {}).get("_embedded") or {}
             contacts = emb.get("contacts") or []
