@@ -164,3 +164,10 @@ class AmoClient:
         url = f"{self.base}/api/v4/contacts/chats"
         body = [{"contact_id": int(contact_id), "chat_id": str(chat_id)}]
         return await self._request("POST", url, json=body)
+
+    async def get_pipeline_statuses(self, pipeline_id: int) -> list[dict]:
+        """Return statuses for the specified pipeline."""
+
+        url = f"{self.base}/api/v4/leads/pipelines/{int(pipeline_id)}"
+        data = await self._request("GET", url)
+        return (data.get("_embedded") or {}).get("statuses") or []
