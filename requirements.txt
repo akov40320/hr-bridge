@@ -16,3 +16,4 @@ pytest-asyncio
 aiosqlite
 python-json-logger
 prometheus_client
+cryptography

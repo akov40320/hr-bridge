@@ -26,7 +26,21 @@ from app.services.queue import rabbitmq
 log = logging.getLogger(__name__)
 setup_logging("INFO")
 
-app = FastAPI(title="Recruiting Bridge")
+settings = get_settings()
+docs_url = None
+redoc_url = None
+openapi_url = None
+if settings.ENVIRONMENT != "prod":
+    docs_url = "/docs"
+    redoc_url = "/redoc"
+    openapi_url = "/openapi.json"
+
+app = FastAPI(
+    title="Recruiting Bridge",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
+)
 app.add_middleware(LoggingMiddleware)
 app.add_route("/metrics", metrics_endpoint)
 
