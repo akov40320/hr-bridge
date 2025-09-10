@@ -74,6 +74,12 @@ async def handle(
     try:
         plat = payload.get("platform")
         act = payload.get("action")
+        logger.info(
+            "worker: handle platform=%s action=%s attempts=%s",
+            plat,
+            act,
+            attempts,
+        )
         if not isinstance(plat, str) or not isinstance(act, str):
             raise RuntimeError(f"unknown task: {payload}")
         handler = HANDLERS.get((plat, act))
@@ -83,6 +89,12 @@ async def handle(
         if payload.get("msg_key") is not None:
             data.setdefault("msg_key", payload["msg_key"])
         await handler(data)
+        logger.info(
+            "worker: done platform=%s action=%s attempts=%s",
+            plat,
+            act,
+            attempts,
+        )
 
     except ReauthRequired as err:
         logger.warning("ReauthRequired: %s", err)
