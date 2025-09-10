@@ -52,11 +52,12 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
         except (RuntimeError, SQLAlchemyError):
             continue
 
+        user_agent = getattr(s, "HH_USER_AGENT", None) or "hr-bridge/1.0 (+https://hr-bridge.onrender.com)"
         headers = {
             "Authorization": f"Bearer {access}",
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": s.HH_USER_AGENT or "hr-bridge/1.0 (+https://hr-bridge.onrender.com)",
+            "User-Agent": user_agent,
         }
 
         try:

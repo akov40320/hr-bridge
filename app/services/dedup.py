@@ -40,8 +40,8 @@ async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
     """Удалить записи дедупликации старше указанного количества секунд."""
     async with get_session() as s:
         q = text(
-            "DELETE FROM events_dedup WHERE created_at < (NOW() AT TIME ZONE 'utc') - "
-            "(:sec || ' seconds')::interval"
+            "DELETE FROM events_dedup "
+            "WHERE created_at < (NOW() AT TIME ZONE 'utc') - (:sec * INTERVAL '1 second')"
         )
         res = await s.execute(q, {"sec": seconds})
         await s.commit()

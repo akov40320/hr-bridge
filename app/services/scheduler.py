@@ -130,7 +130,7 @@ async def _republish_from_queue(queue_name: str) -> int:
     queue = await chan.get_queue(queue_name)
     count = 0
     while True:
-        msg = await queue.get(fail=False, timeout=0)
+        msg = await queue.get(fail=False)
         if msg is None:
             break
         try:
