@@ -22,10 +22,31 @@ class LoggingMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-m
 
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
-        response: StarletteResponse = await call_next(request)
+        log = logging.getLogger("app.request")
+        try:
+            response: StarletteResponse = await call_next(request)
+        except Exception:  # pylint: disable=broad-except
+            process_time = time.time() - start_time
+            status_code = 500
+            log.exception(
+                "request",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": status_code,
+                    "duration": process_time,
+                },
+            )
+            REQUEST_COUNT.labels(
+                request.method, request.url.path, str(status_code)
+            ).inc()
+            REQUEST_LATENCY.labels(request.method, request.url.path).observe(
+                process_time
+            )
+            raise
+
         process_time = time.time() - start_time
 
-        log = logging.getLogger("app.request")
         log.info(
             "request",
             extra={
