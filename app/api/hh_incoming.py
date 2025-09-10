@@ -31,6 +31,7 @@ async def webhook_hh(
     ts = None
     try:
         data = json.loads(raw.decode("utf-8", "ignore") or "{}")
+        log.info(f"HH FULL WEBHOOK BODY: {data}") 
         obj = (
             data.get("object")
             or data.get("negotiation")
