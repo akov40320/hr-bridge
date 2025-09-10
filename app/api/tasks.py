@@ -69,11 +69,27 @@ async def handle_task(p: dict, attempts: int = 0):
         )
         return
 
-    if p["platform"] == "amo" and p["action"] == "amo_create_lead":
+    if p.get("platform") == "amo":
+        
         amo = await AmoClient.create(get_http_client())
-        await amo.create_leads(payload["lead_body"])
-        return
 
+        action = p.get("action")
+        if action == "amo_create_lead":
+            await amo.create_leads(payload["lead_body"])
+            return
+
+        if action == "amo_add_note":
+            await amo.add_note(payload["lead_id"], payload["text"])
+            return
+
+        if action == "amo_add_tags":
+            await amo.add_tags(payload["lead_id"], payload["tags"])
+            return
+
+        if action == "amo_update_status":
+            await amo.update_status(payload["lead_id"], payload["status_id"])
+            return
+        
     if p.get("platform") == "mirror" and p.get("action") == "bot_to_amo":
         await handle_mirror_bot_to_amo(payload)
         return
