@@ -1,4 +1,4 @@
-"""Helpers for enriching AmoCRM leads with applicant data."""
+"""Помощники для обогащения лидов AmoCRM данными кандидатов."""
 
 import logging
 
@@ -17,7 +17,7 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
     vacancy_title: str | None,
     email: str | None,
 ) -> None:
-    """Attach extra data to a newly created lead."""
+    """Добавить дополнительные данные к созданному лиду."""
     s = get_settings()
 
     contact_id = None
@@ -27,7 +27,7 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
             contact_id = cr["_embedded"]["contacts"][0]["id"]
             await amo.link_contact_to_lead(lead_id, contact_id)
         except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-            logger.warning("create/link contact failed: %s", e)
+            logger.warning("создание/привязка контакта не удалась: %s", e)
 
     cf: dict[int, str] = {}
     if s.AMO_CF_LEAD_CITY_ID:
@@ -43,7 +43,7 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
     try:
         await amo.update_lead_custom_fields(lead_id, cf)
     except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-        logger.warning("update lead CF failed: %s", e)
+        logger.warning("обновление дополнительных полей лида не удалось: %s", e)
 
     if not any(
         [
@@ -65,7 +65,7 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
             )
             await amo.add_note(lead_id, note)
         except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-            logger.warning("add note (candidate data) error: %s", e)
+            logger.warning("ошибка добавления примечания с данными кандидата: %s", e)
 
 
 __all__ = ["enrich_lead"]

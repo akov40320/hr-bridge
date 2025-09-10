@@ -38,7 +38,7 @@ async def webhook_avito(
     sig = request.headers.get(_SIG_HEADER)
 
     logger.info(
-        "avito:webhook received len=%d sig_present=%s ua=%s",
+        "avito:webhook получен len=%d sig_present=%s ua=%s",
         len(raw), bool(sig), request.headers.get("User-Agent")
     )
 
@@ -55,7 +55,7 @@ async def webhook_avito(
         from app.services.payload_parsers import extract_avito_payload, parse_avito_payload
         p = parse_avito_payload(extract_avito_payload(raw))
         logger.info(
-            "avito:webhook ok source=avito event=%s channel=%s vacancy=%s owner=%s dt=%.1fms",
+            "avito:webhook ok source=avito событие=%s канал=%s вакансия=%s владелец=%s dt=%.1fms",
             getattr(p, "raw_text", "")[:32],  # краткий хинт
             p.applicant.id,                   # chat_id или app:<id>
             p.vacancy_id,
@@ -63,6 +63,6 @@ async def webhook_avito(
             dt,
         )
     except Exception as e:
-        logger.info("avito:webhook ok (summary failed: %s) dt=%.1fms", e, dt)
+        logger.info("avito:webhook ok (сводка не получена: %s) dt=%.1fms", e, dt)
 
     return resp

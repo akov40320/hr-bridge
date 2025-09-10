@@ -67,12 +67,12 @@ class AmoClient:
         ))
 
     async def _ensure_token(self):
-        """Refresh the token if it will expire soon."""
+        """Обновить токен, если он скоро истечёт."""
         if time.time() >= self._expires_at - 120:
             await self._refresh_token()
 
     async def _request(self, method: str, url: str, **kw):
-        """Send an HTTP request handling token refresh and error logging."""
+        """Отправить HTTP-запрос с обработкой обновления токена и логированием ошибок."""
         await self._ensure_token()
         r = await self.client.request(method, url, headers=self.headers, timeout=30, **kw)
         if r.status_code == 401:
@@ -81,7 +81,7 @@ class AmoClient:
         if r.is_error:
             payload = kw.get("json") or kw.get("data")
             logger.error(
-                "AMO ERROR: status=%s, text=%s, url=%s, payload=%s",
+                "AMO ОШИБКА: status=%s, text=%s, url=%s, payload=%s",
                 r.status_code,
                 r.text,
                 getattr(r, "url", url),
@@ -91,18 +91,18 @@ class AmoClient:
         return r.json() if r.content else None
 
     async def create_leads(self, leads: list[dict]):
-        """Create AmoCRM leads in bulk."""
+        """Создать лиды AmoCRM пачкой."""
         url = f"{self.base}/api/v4/leads"
         return await self._request("POST", url, json=leads)
 
     async def add_tags(self, lead_id: int, tags: list[str]):
-        """Attach tags to a lead."""
+        """Прикрепить теги к лиду."""
         url = f"{self.base}/api/v4/leads"
         body = [{"id": lead_id, "_embedded": {"tags": [{"name": t} for t in tags]}}]
         return await self._request("PATCH", url, json=body)
 
     async def add_note(self, lead_id: int, text: str):
-        """Add a common note to a lead's timeline."""
+        """Добавить обычное примечание к ленте лида."""
         url = f"{self.base}/api/v4/leads/notes"
         body = [{
             "entity_id": lead_id,
@@ -114,7 +114,7 @@ class AmoClient:
     async def create_contact(
         self, name: str, phone: str | None = None, email: str | None = None
     ):
-        """Create a contact with optional phone and email."""
+        """Создать контакт с необязательными телефоном и email."""
         url = f"{self.base}/api/v4/contacts"
         cfv = []
         if phone:

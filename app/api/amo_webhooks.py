@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 async def parse_status_events(request: Request) -> list[tuple[int, int]]:
-    """Return list of (lead_id, status_id) pairs from Amo webhook payload."""
+    """Вернуть список пар (lead_id, status_id) из полезной нагрузки вебхука Amo."""
     events: list[tuple[int, int]] = []
     try:
         data = await request.json()
@@ -34,7 +34,7 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
         body = (await request.body()).decode("utf-8", errors="replace")
         logger.warning(
-            "Failed to parse AmoCRM status webhook: %s; body=%s", exc, body[:200]
+            "Не удалось распарсить вебхук статуса AmoCRM: %s; body=%s", exc, body[:200]
         )
         raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
 
@@ -55,7 +55,7 @@ async def handle_avito_event(
     link: dict[str, Any],
     queue_client: RabbitMQClient = rabbitmq,
 ) -> None:
-    """Mark Avito thread as read for the given lead."""
+    """Отметить переписку Avito как прочитанную для указанного лида."""
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
     await queue_client.publish_task(
@@ -76,7 +76,7 @@ async def amo_webhook(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """Process AmoCRM webhook and sync lead statuses to external platforms."""
+    """Обработать вебхук AmoCRM и синхронизировать статусы лидов с внешними площадками."""
     raw = await request.body()
     key = calc_key("amo", raw)
     if not await check_and_store(key):
@@ -89,7 +89,7 @@ async def amo_webhook(
         await set_last_transition(lead_id, status_id, int(time.time()))
         link = await find_link(lead_id)
         if not link:
-            logger.warning("NO LINK FOR LEAD %s", lead_id)
+            logger.warning("НЕТ СВЯЗИ ДЛЯ ЛИДА %s", lead_id)
             continue
 
         platform = link.get("platform")

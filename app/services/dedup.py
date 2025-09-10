@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 def calc_key(source: str, payload: str | bytes) -> str:
-    """Return deduplication key for an event payload."""
+    """Вернуть ключ дедупликации для полезной нагрузки события."""
     if isinstance(payload, str):
         payload = payload.encode("utf-8")
     return f"{source}:{hashlib.sha256(payload).hexdigest()}"
 
 
 async def check_and_store(key: str) -> bool:
-    """Store the key if it's not present and return whether it was inserted."""
+    """Сохранить ключ, если его ещё нет, и вернуть, был ли он вставлен."""
     async with get_session() as s:
         stmt = (
             insert(EventDedup)
@@ -37,7 +37,7 @@ async def check_and_store(key: str) -> bool:
 
 
 async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
-    """Remove deduplication entries older than the given number of seconds."""
+    """Удалить записи дедупликации старше указанного количества секунд."""
     async with get_session() as s:
         q = text(
             "DELETE FROM events_dedup WHERE created_at < (NOW() AT TIME ZONE 'utc') - "
@@ -49,22 +49,22 @@ async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
 
 
 async def once(dedup_key: str, ttl: int, operation: Callable[[], Awaitable[Any]]) -> bool:
-    """Run ``operation`` once for ``dedup_key`` within a TTL window.
+    """Выполнить ``operation`` один раз для ``dedup_key`` в пределах окна TTL.
 
-    The key is stored using :func:`check_and_store`.  If the key was already
-    present, the operation is skipped and ``False`` is returned.
+    Ключ сохраняется через :func:`check_and_store`. Если ключ уже присутствует,
+    операция пропускается и возвращается ``False``.
 
     Args:
-        dedup_key: Unique identifier for the operation.
-        ttl: Time-to-live for deduplication entries, in seconds.
-        operation: Coroutine function to execute when the key is new.
+        dedup_key: уникальный идентификатор операции.
+        ttl: время жизни записи дедупликации в секундах.
+        operation: корутина, которую нужно выполнить при новом ключе.
 
     Returns:
-        ``True`` if the operation was executed, ``False`` otherwise.
+        ``True``, если операция была выполнена, иначе ``False``.
     """
 
     if not await check_and_store(dedup_key):
-        logger.info("once: duplicate %s -> skip", dedup_key)
+        logger.info("once: дубликат %s -> пропуск", dedup_key)
         return False
     await operation()
     return True

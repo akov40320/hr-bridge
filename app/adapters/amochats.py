@@ -157,7 +157,7 @@ async def send_text_from_client(
         raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
 
     # можно просто вернуть тот же интеграционный conversation_id
-    logger.info("send_from_client: ok conv_id=%s text_len=%d", conversation_id, len(text))
+    logger.info("send_from_client: успешно conv_id=%s text_len=%d", conversation_id, len(text))
     return conversation_id
 
 
@@ -250,7 +250,7 @@ async def ensure_chat_created(
     if r.status_code >= 400:
         raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
 
-    logger.info("ensure_chat_created: ok for lead=%s -> conv_id=%s", lead_id, conv_id)
+    logger.info("ensure_chat_created: успех для lead=%s -> conv_id=%s", lead_id, conv_id)
 
     # попытаться вытащить chat_id из ответа
     chat_id: str | None = None
@@ -264,9 +264,9 @@ async def ensure_chat_created(
                 or (jr.get("_embedded") or {}).get("chats", [{}])[0].get("id")
         )
     except Exception:  # pragma: no cover
-        logger.warning("ensure_chat_created: parse chat_id failed", exc_info=True)
+        logger.warning("ensure_chat_created: не удалось разобрать chat_id", exc_info=True)
 
-    logger.info("ensure_chat_created: ok for %s -> conv_id=%s chat_id=%s",
+    logger.info("ensure_chat_created: успех для %s -> conv_id=%s chat_id=%s",
                 ("contact" if contact_id else "lead"),
                 conv_id, chat_id or "-")
 
@@ -275,9 +275,9 @@ async def ensure_chat_created(
         try:
             amo = await AmoClient.create(client)
             await amo.bind_chat_to_contact(bind_contact_id, chat_id)
-            logger.info("chat bound to contact: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
+            logger.info("чат привязан к контакту: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
         except Exception:
-            logger.warning("bind chat to contact failed", exc_info=True)
+            logger.warning("привязка чата к контакту не удалась", exc_info=True)
 
     # 2) опционально отправить первое сообщение
     path_msg = f"/v2/origin/custom/{ac.scope_id}"
@@ -330,6 +330,6 @@ async def ensure_chat_created(
             await client.post(url_msg, content=sys_body, headers=sys_headers, timeout=30)
 
     except Exception:
-        logger.warning("ensure_chat_created: initial message post failed", exc_info=True)
+        logger.warning("ensure_chat_created: отправка первого сообщения не удалась", exc_info=True)
 
     return conv_id

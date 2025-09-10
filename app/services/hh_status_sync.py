@@ -1,7 +1,8 @@
-"""Helpers for synchronizing AmoCRM lead statuses with HeadHunter.
+"""Помощники для синхронизации статусов лидов AmoCRM с HeadHunter.
 
-This module exposes :func:`sync_hh_status` which takes a lead/status pair
-and publishes a task to update the corresponding negotiation state on HH.
+Этот модуль предоставляет функцию :func:`sync_hh_status`, которая принимает
+пару лид/статус и публикует задачу для обновления соответствующего состояния
+переговоров на HH.
 """
 
 from __future__ import annotations
@@ -29,12 +30,12 @@ logger = logging.getLogger(__name__)
 async def _fetch_refusal_reason(
     lead_id: int, client: httpx.AsyncClient, field_id: int
 ) -> str | None:
-    """Retrieve refusal reason text for the given lead."""
+    """Получить текст причины отказа для указанного лида."""
     try:
         amo = await AmoClient.create(client)
         lead = await amo.get_lead(lead_id)
     except httpx.HTTPError as exc:  # pragma: no cover - network failure
-        logger.exception("Failed to fetch lead %s: %s", lead_id, exc)
+        logger.exception("Не удалось получить лид %s: %s", lead_id, exc)
         return None
 
     cfv = lead.get("custom_fields_values") or []
@@ -60,7 +61,7 @@ async def sync_hh_status(
     http_client: httpx.AsyncClient,
     queue_client: RabbitMQClient = rabbitmq,
 ) -> None:
-    """Update state in HH based on AmoCRM status change."""
+    """Обновить состояние в HH на основе изменения статуса в AmoCRM."""
     s = get_settings()
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
@@ -85,7 +86,7 @@ async def sync_hh_status(
                         lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
                     )
                 except httpx.HTTPError:
-                    logger.warning("Failed to copy refusal text")
+                    logger.warning("Не удалось скопировать текст отказа")
 
     event = UpdateStatus(
         platform="hh",

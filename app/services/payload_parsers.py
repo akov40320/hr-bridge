@@ -20,7 +20,7 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
     try:
         data = json.loads(raw.decode() or "{}")
     except Exception as exc:
-        logger.warning("HH payload parse error: %s", exc)
+        logger.warning("ошибка разбора HH payload: %s", exc)
         raise ValueError("invalid json") from exc
 
     obj = (
@@ -65,7 +65,7 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
     ).strip() or None
 
     # Лог для контроля
-    logger.info("hh: parsed nid=%s vacancy_id=%s", negotiation_id, vacancy_id)
+    logger.info("hh: распарсено nid=%s vacancy_id=%s", negotiation_id, vacancy_id)
 
     return IncomingPayload(
         platform="hh",
