@@ -15,6 +15,8 @@ from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.api.oauth2 import OAuth2Config, ensure_fresh_access
 from app.db.token_store import DbTokenStore
+from app.api.hh_webhook import ensure_hh_webhook
+from app.api.avito_webhooks import ensure_avito_webhooks
 
 router = APIRouter()
 admin = APIRouter()
@@ -139,6 +141,22 @@ async def hh_autofill_admin(
 
     await queue_client.publish_task({"platform": "system", "action": "hh_autofill", "payload": {}})
     return {"ok": True, "queued": True}
+
+
+@admin.post("/hh-webhook/ensure")
+async def hh_webhook_ensure(http_client: httpx.AsyncClient = Depends(get_http_client)) -> dict:
+    """Trigger idempotent HH webhook registration."""
+
+    await ensure_hh_webhook(http_client)
+    return {"ok": True}
+
+
+@admin.post("/avito-webhook/ensure")
+async def avito_webhook_ensure(http_client: httpx.AsyncClient = Depends(get_http_client)) -> dict:
+    """Trigger idempotent Avito webhook registration."""
+
+    await ensure_avito_webhooks(http_client)
+    return {"ok": True}
 
 
 __all__ = ["router", "admin"]
