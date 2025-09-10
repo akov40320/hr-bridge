@@ -38,7 +38,7 @@ async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
     async with get_session() as s:
         q = text(
             "DELETE FROM events_dedup WHERE created_at < (NOW() AT TIME ZONE 'utc') - "
-            "(:sec || ' seconds')::interval"
+            "make_interval(secs => :sec)"
         )
         res = await s.execute(q, {"sec": seconds})
         await s.commit()
