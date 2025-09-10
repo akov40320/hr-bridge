@@ -30,6 +30,25 @@ async def test_enrich_applicant(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_enrich_applicant_missing_token(monkeypatch):
+    payload = IncomingPayload(
+        platform="hh",
+        owner_id="o1",
+        applicant=Applicant(id="1", name="кандидат"),
+    )
+
+    async def fail_fetch(applicant_id, owner_id, http_client):
+        raise RuntimeError("missing token")
+
+    monkeypatch.setattr(lead_processor.hh_adapt, "fetch_applicant_details", fail_fetch)
+
+    result = await lead_processor.enrich_applicant(payload, None)
+    assert result.applicant.phone is None
+    assert result.applicant.city is None
+    assert result.applicant.name == "кандидат"
+
+
+@pytest.mark.asyncio
 async def test_create_lead(monkeypatch):
     payload = IncomingPayload(
         platform="hh",
