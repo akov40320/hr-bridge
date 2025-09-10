@@ -121,6 +121,7 @@ class RabbitMQClient:
             await self._ensure()
             assert self._exch is not None
             await self._exch.publish(msg, routing_key="tasks")
+        logger.info("publish_task: %s attempts=%s", payload, attempts)
 
     async def publish_retry(self, payload: dict, attempts: int) -> None:
         """Опубликовать задачу в очередь повтора."""
@@ -141,6 +142,7 @@ class RabbitMQClient:
             await self._chan.default_exchange.publish(
                 msg, routing_key=s.RMQ_RETRY_QUEUE
             )
+        logger.info("publish_retry: %s attempts=%s", payload, attempts)
 
     async def publish_dlq(
         self, payload: dict, attempts: int, error: str | None = None
@@ -158,6 +160,7 @@ class RabbitMQClient:
             await self._ensure()
             assert self._exch is not None
             await self._exch.publish(msg, routing_key="tasks.dlq")
+        logger.warning("publish_dlq: %s attempts=%s error=%s", payload, attempts, error)
 
     async def requeue_dlq(self, count: int) -> int:
         """Переместить до ``count`` сообщений из DLQ обратно в основную очередь.
@@ -238,12 +241,22 @@ class RabbitMQClient:
                                         obj.get("attempts"),
                                     )
                                     attempts = 0
+                                logger.info(
+                                    "consume: received payload=%s attempts=%s",
+                                    payload,
+                                    attempts,
+                                )
 
                                 if expects_attempts:
                                     await handler(payload, attempts)
                                 else:
                                     await handler(payload)
                                 await message.ack()
+                                logger.info(
+                                    "consume: acked payload=%s attempts=%s",
+                                    payload,
+                                    attempts,
+                                )
                             except (
                                 json.JSONDecodeError,
                                 aio_exc.AMQPError,
@@ -268,6 +281,11 @@ class RabbitMQClient:
                                 finally:
                                     if republished:
                                         await message.ack()
+                                        logger.info(
+                                            "consume: acked after republish payload=%s attempts=%s",
+                                            payload,
+                                            cur_attempts,
+                                        )
                 except asyncio.CancelledError:
                     break
                 except aio_exc.AMQPError:  # pragma: no cover - network errors
