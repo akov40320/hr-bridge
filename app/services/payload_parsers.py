@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def parse_hh_payload(raw: bytes) -> IncomingPayload:
+    """
+    Парсит вебхук от HeadHunter, надёжно извлекая все необходимые данные,
+    включая ID работодателя из разных возможных мест в JSON-структуре.
+    """
     import json, logging
 
     from app.models import Applicant, IncomingPayload
@@ -59,8 +63,10 @@ def parse_hh_payload(raw: bytes) -> IncomingPayload:
     owner_id = str(
         obj.get("employer_id")
         or data.get("employer_id")
-        or data.get("employer", {}).get("id")
         or obj.get("employer", {}).get("id")
+        or data.get("employer", {}).get("id")
+        or vacancy.get("employer", {}).get("id")
+        or obj.get("company", {}).get("id")
         or ""
     ).strip() or None
 
