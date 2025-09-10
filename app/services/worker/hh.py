@@ -7,6 +7,7 @@ import logging
 
 from app.adapters import hh as hh_adapt
 from app.http_client import get_http_client
+from app.services.dedup import calc_key, check_and_store
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,13 @@ async def handle_hh_send_message(payload: dict):
     nid = payload["negotiation_id"]
     text = payload["text"]
     owner_id = payload.get("owner_id")
+
+    msg_key = payload.get("msg_key")
+    if msg_key:
+        dedup = calc_key("hh_send_message", msg_key)
+        if not await check_and_store(dedup):
+            logger.info("hh.send_message: duplicate %s -> skip", dedup)
+            return
 
     logger.info("hh.send_message: %s text=%r", nid, text[:40])
     client = get_http_client()
@@ -44,6 +52,13 @@ async def handle_hh_set_state(payload: dict):
     nid = payload["negotiation_id"]
     action_id = payload["action_id"]
     owner_id = payload.get("owner_id")
+
+    msg_key = payload.get("msg_key")
+    if msg_key:
+        dedup = calc_key("hh_set_state", msg_key)
+        if not await check_and_store(dedup):
+            logger.info("hh.set_state: duplicate %s -> skip", dedup)
+            return
 
     logger.info("hh.set_state: %s -> %s", nid, action_id)
     client = get_http_client()

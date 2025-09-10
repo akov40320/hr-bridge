@@ -12,6 +12,7 @@ import logging
 
 from app.adapters import avito as avito_adapt
 from app.services.common_request import perform_request
+from app.services.dedup import calc_key, check_and_store
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,13 @@ async def handle_avito_send_message(payload: dict) -> None:
         payload: Mapping that must contain the external message ID and text. It
             may optionally include an ``owner_id`` specifying the account.
     """
+
+    msg_key = payload.get("msg_key")
+    if msg_key:
+        dedup = calc_key("avito_send_message", msg_key)
+        if not await check_and_store(dedup):
+            logger.info("avito.send_message: duplicate %s -> skip", dedup)
+            return
 
     logger.info("avito.send_message: %s", payload.get("external_id"))
     await perform_request(

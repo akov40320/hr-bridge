@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+import hashlib
 
 import httpx
 
@@ -95,12 +96,14 @@ async def create_lead(
     try:
         created = await client.create_leads(body)
     except ReauthRequired:
+        msg_key = f"create_lead:{payload.platform}:{payload.applicant.id}:{payload.vacancy_id}"
         await queue_client.publish_task(
             {
                 "platform": payload.platform or "unknown",
                 "action": "amo_create_lead",
                 "lead_body": body,
                 "ts": int(time.time()),
+                "msg_key": msg_key,
             }
         )
         return None, kind
@@ -157,30 +160,36 @@ async def send_invite(
     negotiation_id = payload.applicant.id
 
     if platform == "avito" and negotiation_id:
+        msg_key = f"avito:{negotiation_id}:{hashlib.sha256(invite_text_avito.encode()).hexdigest()}"
         await queue_client.publish_task({
             "platform": "avito",
             "action": "send_message",
             "external_id": negotiation_id,
             "text": invite_text_avito,
             "owner_id": payload.owner_id,
+            "msg_key": msg_key,
         })
 
     if platform == "hh" and negotiation_id:
         # 1) Перевод в этап «Первичный контакт» через action
+        state_key = f"hh:set_state:{negotiation_id}:phone_interview"
         await queue_client.publish_task({
             "platform": "hh",
             "action": "set_state",
             "negotiation_id": negotiation_id,
             "action_id": "phone_interview",   # PUT /negotiations/phone_interview/{nid}
             "owner_id": payload.owner_id,
+            "msg_key": state_key,
         })
         # 2) Сообщение кандидату (form-urlencoded, HH-User-Agent на стороне воркера)
+        msg_key = f"hh:send_message:{negotiation_id}:{hashlib.sha256(invite_text_hh.encode()).hexdigest()}"
         await queue_client.publish_task({
             "platform": "hh",
             "action": "send_message",
             "negotiation_id": negotiation_id,
             "text": invite_text_hh,
             "owner_id": payload.owner_id,
+            "msg_key": msg_key,
         })
 
     return deep_link
