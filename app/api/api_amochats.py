@@ -8,7 +8,7 @@ import base64
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.adapters.amochats import connect_channel
+from app.adapters.amochats import connect_channel, ensure_amo_chats_connected
 from app.core.config import get_settings
 from app.core.guards import require_admin
 from app.http_client import get_http_client
@@ -244,3 +244,11 @@ async def admin_connect(http_client: httpx.AsyncClient = Depends(get_http_client
     """Initiate a one-time connection to AmoChats from the admin panel."""
     resp = await connect_channel(http_client)
     return {"ok": True, "response": resp}
+
+
+@amo_admin.post("/ensure")
+async def admin_ensure(http_client: httpx.AsyncClient = Depends(get_http_client)) -> dict:
+    """Trigger idempotent AmoChats channel connection."""
+
+    await ensure_amo_chats_connected(logger, http_client)
+    return {"ok": True}
