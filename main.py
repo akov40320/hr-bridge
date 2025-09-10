@@ -48,6 +48,31 @@ app.include_router(amo_admin)
 app.include_router(tg_wh_router)
 
 
+async def register_webhook(bot_token: str, path_suffix: str) -> None:
+    s = get_settings()
+    base = (s.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
+    secret = s.TELEGRAM_WEBHOOK_SECRET or None
+    allowed = ["message"]
+
+    try:
+        async with Bot(bot_token) as bot:
+            await bot.set_webhook(
+                url=f"{base}/tg/webhook/{path_suffix}",
+                secret_token=secret,
+                allowed_updates=allowed,
+                drop_pending_updates=True,
+            )
+            info = await bot.get_webhook_info()
+            log.info(
+                "%s webhook set -> %s (pending=%s)",
+                path_suffix.capitalize(),
+                info.url,
+                info.pending_update_count,
+            )
+    except Exception:
+        log.exception("Failed to set %s webhook", path_suffix)
+
+
 async def auto_register_telegram_webhooks() -> None:
     s = get_settings()
     base = (s.TELEGRAM_WEBHOOK_BASE or "").rstrip("/")
@@ -55,38 +80,13 @@ async def auto_register_telegram_webhooks() -> None:
         log.warning("TELEGRAM_WEBHOOK_BASE пуст — не могу поставить вебхуки")
         return
 
-    secret = s.TELEGRAM_WEBHOOK_SECRET or None
-    allowed = ["message"]
-
-    # master
-    if s.TELEGRAM_MASTER_BOT_TOKEN:
-        try:
-            async with Bot(s.TELEGRAM_MASTER_BOT_TOKEN) as m_bot:
-                await m_bot.set_webhook(
-                    url=f"{base}/tg/webhook/master",
-                    secret_token=secret,
-                    allowed_updates=allowed,
-                    drop_pending_updates=True,
-                )
-                info = await m_bot.get_webhook_info()
-                log.info("Master webhook set -> %s (pending=%s)", info.url, info.pending_update_count)
-        except Exception:
-            log.exception("Failed to set master webhook")
-
-    # operator
-    if s.TELEGRAM_OPERATOR_BOT_TOKEN:
-        try:
-            async with Bot(s.TELEGRAM_OPERATOR_BOT_TOKEN) as o_bot:
-                await o_bot.set_webhook(
-                    url=f"{base}/tg/webhook/operator",
-                    secret_token=secret,
-                    allowed_updates=allowed,
-                    drop_pending_updates=True,
-                )
-                info = await o_bot.get_webhook_info()
-                log.info("Operator webhook set -> %s (pending=%s)", info.url, info.pending_update_count)
-        except Exception:
-            log.exception("Failed to set operator webhook")
+    bot_configs = [
+        (s.TELEGRAM_MASTER_BOT_TOKEN, "master"),
+        (s.TELEGRAM_OPERATOR_BOT_TOKEN, "operator"),
+    ]
+    for token, suffix in bot_configs:
+        if token:
+            await register_webhook(token, suffix)
 
 
 @app.on_event("startup")
