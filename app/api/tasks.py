@@ -46,6 +46,7 @@ async def handle_task(p: dict, attempts: int = 0):
             employer_id=p.get("owner_id"),
             client=get_http_client(),
         )
+        return
 
     if p["platform"] == "avito" and p["action"] == "mark_read":
         await avito_adapt.mark_read(
