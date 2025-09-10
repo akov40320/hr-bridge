@@ -123,6 +123,18 @@ async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncCli
         log.warning("AmoChats connect warning: %s", exc)
 
 
+async def _bind_contact_via_amojo(contact_id: int, chat_id: str, client: httpx.AsyncClient) -> None:
+    """Привязать чат к контакту через AmoChats API (v2) в качестве fallback."""
+    ac = _get_client()
+    path = f"/v2/origin/custom/{ac.scope_id}/contacts"
+    url = _base() + path
+    body = _dump({"contact_id": int(contact_id), "chat_id": str(chat_id)})
+    headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
+    r = await client.post(url, content=body, headers=headers, timeout=30)
+    if r.status_code >= 400:
+        raise AmoChatsError(f"bind_contact_via_amojo failed {r.status_code}: {r.text}")
+
+
 async def send_text_from_client(
         *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
         conversation_id: str | None = None, client: httpx.AsyncClient,
@@ -276,6 +288,23 @@ async def ensure_chat_created(
             amo = await AmoClient.create(client)
             await amo.bind_chat_to_contact(bind_contact_id, chat_id)
             logger.info("чат привязан к контакту: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
+        except httpx.HTTPStatusError as exc:
+            err_text = exc.response.text if exc.response else ""
+            if "Channel must be linked to your client" in err_text:
+                logger.warning(
+                    "привязка чата к контакту: Channel must be linked to your client; пробуем через AmoChats"
+                )
+                try:
+                    await _bind_contact_via_amojo(bind_contact_id, chat_id, client)
+                    logger.info(
+                        "чат привязан к контакту через AmoChats: contact_id=%s chat_id=%s",
+                        bind_contact_id,
+                        chat_id,
+                    )
+                except Exception:
+                    logger.warning("привязка чата к контакту не удалась", exc_info=True)
+            else:
+                logger.warning("привязка чата к контакту не удалась", exc_info=True)
         except Exception:
             logger.warning("привязка чата к контакту не удалась", exc_info=True)
 
