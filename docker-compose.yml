@@ -29,29 +29,12 @@ x-common-env: &common-env
   AMO_CHATS_SENDER_USER_AMOJO_ID: ${AMO_CHATS_SENDER_USER_AMOJO_ID}
 
 services:
-  api:
-    build: .
-    environment:
-      <<: *common-env
-    depends_on:
-      - rabbitmq
-      - postgres
-    ports:
-      - "8000:8000"
-    networks:
-      - app
-    restart: unless-stopped
-
   worker:
     build: .
     command: python -u -m app.services.worker_rmq
     environment:
       <<: *common-env
-    depends_on:
-      - rabbitmq
-      - postgres
-    networks:
-      - app
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
     restart: unless-stopped
 
   scheduler:
@@ -59,44 +42,5 @@ services:
     command: python -u -m app.services.scheduler
     environment:
       <<: *common-env
-    depends_on:
-      - rabbitmq
-      - postgres
-    networks:
-      - app
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
     restart: unless-stopped
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - app
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:14
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - app
-    restart: unless-stopped
-
-volumes:
-  rabbitmq_data:
-  postgres_data:
-
-networks:
-  app:
