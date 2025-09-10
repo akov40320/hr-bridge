@@ -35,7 +35,8 @@ async def process_job_board_webhook(
     try:
         payload = parse_payload(raw)
     except ValueError as exc:
-        logger.warning("%s webhook: %s; payload=%s", platform, exc, raw)
+        logger.warning("%s webhook: %s", platform, exc)
+        logger.debug("%s webhook body: %s", platform, raw)
         return {"ok": True, "skipped": True}
 
     try:
