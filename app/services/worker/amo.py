@@ -11,7 +11,7 @@ from httpx import HTTPStatusError
 
 from app.adapters.amo_client import AmoClient
 from app.http_client import get_http_client
-from app.services.dedup import calc_key, check_and_store
+from app.services.dedup import calc_key, once
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +24,18 @@ async def handle_amo_create_lead(payload: dict) -> None:
     """
 
     msg_key = payload.get("msg_key")
+
+    async def _op():
+        logger.info("amo.create_lead")
+        amo = await AmoClient.create(get_http_client())
+        await amo.create_leads(payload["lead_body"])
+
     if msg_key:
         dedup = calc_key("amo_create_lead", msg_key)
-        if not await check_and_store(dedup):
-            logger.info("amo.create_lead: duplicate %s -> skip", dedup)
+        if not await once(dedup, 72 * 3600, _op):
             return
-
-    logger.info("amo.create_lead")
-    amo = await AmoClient.create(get_http_client())
-    await amo.create_leads(payload["lead_body"])
+    else:
+        await _op()
 
 
 async def handle_amo_add_note(payload: dict) -> None:
