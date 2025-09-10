@@ -9,6 +9,7 @@ import httpx
 
 from app.adapters import hh as hh_adapt
 from app.adapters.amo_client import ReauthRequired
+from app.api.oauth2 import OAuth2RefreshError
 from app.core.config import get_settings
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.store import save_link
@@ -38,8 +39,12 @@ async def enrich_applicant(
                     if payload.applicant.name and payload.applicant.name != "кандидат"
                     else extra.get("name") or payload.applicant.name
                 )
-        except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover
-            logger.warning("HH: обогащение кандидата %s не удалось: %s", payload.applicant.id, type(e).__name__)
+        except (httpx.HTTPError, json.JSONDecodeError, RuntimeError, OAuth2RefreshError) as e:  # pragma: no cover
+            logger.warning(
+                "HH: обогащение кандидата %s не удалось: %s",
+                payload.applicant.id,
+                type(e).__name__,
+            )
         if payload.vacancy_id and not (payload.vacancy_desc or "").strip():
             try:
                 desc = await hh_adapt.fetch_vacancy_description(
@@ -47,8 +52,12 @@ async def enrich_applicant(
                 )
                 if desc:
                     payload.vacancy_desc = desc
-            except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover
-                logger.warning("HH: описание вакансии %s не получено: %s", payload.vacancy_id, type(e).__name__)
+            except (httpx.HTTPError, json.JSONDecodeError, RuntimeError, OAuth2RefreshError) as e:  # pragma: no cover
+                logger.warning(
+                    "HH: описание вакансии %s не получено: %s",
+                    payload.vacancy_id,
+                    type(e).__name__,
+                )
     return payload
 
 
