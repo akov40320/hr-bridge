@@ -43,20 +43,22 @@ async def handle_hh_set_state(payload: dict):
     payload:
         negotiation_id (str) — ID отклика/приглашения (nid)
         external_id (str) — альтернативный ID отклика/приглашения
-        action_id (str) — действие, например 'phone_interview', 'interview'
+        action_id (str) или target_state (str) — действие, например 'phone_interview', 'interview'
         owner_id (str|None) — работодатель/менеджер
     """
     nid = payload.get("negotiation_id") or payload.get("external_id")
     if not nid:
         raise ValueError("negotiation_id or external_id is required")
-    action_id = payload["action_id"]
+    target_state = payload.get("action_id") or payload.get("target_state")
+    if not target_state:
+        raise ValueError("action_id or target_state is required")
     owner_id = payload.get("owner_id")
 
-    logger.info("hh.set_state: %s -> %s", nid, action_id)
+    logger.info("hh.set_state: %s -> %s", nid, target_state)
     client = get_http_client()
     await hh_adapt.set_employer_state(
         response_id=nid,
-        target_state=action_id,
+        target_state=target_state,
         employer_id=owner_id,
         client=client,
     )
