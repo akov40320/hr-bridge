@@ -17,3 +17,4 @@ aiosqlite
 python-json-logger
 prometheus_client
 apscheduler
+pyyaml

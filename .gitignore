@@ -2,6 +2,7 @@
 __pycache__/
 .idea/
 secrets/
-data/
+data/*
+!data/hh_stage_mapping.yaml
 .env
 *.log
