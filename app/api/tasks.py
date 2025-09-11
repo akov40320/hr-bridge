@@ -4,9 +4,19 @@ import time as _time
 
 from app.adapters import avito as avito_adapt, hh as hh_adapt
 from app.adapters.amo_client import AmoClient
-from app.services.hh_autofill import autofill_hh_mapping
 from app.db.token_store import DbTokenStore
 from app.http_client import get_http_client
+from app.services.hh_autofill import autofill_hh_mapping
+from app.services.worker.amo import (
+    handle_amo_add_note,
+    handle_amo_add_tags,
+    handle_amo_update_status,
+)
+from app.services.worker.mirror import (
+    handle_mirror_amo_to_tg,
+    handle_mirror_bot_to_amo,
+    handle_mirror_tg_to_amo,
+)
 
 
 async def handle_task(p: dict, attempts: int = 0):
@@ -68,6 +78,30 @@ async def handle_task(p: dict, attempts: int = 0):
     if p["platform"] == "amo" and p["action"] == "amo_create_lead":
         amo = await AmoClient.create(get_http_client())
         await amo.create_leads(p["lead_body"])
+        return
+
+    if p.get("platform") == "amo" and p.get("action") == "amo_add_note":
+        await handle_amo_add_note(p)
+        return
+
+    if p.get("platform") == "amo" and p.get("action") == "amo_add_tags":
+        await handle_amo_add_tags(p)
+        return
+
+    if p.get("platform") == "amo" and p.get("action") == "amo_update_status":
+        await handle_amo_update_status(p)
+        return
+
+    if p.get("platform") == "mirror" and p.get("action") == "amo_to_tg":
+        await handle_mirror_amo_to_tg(p)
+        return
+
+    if p.get("platform") == "mirror" and p.get("action") == "tg_to_amo":
+        await handle_mirror_tg_to_amo(p)
+        return
+
+    if p.get("platform") == "mirror" and p.get("action") == "bot_to_amo":
+        await handle_mirror_bot_to_amo(p)
         return
 
     raise RuntimeError(f"Unknown task: {p}")
