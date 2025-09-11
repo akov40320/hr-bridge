@@ -3,10 +3,8 @@ import datetime
 import hashlib
 import hmac
 import logging
-import secrets
-import base64
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 
 from app.adapters.amochats import connect_channel
 from app.core.config import get_settings
@@ -25,26 +23,19 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
-def _md5_hex(b: bytes) -> str:
-    return hashlib.md5(b).hexdigest().lower()
-
-
 async def verify_amochats_signature(
         request: Request,
         settings=Depends(get_settings),
 ) -> None:
     raw = await request.body()
-    x_sig = request.headers.get("X-Signature")
-    if not x_sig:
-        raise HTTPException(status_code=400, detail="missing X-Signature")
-
-    calc = hmac.new(
-        settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1
-    ).hexdigest()
-    if not hmac.compare_digest(x_sig.lower(), calc.lower()):
-        raise HTTPException(status_code=401, detail="invalid signature")
-
     request.state.raw_body = raw
+    # TODO: подпись
+    # x_sig = request.headers.get("X-Signature")
+    # calc = hmac.new(
+    #     settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1
+    # ).hexdigest()
+    # if not x_sig or not hmac.compare_digest(x_sig.lower(), calc.lower()):
+    #     raise HTTPException(status_code=401)
 
 
 def parse_lead_id(client_id: str) -> int | None:
@@ -193,7 +184,7 @@ async def amochats_in(
         queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
     """Process incoming AmoChats webhook and mirror messages to Telegram."""
-    raw = await request.body()
+    raw = getattr(request.state, "raw_body", await request.body())
 
     if await is_duplicate(raw):
         logger.info("amo-chats duplicate webhook skipped (scope_id=%s)", scope_id)
