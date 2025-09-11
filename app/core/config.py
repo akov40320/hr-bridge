@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""
     TELEGRAM_WEBHOOK_BASE: str = ""
     TELEGRAM_WEBHOOK_MODE: bool = True
+    TELEGRAM_WEBHOOK_TIMEOUT: int = 10
+    TELEGRAM_WEBHOOK_RETRIES: int = 3
+    TELEGRAM_WEBHOOK_RETRY_DELAY: float = 1.0
 
     # Админ
     ADMIN_TOKEN: str = ""  # не обязателен для тестов; проверим в validate_required()
