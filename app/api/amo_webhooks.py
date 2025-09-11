@@ -92,7 +92,7 @@ async def handle_hh_event(
     s = get_settings()
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
-    state = hh_map_get(status_id)
+    state = await hh_map_get(status_id)
     if not (state and ext_id):
         return
 
@@ -157,7 +157,7 @@ async def amo_webhook(
     if not await check_and_store(key):
         return {"ok": True, "duplicate": True}
 
-    hh_map_load()
+    await hh_map_load()
     events = await parse_status_events(request)
 
     for lead_id, status_id in events:

@@ -127,7 +127,7 @@ async def on_startup():
 
         amo_tok = await DbTokenStore("amo").load()
         if amo_tok and amo_tok.get("access_token") and int(amo_tok.get("expires_at", 0)) > int(time.time()) + 30:
-            if not load_hh_mapping():
+            if not await load_hh_mapping():
                 await rabbitmq.publish_task({"platform": "system", "action": "hh_autofill"})
                 log.info("Queued hh_autofill on startup")
     except Exception:

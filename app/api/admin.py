@@ -46,14 +46,14 @@ async def health() -> dict[str, object]:
 async def get_hh_mapping() -> dict:
     """Return the current HeadHunter mapping."""
 
-    return {"ok": True, "mapping": hh_map_load()}
+    return {"ok": True, "mapping": await hh_map_load()}
 
 
 @admin.put("/hh-mapping")
 async def put_hh_mapping(payload: dict) -> dict:
     """Replace the HeadHunter mapping with ``payload``."""
 
-    return {"ok": True, "mapping": hh_map_set(payload)}
+    return {"ok": True, "mapping": await hh_map_set(payload)}
 
 
 @admin.post("/rmq-test")
