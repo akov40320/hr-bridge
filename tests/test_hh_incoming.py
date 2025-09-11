@@ -1,5 +1,7 @@
 from app.api import hh_incoming, _webhook_common
 from app.models import IncomingPayload, Applicant
+from fastapi import Request
+from starlette.requests import ClientDisconnect
 
 
 def _payload() -> IncomingPayload:
@@ -233,3 +235,38 @@ def test_webhook_tag_error(monkeypatch, client):
     assert r.status_code == 200
     assert r.json() == {"ok": False, "error": "internal_error"}
     assert called["invite"] == 123
+
+
+def test_webhook_empty_body(monkeypatch, client):
+    async def fake_check(key):
+        return True
+
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
+
+    async def fake_body(self):
+        raise AssertionError("body should not be read")
+
+    monkeypatch.setattr(Request, "body", fake_body)
+
+    r = client.post("/webhooks/hh/1")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "skipped": True}
+
+
+def test_webhook_client_disconnect(monkeypatch, client):
+    called = {}
+
+    async def fake_check(key):
+        called["called"] = True
+        return True
+
+    monkeypatch.setattr(_webhook_common, "check_and_store", fake_check)
+
+    async def fake_body(self):
+        raise ClientDisconnect()
+
+    monkeypatch.setattr(Request, "body", fake_body)
+
+    r = client.post("/webhooks/hh/1", data=b"{}")
+    assert r.status_code == 400
+    assert "called" not in called
