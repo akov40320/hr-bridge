@@ -4,8 +4,9 @@ from urllib.parse import urlencode
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
+from unittest.mock import AsyncMock
 
-from app.api.amo_webhooks import parse_status_events
+from app.api import amo_webhooks
 
 
 def _json_request(data: dict) -> Request:
@@ -43,7 +44,7 @@ async def test_parse_status_events_json():
         }
     }
     req = _json_request(payload)
-    events = await parse_status_events(req)
+    events = await amo_webhooks.parse_status_events(req)
     assert events == [(1, 10), (2, 20)]
 
 
@@ -57,5 +58,22 @@ async def test_parse_status_events_form_error():
     }
     req = _form_request(form_data)
     with pytest.raises(HTTPException) as exc:
-        await parse_status_events(req)
+        await amo_webhooks.parse_status_events(req)
     assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_handle_hh_event_unknown_status(monkeypatch, caplog):
+    async def fake_map_get(_):
+        return None
+
+    monkeypatch.setattr(amo_webhooks, "hh_map_get", fake_map_get)
+
+    queue = type("Q", (), {"publish_task": AsyncMock()})()
+    link = {"external_id": "ext", "owner_id": 1}
+
+    with caplog.at_level("INFO"):
+        await amo_webhooks.handle_hh_event(1, 2, link, object(), queue)
+
+    queue.publish_task.assert_awaited_once_with({"platform": "system", "action": "hh_autofill"})
+    assert "hh_autofill" in caplog.text
