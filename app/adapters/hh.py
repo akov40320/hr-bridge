@@ -51,7 +51,9 @@ async def set_employer_state(
 
     ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
                                                       None) or "hr-bridge/1.0 (support@example.com)"
-    url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{response_id}/{target_state}"
+    # Вызов HeadHunter API требует, чтобы действие (state) стояло перед идентификатором
+    # отклика. Ранее аргументы в URL были перепутаны местами, что приводило к 404.
+    url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{target_state}/{response_id}"
 
     await request_with_retry(
         client,

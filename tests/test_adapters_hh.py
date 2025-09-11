@@ -26,7 +26,8 @@ async def test_hh_set_employer_state(monkeypatch, token_mock):
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         await hh.set_employer_state("resp1", "interview", "emp1", client)
 
-    assert captured["url"].endswith("/negotiations/resp1/interview")
+    # URL должен содержать действие перед идентификатором отклика
+    assert captured["url"].endswith("/negotiations/interview/resp1")
     assert captured["method"] == "PUT"
 
 
