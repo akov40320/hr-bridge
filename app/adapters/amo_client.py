@@ -160,7 +160,19 @@ class AmoClient:
         return await self._request("GET", url)
 
     async def bind_chat_to_contact(self, contact_id: int, chat_id: str):
-        """Bind a chat to a contact (POST /api/v4/contacts/chats)."""
+        """Bind a chat to a contact (POST /api/v4/contacts/chats).
+
+        AmoCRM requires ``scope_id`` when working with custom channels via the
+        AmoChats API. Without it the server responds with
+        ``Channel must be linked to your client``. Include the configured
+        ``AMO_CHATS_SCOPE_ID`` alongside identifiers so the chat can be linked.
+        """
         url = f"{self.base}/api/v4/contacts/chats"
-        body = [{"contact_id": int(contact_id), "chat_id": str(chat_id)}]
+        body = [
+            {
+                "contact_id": int(contact_id),
+                "chat_id": str(chat_id),
+                "scope_id": self._s.AMO_CHATS_SCOPE_ID,
+            }
+        ]
         return await self._request("POST", url, json=body)
