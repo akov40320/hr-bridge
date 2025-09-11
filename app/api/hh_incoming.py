@@ -2,7 +2,8 @@
 
 import logging
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
+from starlette.requests import ClientDisconnect
 
 from app.api._webhook_common import process_job_board_webhook
 from app.http_client import get_http_client
@@ -24,7 +25,13 @@ async def webhook_hh(
     Fetches the raw request body and passes it to the generic job board
     webhook processor along with the HeadHunter payload parser.
     """
-    raw = await request.body()
+    if request.method == "HEAD" or request.headers.get("content-length") in (None, "0"):
+        raw = b""
+    else:
+        try:
+            raw = await request.body()
+        except ClientDisconnect:
+            return Response(status_code=400)
     try:
         log.info("HH webhook received raw: %s", raw.decode("utf-8"))
     except Exception:
