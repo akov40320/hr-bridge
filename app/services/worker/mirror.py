@@ -81,11 +81,11 @@ async def handle_mirror_tg_to_amo(payload: dict):
     amo = await AmoClient.create(http_client)
 
     # (опционально) оставляем заметку для аудита
-    await with_retry(
-        lambda: amo.add_note(lead_id, f"[TG->{bot_kind}] {text}"),
-        attempts=6,
-        is_retryable=lambda e: True,
-    )
+    # await with_retry(
+    #     lambda: amo.add_note(lead_id, f"[TG->{bot_kind}] {text}"),
+    #     attempts=6,
+    #     is_retryable=lambda e: True,
+    # )
 
     # 👇 КЛЮЧЕВОЕ: если нет conversation_id — создаём/привязываем чат к контакту сделки
     if not conv_id:
