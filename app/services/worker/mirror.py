@@ -168,7 +168,6 @@ async def handle_mirror_bot_to_amo(payload: dict):
     bot_kind = payload.get("bot_kind")
 
     http_client = get_http_client()
-    text_sent = False
 
     if not conv_id and lead_id:
 
@@ -191,14 +190,10 @@ async def handle_mirror_bot_to_amo(payload: dict):
                 tg_user_id=user_id,
                 tg_user_name=user_name,
                 client=http_client,
-                init_text=text,
-                init_as_manager=True,
             ),
             attempts=6,
             is_retryable=lambda e: True,
         )
-
-        text_sent = True
 
         if isinstance(bot_kind, str):
             await set_conversation(user_id, bot_kind, conv_id)
@@ -218,16 +213,15 @@ async def handle_mirror_bot_to_amo(payload: dict):
     if not conv_id:
         raise RuntimeError("bot_to_amo: no conversation_id and no lead_id to create one")
 
-    if not text_sent:
-        await with_retry(
-            lambda: send_text_from_manager(
-                conversation_id=conv_id,
-                user_id=user_id,
-                user_name=user_name,
-                avatar=None,
-                text=text,
-                client=http_client,
-            ),
-            attempts=6,
-            is_retryable=lambda e: True,
-        )
+    await with_retry(
+        lambda: send_text_from_manager(
+            conversation_id=conv_id,
+            user_id=user_id,
+            user_name=user_name,
+            avatar=None,
+            text=text,
+            client=http_client,
+        ),
+        attempts=6,
+        is_retryable=lambda e: True,
+    )
