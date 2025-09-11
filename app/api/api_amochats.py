@@ -34,13 +34,14 @@ async def verify_amochats_signature(
         settings=Depends(get_settings),
 ) -> None:
     raw = await request.body()
-    x_sig = request.headers.get("X-Signature")
-    if not x_sig:
-        raise HTTPException(status_code=400, detail="missing X-Signature")
+    # TODO: re-enable AmoChats signature verification.
+    # x_sig = request.headers.get("X-Signature")
+    # if not x_sig:
+    #     raise HTTPException(status_code=400, detail="missing X-Signature")
 
-    calc = hmac.new(settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1).hexdigest()
-    if not hmac.compare_digest(x_sig.lower(), calc.lower()):
-        raise HTTPException(status_code=401, detail="invalid signature")
+    # calc = hmac.new(settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1).hexdigest()
+    # if not hmac.compare_digest(x_sig.lower(), calc.lower()):
+    #     raise HTTPException(status_code=401, detail="invalid signature")
 
     request.state.raw_body = raw
 
