@@ -219,14 +219,13 @@ async def handle_mirror_bot_to_amo(payload: dict):
         raise RuntimeError("bot_to_amo: no conversation_id and no lead_id to create one")
 
     if not text_sent:
-        lead_for_call = int(lead_id) if lead_id is not None else 0
         await with_retry(
-            lambda: send_text_from_client(
-                lead_id=lead_for_call,
-                text=text,
-                tg_user_id=user_id,
-                tg_user_name=user_name,
+            lambda: send_text_from_manager(
                 conversation_id=conv_id,
+                user_id=user_id,
+                user_name=user_name,
+                avatar=None,
+                text=text,
                 client=http_client,
             ),
             attempts=6,
