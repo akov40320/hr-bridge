@@ -24,15 +24,14 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
     dp = Dispatcher()
     svc = SurveyService(queue_client)
 
-    async def _answer_and_mirror(
-        m: Message, text: str, lead_id: int, conv_id: str | None
+    async def mirror_prompt_to_amo(
+        m: Message, text: str, lead_id: int, conv_id: str | None, key: str
     ) -> None:
-        """Reply to user and mirror message to the CRM queue."""
+        """Mirror bot's prompt to the CRM queue."""
         user = m.from_user
         if user is None:
             return
-        await m.answer(text)
-        msg_key = f"bot_to_amo:{lead_id}:{m.message_id}"
+        msg_key = f"bot_to_amo:{lead_id}:{m.message_id}:{key}"
         await queue_client.publish_task(
             {
                 "platform": "mirror",
@@ -64,11 +63,13 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
         await upsert_tg_link(user.id, bot_kind, lead_id)
         await svc.start(user.id, bot_kind, lead_id, pretty_tg_identity(m))
 
-        greeting = (
-            "Здравствуйте! Нужны пару уточнений по заявке.\n\n"
-            + survey_prompt(0)
-        )
-        await _answer_and_mirror(m, greeting, lead_id, conv_id=None)
+        greeting = "Здравствуйте! Нужны пару уточнений по заявке..."
+        await m.answer(greeting)
+        await mirror_prompt_to_amo(m, greeting, lead_id, conv_id=None, key="greet")
+
+        first = survey_prompt(0)
+        await m.answer(first)
+        await mirror_prompt_to_amo(m, first, lead_id, conv_id=None, key="step0")
 
         logger.info(
             "[%s] /start user_id=%s lead_id=%s",
@@ -121,32 +122,31 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
         if survey:
             survey = await svc.store_answer(user.id, bot_kind, text)
             if not survey:
-                await _answer_and_mirror(
-                    m,
-                    "Сессия не найдена. Нажмите /start ещё раз.",
-                    lead_id,
-                    conv_id,
+                text_out = "Сессия не найдена. Нажмите /start ещё раз."
+                await m.answer(text_out)
+                await mirror_prompt_to_amo(
+                    m, text_out, lead_id, conv_id, key="error"
                 )
                 return
 
             if survey.step <= 2:
-                await _answer_and_mirror(
-                    m,
-                    survey_prompt(survey.step),
-                    lead_id,
-                    conv_id,
+                prompt = survey_prompt(survey.step)
+                await m.answer(prompt)
+                await mirror_prompt_to_amo(
+                    m, prompt, lead_id, conv_id, key=f"step{survey.step}"
                 )
             else:
                 summary = survey_summary(
                     survey.city, survey.experience, survey.time_pref
                 )
                 await svc.finish(user.id, bot_kind, lead_id, summary)
-                await _answer_and_mirror(
-                    m,
+                final = (
                     "Спасибо! Мы передали информацию рекрутеру. "
-                    "С вами свяжутся.",
-                    lead_id,
-                    conv_id,
+                    "С вами свяжутся."
+                )
+                await m.answer(final)
+                await mirror_prompt_to_amo(
+                    m, final, lead_id, conv_id, key="finish"
                 )
                 logger.info(
                     "[%s] survey finished user_id=%s lead_id=%s",
