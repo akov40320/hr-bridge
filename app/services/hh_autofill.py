@@ -24,11 +24,25 @@ def _norm_stage_name(s: str) -> str:
 # Название стадии Amo (нормализованное) -> код HH
 _STAGE_NAME_TO_HH = {
     "отклик": "response",
+    "откликполучен": "response",
     "первичныйконтакт": "phone_interview",
+    "прошелопрос": "phone_interview",
+    "пройденопрос": "phone_interview",
+    "опроспройден": "phone_interview",
     "собеседование": "interview",
+    "пройденособеседование": "interview",
+    "прошелсобеседование": "interview",
     "выходнаработу": "hired",
+    "вышелнаработу": "hired",
+    "вышел": "hired",
+    "принят": "hired",
+    "нанят": "hired",
     "отказ": "discard_by_employer",
+    "отклонен": "discard_by_employer",
+    "неподходит": "discard_by_employer",
     "закрытоинереализовано": "discard_by_employer",
+    "закрыто": "discard_by_employer",
+    "неактуально": "discard_by_employer",
 }
 
 
