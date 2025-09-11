@@ -51,7 +51,7 @@ async def set_employer_state(
 
     ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
                                                       None) or "hr-bridge/1.0 (support@example.com)"
-    url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{target_state}/{response_id}"
+    url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{response_id}/{target_state}"
 
     await request_with_retry(
         client,
