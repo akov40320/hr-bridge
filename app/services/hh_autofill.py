@@ -6,7 +6,10 @@ HeadHunter status codes. The resulting mapping is stored for later reuse.
 
 import re
 import logging
+from pathlib import Path
+
 import httpx
+import yaml
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
@@ -21,34 +24,31 @@ def _norm_stage_name(s: str) -> str:
     return re.sub(r"[^a-zа-я0-9]+", "", s)
 
 
-# Название стадии Amo (нормализованное) -> код HH
-_STAGE_NAME_TO_HH = {
-    "отклик": "response",
-    "откликполучен": "response",
-    "новыйотклик": "response",
-    "первичныйконтакт": "phone_interview",
-    "прошелопрос": "interview",
-    "пройденопрос": "interview",
-    "опроспройден": "interview",
-    "собеседование": "interview",
-    "пройденособеседование": "interview",
-    "прошелсобеседование": "interview",
-    "выходнаработу": "hired",
-    "вышелнаработу": "hired",
-    "вышел": "hired",
-    "принят": "hired",
-    "нанят": "hired",
-    "отказ": "discard_by_employer",
-    "отклонен": "discard_by_employer",
-    "неподходит": "discard_by_employer",
-    "закрытоинереализовано": "discard_by_employer",
-    "закрыто": "discard_by_employer",
-    "неактуально": "discard_by_employer",
-    "кандидатотказался": "discard_by_applicant",
-    "невыходитнасвязь": "discard_no_interaction",
-    "вакансиязакрыта": "discard_vacancy_closed",
-    "переводнадругуювакансию": "discard_to_other_vacancy",
-}
+MAPPING_FILE = Path(__file__).resolve().parents[2] / "data" / "hh_stage_mapping.yaml"
+
+
+def _load_stage_mapping(path: Path) -> dict[str, str]:
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return {str(k): str(v) for k, v in data.items()}
+    except FileNotFoundError:
+        log.warning("hh-autofill: mapping file %s not found", path)
+    except yaml.YAMLError as e:
+        log.warning("hh-autofill: cannot parse mapping file %s: %s", path, e)
+    return {}
+
+
+_STAGE_NAME_TO_HH: dict[str, str] = {}
+
+
+def reload_stage_mapping(path: Path | None = None) -> None:
+    """Reload stage mapping from YAML file."""
+    global _STAGE_NAME_TO_HH
+    _STAGE_NAME_TO_HH = _load_stage_mapping(path or MAPPING_FILE)
+
+
+reload_stage_mapping()
 
 
 async def _fetch_pipeline_statuses(
