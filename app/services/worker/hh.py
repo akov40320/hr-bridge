@@ -16,10 +16,13 @@ async def handle_hh_send_message(payload: dict):
 
     payload:
         negotiation_id (str) — ID отклика/приглашения (nid)
+        external_id (str) — альтернативный ID отклика/приглашения
         text (str) — текст сообщения
         owner_id (str|None) — работодатель/менеджер
     """
-    nid = payload["negotiation_id"]
+    nid = payload.get("negotiation_id") or payload.get("external_id")
+    if not nid:
+        raise ValueError("negotiation_id or external_id is required")
     text = payload["text"]
     owner_id = payload.get("owner_id")
 
@@ -33,15 +36,19 @@ async def handle_hh_send_message(payload: dict):
     )
 
 
+
 async def handle_hh_set_state(payload: dict):
     """Перевести отклик на следующий этап.
 
     payload:
         negotiation_id (str) — ID отклика/приглашения (nid)
+        external_id (str) — альтернативный ID отклика/приглашения
         action_id (str) — действие, например 'phone_interview', 'interview'
         owner_id (str|None) — работодатель/менеджер
     """
-    nid = payload["negotiation_id"]
+    nid = payload.get("negotiation_id") or payload.get("external_id")
+    if not nid:
+        raise ValueError("negotiation_id or external_id is required")
     action_id = payload["action_id"]
     owner_id = payload.get("owner_id")
 
