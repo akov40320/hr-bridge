@@ -37,3 +37,25 @@ async def test_stage_rename_updates_mapping(monkeypatch):
         result = await hh_autofill.autofill_hh_mapping(client)
     assert result == {}
 
+
+@pytest.mark.parametrize(
+    "raw, normalized, code",
+    [
+        ("Принят", "принят", "hired"),
+        ("Прошел опрос", "прошелопрос", "phone_interview"),
+        ("Отклонён", "отклонен", "discard_by_employer"),
+        ("Новый отклик", "новыйотклик", "response"),
+        ("Кандидат отказался", "кандидатотказался", "discard_by_applicant"),
+        ("Не выходит на связь", "невыходитнасвязь", "discard_no_interaction"),
+        ("Вакансия закрыта", "вакансиязакрыта", "discard_vacancy_closed"),
+        (
+            "Перевод на другую вакансию",
+            "переводнадругуювакансию",
+            "discard_to_other_vacancy",
+        ),
+    ],
+)
+def test_stage_name_normalization_and_mapping(raw, normalized, code):
+    assert hh_autofill._norm_stage_name(raw) == normalized
+    assert hh_autofill._STAGE_NAME_TO_HH[normalized] == code
+
