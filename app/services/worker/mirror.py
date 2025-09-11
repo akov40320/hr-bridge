@@ -59,22 +59,7 @@ async def handle_mirror_amo_to_tg(payload: dict):
 
 
 async def handle_mirror_tg_to_amo(payload: dict):
-    """Mirror a Telegram message into AMO CRM.
-
-    Args:
-        payload: Mapping with message information. Required keys include
-            ``lead_id``, ``text``, ``tg_user_id`` and ``bot_kind``; optional
-            keys are ``tg_user_name``, ``conversation_id`` and ``msg_key`` for
-            deduplication.
-
-    Behaviour:
-        Adds the message as a note in AMO and forwards it through the
-        ``send_text_from_client`` adapter. If a new conversation identifier is
-        returned, it is stored for later use.
-
-    Returns:
-        None
-    """
+    """Mirror a Telegram message into AMO CRM (как реальное сообщение в чат сделки)."""
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
@@ -95,12 +80,41 @@ async def handle_mirror_tg_to_amo(payload: dict):
     http_client = get_http_client()
     amo = await AmoClient.create(http_client)
 
+    # (опционально) оставляем заметку для аудита
     await with_retry(
         lambda: amo.add_note(lead_id, f"[TG->{bot_kind}] {text}"),
         attempts=6,
         is_retryable=lambda e: True,
     )
 
+    # 👇 КЛЮЧЕВОЕ: если нет conversation_id — создаём/привязываем чат к контакту сделки
+    if not conv_id:
+        contact_id: int | None = None
+        try:
+            lead = await amo.get_lead_with_contacts(lead_id)
+            emb = (lead or {}).get("_embedded") or {}
+            contacts = emb.get("contacts") or []
+            if contacts:
+                contact_id = int(contacts[0]["id"])
+        except Exception:
+            logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
+
+        # Создаём чат вида conversation_id="lead:<lead_id>" и ПРИВЯЗЫВАЕМ к контакту
+        conv_id = await with_retry(
+            lambda: ensure_chat_created(
+                lead_id=lead_id,
+                contact_id=contact_id,
+                bind_contact_id=contact_id,   # <-- без этого чат не появится в карточке
+                tg_user_id=tg_user_id,
+                tg_user_name=tg_user_name,
+                client=http_client,
+                # init_text/ init_as_manager НЕ ставим: это сообщение от клиента
+            ),
+            attempts=6,
+            is_retryable=lambda e: True,
+        )
+
+    # Теперь отправляем как КЛИЕНТСКОЕ сообщение в чат сделки
     new_cid = await with_retry(
         lambda: send_text_from_client(
             lead_id=lead_id,
@@ -113,8 +127,11 @@ async def handle_mirror_tg_to_amo(payload: dict):
         attempts=6,
         is_retryable=lambda e: True,
     )
+
+    # Сохраняем новый conversation_id, если он изменился
     if new_cid is not None and new_cid != conv_id:
         await set_conversation(tg_user_id, bot_kind, new_cid)
+
 
 
 async def handle_mirror_bot_to_amo(payload: dict):
