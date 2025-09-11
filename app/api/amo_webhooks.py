@@ -93,7 +93,11 @@ async def handle_hh_event(
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
     state = await hh_map_get(status_id)
-    if not (state and ext_id):
+    if state is None:
+        await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
+        logger.info("Unknown Amo status %s – queued hh_autofill", status_id)
+        return
+    if not ext_id:
         return
 
     final_state = state
