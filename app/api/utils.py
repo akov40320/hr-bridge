@@ -26,7 +26,11 @@ def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
     events: list[tuple[int, int]] = []
     for i in sorted(idxs):
         lead_id = int(form.get(f"leads[status][{i}][id]", 0) or 0)
-        status_id = int(form.get(f"leads[status][{i}][status_id]", 0) or 0)
+        status_id = int(
+            form.get(f"leads[status][{i}][new_status_id]")
+            or form.get(f"leads[status][{i}][status_id]")
+            or 0
+        )
         if lead_id and status_id:
             events.append((lead_id, status_id))
     return events
