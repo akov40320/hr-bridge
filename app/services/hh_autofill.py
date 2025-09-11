@@ -25,6 +25,7 @@ def _norm_stage_name(s: str) -> str:
 _STAGE_NAME_TO_HH = {
     "отклик": "response",
     "откликполучен": "response",
+    "новыйотклик": "response",
     "первичныйконтакт": "phone_interview",
     "прошелопрос": "phone_interview",
     "пройденопрос": "phone_interview",
@@ -43,6 +44,10 @@ _STAGE_NAME_TO_HH = {
     "закрытоинереализовано": "discard_by_employer",
     "закрыто": "discard_by_employer",
     "неактуально": "discard_by_employer",
+    "кандидатотказался": "discard_by_applicant",
+    "невыходитнасвязь": "discard_no_interaction",
+    "вакансиязакрыта": "discard_vacancy_closed",
+    "переводнадругуювакансию": "discard_to_other_vacancy",
 }
 
 
