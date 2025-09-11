@@ -66,7 +66,7 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
     Строит {amo_status_id: hh_code} по названиям стадий двух воронок (master/operator)
     и сохраняет в data/hh_mapping.json.
     """
-    existing = hh_map_load().copy()
+    existing = hh_map_load()
     result = existing.copy()
 
     s = get_settings()
@@ -87,12 +87,13 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
 
         found = 0
         for st in statuses:
+            sid = str(st.get("id"))
+            if not sid:
+                continue
+            result.pop(sid, None)
             name = _norm_stage_name(st.get("name", ""))
             hh_code = _STAGE_NAME_TO_HH.get(name)
             if not hh_code:
-                continue
-            sid = str(st.get("id"))
-            if not sid:
                 continue
             result[sid] = hh_code
             found += 1
