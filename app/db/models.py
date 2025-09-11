@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Text, Integer, TIMESTAMP, UniqueConstraint
+from sqlalchemy import BigInteger, Text, Integer, TIMESTAMP, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
+from typing import Any
 from .base import Base
 
 
@@ -115,3 +116,25 @@ class EventDedup(Base):
         TIMESTAMP(timezone=True),
         server_default=func.now(),  # pylint: disable=not-callable
     )
+
+
+class Task(Base):
+    """Background tasks with idempotent processing semantics."""
+
+    __tablename__ = "tasks"
+
+    task_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, index=True, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
+    )
+
