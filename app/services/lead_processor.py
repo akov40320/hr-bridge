@@ -48,6 +48,15 @@ async def enrich_applicant(
                     payload.vacancy_desc = desc
             except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover
                 logger.warning("HH: описание вакансии %s не получено: %s", payload.vacancy_id, type(e).__name__)
+        if payload.vacancy_id and not (payload.vacancy_title or "").strip():
+            try:
+                title = await hh_adapt.fetch_vacancy_title(
+                    payload.vacancy_id, owner_id, http_client
+                )
+                if title:
+                    payload.vacancy_title = title
+            except (httpx.HTTPError, json.JSONDecodeError) as e:  # pragma: no cover
+                logger.warning("HH: название вакансии %s не получено: %s", payload.vacancy_id, type(e).__name__)
     return payload
 
 
