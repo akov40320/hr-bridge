@@ -42,7 +42,7 @@ async def test_stage_rename_updates_mapping(monkeypatch):
     "raw, normalized, code",
     [
         ("Принят", "принят", "hired"),
-        ("Прошел опрос", "прошелопрос", "phone_interview"),
+        ("Прошел опрос", "прошелопрос", "interview"),
         ("Отклонён", "отклонен", "discard_by_employer"),
         ("Новый отклик", "новыйотклик", "response"),
         ("Кандидат отказался", "кандидатотказался", "discard_by_applicant"),
