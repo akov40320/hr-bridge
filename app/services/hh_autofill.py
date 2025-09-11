@@ -110,8 +110,16 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
             if not sid:
                 continue
             result.pop(sid, None)
-            name = _norm_stage_name(st.get("name", ""))
+            name_raw = st.get("name", "")
+            name = _norm_stage_name(name_raw)
             hh_code = _STAGE_NAME_TO_HH.get(name)
+            log.debug(
+                "hh-autofill: status %s: original=%r normalized=%r hh_code=%s",
+                sid,
+                name_raw,
+                name,
+                hh_code,
+            )
             if not hh_code:
                 continue
             result[sid] = hh_code
