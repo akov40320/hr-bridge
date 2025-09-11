@@ -190,7 +190,7 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
             "conversation_id": conversation_id,
             "sender": {"ref_id": ac.sender_user_amojo_id},
             "receiver": {
-                "id": str(user_id),
+                "id": f"tg:{user_id}",
                 **({"name": user_name} if user_name else {}),
                 **({"avatar": avatar} if avatar else {}),
             },
