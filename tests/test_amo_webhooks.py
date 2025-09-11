@@ -49,7 +49,7 @@ async def test_parse_status_events_json():
 
 
 @pytest.mark.asyncio
-async def test_parse_status_events_form_error():
+async def test_parse_status_events_form():
     form_data = {
         "leads[status][0][id]": "3",
         "leads[status][0][status_id]": "30",
@@ -57,9 +57,8 @@ async def test_parse_status_events_form_error():
         "leads[status][1][status_id]": "40",
     }
     req = _form_request(form_data)
-    with pytest.raises(HTTPException) as exc:
-        await amo_webhooks.parse_status_events(req)
-    assert exc.value.status_code == 400
+    events = await amo_webhooks.parse_status_events(req)
+    assert events == [(3, 30), (4, 40)]
 
 
 @pytest.mark.asyncio

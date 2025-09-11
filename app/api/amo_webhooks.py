@@ -31,17 +31,24 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
     events: list[tuple[int, int]] = []
     try:
         data = await request.json()
-        if isinstance(data, dict) and data.get("leads", {}).get("status"):
-            for it in data["leads"]["status"]:
-                lead_id = int(it["id"])
-                status_id = int(it.get("new_status_id") or it.get("status_id"))
-                events.append((lead_id, status_id))
-    except (json.JSONDecodeError, KeyError, ValueError) as exc:
+    except json.JSONDecodeError as exc:
         body = (await request.body()).decode("utf-8", errors="replace")
         logger.warning(
             "Failed to parse AmoCRM status webhook: %s; body=%s", exc, body[:200]
         )
-        raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
+    else:
+        try:
+            if isinstance(data, dict) and data.get("leads", {}).get("status"):
+                for it in data["leads"]["status"]:
+                    lead_id = int(it["id"])
+                    status_id = int(it.get("new_status_id") or it.get("status_id"))
+                    events.append((lead_id, status_id))
+        except (KeyError, ValueError) as exc:
+            body = (await request.body()).decode("utf-8", errors="replace")
+            logger.warning(
+                "Failed to parse AmoCRM status webhook: %s; body=%s", exc, body[:200]
+            )
+            raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
 
     if not events:
         form = await request.form()
