@@ -3,6 +3,7 @@ import pytest
 import yaml
 
 from app.services import hh_autofill
+from app.models import Applicant, IncomingPayload
 
 
 @pytest.mark.asyncio
@@ -76,4 +77,49 @@ def test_stage_name_normalization_and_mapping(monkeypatch, tmp_path, raw, normal
 
     assert hh_autofill._norm_stage_name(raw) == normalized
     assert hh_autofill._STAGE_NAME_TO_HH[normalized] == code
+
+
+@pytest.mark.asyncio
+async def test_enrich_applicant_adds_vacancy_title(monkeypatch):
+    import sys, types
+
+    api_pkg = types.ModuleType("app.api")
+    utils_mod = types.ModuleType("app.api.utils")
+
+    def route_kind(*, desc: str = "", raw: str = "") -> str:
+        return "ignore"
+
+    utils_mod.route_kind = route_kind
+    api_pkg.utils = utils_mod
+    sys.modules.setdefault("app.api", api_pkg)
+    sys.modules.setdefault("app.api.utils", utils_mod)
+
+    from app.services import lead_processor
+
+    payload = IncomingPayload(
+        platform="hh",
+        owner_id="own",
+        applicant=Applicant(id="nid", name="anon"),
+        vacancy_id="vac1",
+        vacancy_title="",
+        vacancy_desc="desc",
+    )
+
+    async def fake_fetch_applicant_details(*args, **kwargs):
+        return {}
+
+    async def fake_fetch_vacancy_title(vacancy_id, owner_id, client):
+        assert vacancy_id == "vac1"
+        assert owner_id == "own"
+        return "Название"
+
+    monkeypatch.setattr(
+        lead_processor.hh_adapt, "fetch_applicant_details", fake_fetch_applicant_details
+    )
+    monkeypatch.setattr(
+        lead_processor.hh_adapt, "fetch_vacancy_title", fake_fetch_vacancy_title
+    )
+
+    result = await lead_processor.enrich_applicant(payload, None)
+    assert result.vacancy_title == "Название"
 
