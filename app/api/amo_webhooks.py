@@ -29,14 +29,17 @@ router = APIRouter()
 async def parse_status_events(request: Request) -> list[tuple[int, int]]:
     """Return list of (lead_id, status_id) pairs from Amo webhook payload."""
     events: list[tuple[int, int]] = []
-    try:
-        data = await request.json()
-    except json.JSONDecodeError as exc:
-        body = (await request.body()).decode("utf-8", errors="replace")
-        logger.warning(
-            "Failed to parse AmoCRM status webhook: %s; body=%s", exc, body[:200]
-        )
-    else:
+    data: Any | None = None
+    ctype = request.headers.get("content-type", "")
+    if "json" in ctype:
+        try:
+            data = await request.json()
+        except json.JSONDecodeError as exc:
+            body = (await request.body()).decode("utf-8", errors="replace")
+            logger.warning(
+                "Failed to parse AmoCRM status webhook: %s; body=%s", exc, body[:200]
+            )
+    if data is not None:
         try:
             if isinstance(data, dict) and data.get("leads", {}).get("status"):
                 for it in data["leads"]["status"]:

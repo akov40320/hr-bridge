@@ -62,6 +62,17 @@ async def test_parse_status_events_form():
 
 
 @pytest.mark.asyncio
+async def test_parse_status_events_form_new_status_id():
+    form_data = {
+        "leads[status][0][id]": "5",
+        "leads[status][0][new_status_id]": "50",
+    }
+    req = _form_request(form_data)
+    events = await amo_webhooks.parse_status_events(req)
+    assert events == [(5, 50)]
+
+
+@pytest.mark.asyncio
 async def test_handle_hh_event_unknown_status(monkeypatch, caplog):
     async def fake_map_get(_):
         return None
