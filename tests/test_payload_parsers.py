@@ -41,6 +41,7 @@ def test_parse_hh_payload_new_negotiation():
     raw = json.dumps(
         {
             "id": "notification1",
+            "action_type": "NEW_NEGOTIATION_VACANCY",
             "payload": {
                 "topic_id": "topic1",
                 "resume_id": "resume1",
@@ -57,6 +58,23 @@ def test_parse_hh_payload_new_negotiation():
     assert payload.vacancy_id == "vac1"
     assert payload.applicant.id == "topic1"
     assert payload.applicant.name == "кандидат"
+
+
+def test_parse_hh_payload_unsupported_action():
+    raw = json.dumps(
+        {
+            "id": "notification2",
+            "action_type": "NEGOTIATION_EMPLOYER_STATE_CHANGE",
+            "payload": {
+                "topic_id": "topic1",
+                "vacancy_id": "vac1",
+                "employer_id": "emp1",
+            },
+        }
+    ).encode()
+
+    with pytest.raises(ValueError):
+        parse_hh_payload(raw)
 
 
 def test_parse_hh_payload_bad_json():

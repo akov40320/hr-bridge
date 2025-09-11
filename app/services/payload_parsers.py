@@ -23,6 +23,10 @@ def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload
         logger.warning("HH payload parse error: %s", exc)
         raise ValueError("invalid json") from exc
 
+    action_type = str(data.get("action_type") or "").strip()
+    if action_type and action_type != "NEW_NEGOTIATION_VACANCY":
+        raise ValueError(f"unsupported action_type: {action_type}")
+
     obj = (
             data.get("object")
             or data.get("negotiation")
