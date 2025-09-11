@@ -99,11 +99,10 @@ async def handle_mirror_tg_to_amo(payload: dict):
         except Exception:
             logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
 
-        # Создаём чат вида conversation_id="lead:<lead_id>" и ПРИВЯЗЫВАЕМ к контакту
+        # Создаём чат вида conversation_id="lead:<lead_id>" и привязываем его к сделке/контакту
         conv_id = await with_retry(
             lambda: ensure_chat_created(
                 lead_id=lead_id,
-                contact_id=contact_id,
                 bind_contact_id=contact_id,   # <-- без этого чат не появится в карточке
                 tg_user_id=tg_user_id,
                 tg_user_name=tg_user_name,
@@ -185,7 +184,6 @@ async def handle_mirror_bot_to_amo(payload: dict):
         conv_id = await with_retry(
             lambda: ensure_chat_created(
                 lead_id=int(lead_id),
-                contact_id=contact_id,
                 bind_contact_id=contact_id,
                 tg_user_id=user_id,
                 tg_user_name=user_name,

@@ -176,3 +176,21 @@ class AmoClient:
             }
         ]
         return await self._request("POST", url, json=body)
+
+    async def bind_chat_to_lead(self, lead_id: int, chat_id: str):
+        """Bind a chat to a lead (POST /api/v4/leads/chats).
+
+        Similar to :meth:`bind_chat_to_contact`, AmoCRM expects the
+        ``scope_id`` of the custom channel to be provided when linking the
+        chat. Without it the API may respond with "Channel must be linked to
+        your client".
+        """
+        url = f"{self.base}/api/v4/leads/chats"
+        body = [
+            {
+                "entity_id": int(lead_id),
+                "chat_id": str(chat_id),
+                "scope_id": self._s.AMO_CHATS_SCOPE_ID,
+            }
+        ]
+        return await self._request("POST", url, json=body)

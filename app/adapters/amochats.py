@@ -44,6 +44,7 @@ class AmoChatsClient:  # pylint: disable=too-few-public-methods
         self.account_id: str = cast(str, req["AMO_CHATS_ACCOUNT_ID"])
         self.channel_id: str = cast(str, req["AMO_CHATS_CHANNEL_ID"])
         self.sender_user_amojo_id: str = cast(str, req["AMO_CHATS_SENDER_USER_AMOJO_ID"])
+        self.sender_name: str = getattr(settings, "AMO_CHATS_SENDER_NAME", "manager")
 
 
 @lru_cache(maxsize=1)
@@ -168,6 +169,7 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
         avatar: str | None,
         text: str,
         client: httpx.AsyncClient,
+        receiver_ref_id: str | None = None,
 ) -> None:
     """
     Сообщение 'от менеджера' — используем sender.ref_id = AMO_CHATS_SENDER_USER_AMOJO_ID,
@@ -188,11 +190,16 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
             "timestamp": now_s,
             "msec_timestamp": now_ms,
             "conversation_id": conversation_id,
-            "sender": {"ref_id": ac.sender_user_amojo_id},
+            "sender": {
+                "id": ac.sender_user_amojo_id,
+                "name": ac.sender_name,
+                "ref_id": ac.sender_user_amojo_id,
+            },
             "receiver": {
                 "id": str(user_id),
                 **({"name": user_name} if user_name else {}),
                 **({"avatar": avatar} if avatar else {}),
+                **({"ref_id": receiver_ref_id} if receiver_ref_id else {}),
             },
             "message": {"type": "text", "text": text},
         },
@@ -212,7 +219,6 @@ async def ensure_chat_created(
         tg_user_id: int,
         tg_user_name: str | None,
         client: httpx.AsyncClient,
-        contact_id: int | None = None,
         bind_contact_id: int | None = None,
         init_text: str | None = None,
         init_as_manager: bool = False,
@@ -230,8 +236,8 @@ async def ensure_chat_created(
 
     ac = _get_client()
 
-    # стабильный ID чата на стороне интеграции
-    conv_id = f"contact:{contact_id}" if contact_id else f"lead:{lead_id}"
+    # стабильный ID чата на стороне интеграции: всегда привязываем к сделке
+    conv_id = f"lead:{lead_id}"
 
     # 1) создать/найти чат
     path_chats = f"/v2/origin/custom/{ac.scope_id}/chats"
@@ -265,18 +271,19 @@ async def ensure_chat_created(
     except Exception:  # pragma: no cover
         logger.warning("ensure_chat_created: parse chat_id failed", exc_info=True)
 
-    logger.info("ensure_chat_created: ok for %s -> conv_id=%s chat_id=%s",
-                ("contact" if contact_id else "lead"),
-                conv_id, chat_id or "-")
+    logger.info("ensure_chat_created: ok for lead conv_id=%s chat_id=%s", conv_id, chat_id or "-")
 
-    # 1.1) при желании — сразу привяжем чат к контакту
-    if bind_contact_id and chat_id:
+    # 1.1) привяжем чат к сделке и, при необходимости, к контакту
+    if chat_id:
         try:
             amo = await AmoClient.create(client)
-            await amo.bind_chat_to_contact(bind_contact_id, chat_id)
-            logger.info("chat bound to contact: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
+            await amo.bind_chat_to_lead(lead_id, chat_id)
+            logger.info("chat bound to lead: lead_id=%s chat_id=%s", lead_id, chat_id)
+            if bind_contact_id:
+                await amo.bind_chat_to_contact(bind_contact_id, chat_id)
+                logger.info("chat bound to contact: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
         except Exception:
-            logger.warning("bind chat to contact failed", exc_info=True)
+            logger.warning("bind chat failed", exc_info=True)
 
     # 2) опционально отправить первое сообщение
     path_msg = f"/v2/origin/custom/{ac.scope_id}"
