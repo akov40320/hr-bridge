@@ -119,6 +119,13 @@ async def handle_hh_event(
                 except httpx.HTTPError:
                     logger.warning("Failed to copy refusal text")
 
+    logger.info(
+        "hh.set_state: lead=%s status=%s state=%s final=%s",
+        lead_id,
+        status_id,
+        state,
+        final_state,
+    )
     await queue_client.publish_task(
         {
             "platform": "hh",
