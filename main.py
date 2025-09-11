@@ -5,6 +5,7 @@ import time
 
 import uvicorn
 from aiogram import Bot
+from aiogram.exceptions import TelegramNetworkError
 from fastapi import FastAPI, Depends, APIRouter
 
 from app.adapters.amochats import ensure_amo_chats_connected
@@ -77,16 +78,38 @@ async def auto_register_telegram_webhooks() -> None:
     if s.TELEGRAM_OPERATOR_BOT_TOKEN:
         try:
             async with Bot(s.TELEGRAM_OPERATOR_BOT_TOKEN) as o_bot:
-                await o_bot.set_webhook(
-                    url=f"{base}/tg/webhook/operator",
-                    secret_token=secret,
-                    allowed_updates=allowed,
-                    drop_pending_updates=True,
-                )
-                info = await o_bot.get_webhook_info()
-                log.info("Operator webhook set -> %s (pending=%s)", info.url, info.pending_update_count)
+                for attempt in range(s.TELEGRAM_WEBHOOK_RETRIES):
+                    try:
+                        await o_bot.set_webhook(
+                            url=f"{base}/tg/webhook/operator",
+                            secret_token=secret,
+                            allowed_updates=allowed,
+                            drop_pending_updates=True,
+                            request_timeout=s.TELEGRAM_WEBHOOK_TIMEOUT,
+                        )
+                        info = await o_bot.get_webhook_info()
+                        log.info(
+                            "Operator webhook set -> %s (pending=%s)",
+                            info.url,
+                            info.pending_update_count,
+                        )
+                        break
+                    except TelegramNetworkError as e:
+                        log.warning(
+                            "Attempt %d to set operator webhook failed: %s",
+                            attempt + 1,
+                            e,
+                        )
+                        if attempt + 1 == s.TELEGRAM_WEBHOOK_RETRIES:
+                            log.exception(
+                                "Failed to set operator webhook after %d attempts",
+                                s.TELEGRAM_WEBHOOK_RETRIES,
+                            )
+                            raise RuntimeError("Failed to set operator webhook") from e
+                        await asyncio.sleep(s.TELEGRAM_WEBHOOK_RETRY_DELAY)
         except Exception:
             log.exception("Failed to set operator webhook")
+            raise
 
 
 @app.on_event("startup")
