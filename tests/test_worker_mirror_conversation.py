@@ -4,7 +4,7 @@ from app.services.worker import mirror as worker_mirror
 
 @pytest.mark.asyncio
 async def test_tg_to_amo_sets_conversation(monkeypatch):
-    conv_id = "contact:21985897"
+    conv_id = "lead:21985897"
 
     class DummyAmo:
         async def get_lead_with_contacts(self, lead_id):
