@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     HH_SYNC_ENABLED: bool = False
     AVITO_SYNC_ENABLED: bool = False
     AVITO_MARK_READ_ON_STAGE_CHANGE: bool = True
+    HH_AUTOFILL_INTERVAL_HOURS: int = 0
 
     # Telegram
     TELEGRAM_MASTER_BOT_TOKEN: str = ""

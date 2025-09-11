@@ -7,6 +7,7 @@ import uvicorn
 from aiogram import Bot
 from aiogram.exceptions import TelegramNetworkError
 from fastapi import FastAPI, Depends, APIRouter
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.adapters.amochats import ensure_amo_chats_connected
 from app.api import oauth, admin as admin_module, hh_incoming, avito_incoming, amo_webhooks
@@ -23,6 +24,11 @@ from app.core.middleware import LoggingMiddleware, metrics_endpoint
 from app.db import init_db
 from app.http_client import get_http_client, close_http_client
 from app.services.queue import rabbitmq
+
+
+async def hh_autofill_task() -> None:
+    await rabbitmq.publish_task({"platform": "system", "action": "hh_autofill"})
+    log.info("Scheduled hh_autofill queued")
 
 log = logging.getLogger(__name__)
 setup_logging("INFO")
@@ -146,6 +152,13 @@ async def on_startup():
     await auto_register_telegram_webhooks()
     await ensure_amo_chats_connected(log, client)
 
+    if s.HH_AUTOFILL_INTERVAL_HOURS > 0:
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(hh_autofill_task, "interval", hours=s.HH_AUTOFILL_INTERVAL_HOURS)
+        scheduler.start()
+        app.state.scheduler = scheduler
+        log.info("HH autofill scheduler started interval=%s h", s.HH_AUTOFILL_INTERVAL_HOURS)
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -156,6 +169,9 @@ async def on_shutdown():
             await t
     await rabbitmq.close()
     await close_http_client()
+    sched = getattr(app.state, "scheduler", None)
+    if sched:
+        sched.shutdown()
 
 
 @app.get("/")
