@@ -113,6 +113,8 @@ async def handle_mirror_tg_to_amo(payload: dict):
             attempts=6,
             is_retryable=lambda e: True,
         )
+        # сохраняем conversation_id, если он только что появился
+        await set_conversation(tg_user_id, bot_kind, conv_id)
 
     # Теперь отправляем как КЛИЕНТСКОЕ сообщение в чат сделки
     new_cid = await with_retry(
