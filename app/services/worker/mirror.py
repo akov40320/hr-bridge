@@ -163,6 +163,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
     conv_id = payload.get("conversation_id")
     lead_id = payload.get("lead_id")
     status_id = payload.get("status_id")
+    bot_kind = payload.get("bot_kind")
 
     http_client = get_http_client()
     text_sent = False
@@ -196,6 +197,9 @@ async def handle_mirror_bot_to_amo(payload: dict):
         )
 
         text_sent = True
+
+        if isinstance(bot_kind, str):
+            await set_conversation(user_id, bot_kind, conv_id)
 
         if status_id is not None:
             dedup = calc_key("chat_status", f"{lead_id}:{status_id}")
