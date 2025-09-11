@@ -133,18 +133,24 @@ async def links_from_ext_id(
 
 
 async def resolve_links(
-        conv_ref_id: str | None, lead_id: int | None, sender: dict, receiver: dict
+        conv_ref_id: str | None,
+        client_conv_id: str | None,
+        lead_id: int | None,
+        sender: dict,
+        receiver: dict,
 ):
-    """Resolve links based on conversation, lead, or external identifiers."""
+    """Resolve links using conversation IDs, lead mapping, or external identifiers."""
     links = []
     if conv_ref_id:
         links = await get_by_conversation(conv_ref_id)
+    if not links and client_conv_id:
+        links = await get_by_conversation(client_conv_id)
     if not links and lead_id:
         links = await get_by_lead(lead_id)
-        if links and conv_ref_id:
-            await set_conv_for_links(links, conv_ref_id)
+        if links and (conv_ref_id or client_conv_id):
+            await set_conv_for_links(links, conv_ref_id or client_conv_id)
     if not links:
-        links = await links_from_ext_id(conv_ref_id, sender, receiver)
+        links = await links_from_ext_id(conv_ref_id or client_conv_id, sender, receiver)
     return links
 
 
@@ -209,12 +215,13 @@ async def amochats_in(
     )
 
     lead_id = parse_lead_id(client_id)
-    links = await resolve_links(conv_ref_id, lead_id, sender, receiver)
+    links = await resolve_links(conv_ref_id, client_id, lead_id, sender, receiver)
 
     logger.info(
-        "amo-chats links found: %d (conv=%s lead=%s)",
+        "amo-chats links found: %d (conv=%s client_conv=%s lead=%s)",
         len(links),
         conv_ref_id,
+        client_id,
         lead_id,
     )
 
