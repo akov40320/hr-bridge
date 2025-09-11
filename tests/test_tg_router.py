@@ -95,6 +95,7 @@ async def test_start(monkeypatch, queue_mock):
     assert sent and "Здравствуйте" in sent[0]["text"]
     assert queue_mock[-1]["action"] == "bot_to_amo"
     assert queue_mock[-1]["lead_id"] == 777
+    assert queue_mock[-1]["bot_kind"] == "master"
 
 
 @pytest.mark.asyncio
@@ -127,6 +128,7 @@ async def test_text_step(monkeypatch, queue_mock):
     assert sent and "Опишите" in sent[0]["text"]
     assert queue_mock[0]["action"] == "tg_to_amo"
     assert queue_mock[1]["action"] == "bot_to_amo"
+    assert queue_mock[1]["bot_kind"] == "master"
     assert svc.data[1]["step"] == 1
 
 
@@ -165,6 +167,7 @@ async def test_survey_finish(monkeypatch, queue_mock):
     assert sent and "Спасибо" in sent[0]["text"]
     assert queue_mock[0]["action"] == "tg_to_amo"
     assert queue_mock[1]["action"] == "bot_to_amo"
+    assert queue_mock[1]["bot_kind"] == "master"
     # finish called with summary
     assert svc.finished and "Итоги опроса" in svc.finished[3]
 

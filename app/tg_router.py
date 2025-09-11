@@ -42,6 +42,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
                 "user_name": user.username,
                 "conversation_id": conv_id,
                 "lead_id": lead_id,
+                "bot_kind": bot_kind,
                 "msg_key": msg_key,
             }
         )
