@@ -203,6 +203,13 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
 
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
+        body_for_log = body.decode('utf-8', errors='ignore')
+        logger.error(
+            "send_text_from_manager failed: status=%s text=%s payload=%s",
+            r.status_code,
+            r.text,
+            body_for_log
+        )
         raise AmoChatsError(f"send_text_from_manager failed {r.status_code}: {r.text}")
 
 
