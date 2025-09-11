@@ -1,52 +1,74 @@
 """Utilities for storing and retrieving HeadHunter status mappings.
 
-The mappings are kept in a JSON file on disk and mirrored in an in-memory
-cache for faster access. Helper functions provide safe concurrent reads and
-writes to this data.
+The mappings are stored in the ``hh_mapping`` database table and mirrored in
+an in-memory cache for fast access.  The cache has a simple TTL to avoid
+frequent database hits.
 """
 
-import json
-import os
-from threading import Lock
+from __future__ import annotations
+
+import asyncio
+import time
 from typing import Optional
 
-PATH = "data/hh_mapping.json"
+from sqlalchemy import delete, insert, select
+
+from app.db.db import get_session
+from app.db.models import HhMapping
+
+# Cache settings
+_CACHE_TTL = 60  # seconds
 _cache: dict[str, str] = {}
-_lock = Lock()
+_cache_expire: float = 0
+_lock = asyncio.Lock()
 
 
-def _ensure_dir() -> None:
-    """Create the directory that stores the mapping file if needed."""
-    os.makedirs("data", exist_ok=True)
+async def load() -> dict[str, str]:
+    """Load mappings from the database and refresh the cache."""
 
+    async with get_session() as s:
+        rows = (await s.execute(select(HhMapping))).scalars().all()
+    mapping = {str(row.amo_status_id): row.hh_code for row in rows}
 
-def load() -> dict[str, str]:
-    """Load mappings from disk.
-
-    Returns an empty dictionary when no data file is present.
-    """
-    _ensure_dir()
-    if os.path.exists(PATH):
-        with open(PATH, "r", encoding="utf-8") as f:
-            return json.load(f) or {}
-    return {}
-
-
-def get(status_id: int) -> Optional[str]:
-    """Return the mapped value for ``status_id`` if it exists."""
-    with _lock:
-        if not _cache:
-            _cache.update(load())
-        return _cache.get(str(status_id))
-
-
-def set_all(mapping: dict[str, str]) -> dict[str, str]:
-    """Persist a new mapping to disk and refresh the in-memory cache."""
-    _ensure_dir()
-    with open(PATH, "w", encoding="utf-8") as f:
-        json.dump(mapping, f, ensure_ascii=False, indent=2)
-    new_data = mapping.copy()
-    with _lock:
+    async with _lock:
+        global _cache_expire
         _cache.clear()
-        _cache.update(new_data)
-    return new_data
+        _cache.update(mapping)
+        _cache_expire = time.time() + _CACHE_TTL
+    return mapping
+
+
+async def get(status_id: int) -> Optional[str]:
+    """Return the mapped value for ``status_id`` if present."""
+
+    async with _lock:
+        if _cache and time.time() < _cache_expire:
+            return _cache.get(str(status_id))
+
+    mapping = await load()
+    return mapping.get(str(status_id))
+
+
+async def set_all(mapping: dict[str, str]) -> dict[str, str]:
+    """Replace mapping in the database and refresh the cache."""
+
+    async with get_session() as s:
+        await s.execute(delete(HhMapping))
+        if mapping:
+            rows = [
+                {"amo_status_id": int(k), "hh_code": v}
+                for k, v in mapping.items()
+            ]
+            await s.execute(insert(HhMapping), rows)
+        await s.commit()
+
+    async with _lock:
+        global _cache_expire
+        _cache.clear()
+        _cache.update(mapping)
+        _cache_expire = time.time() + _CACHE_TTL
+    return mapping
+
+
+__all__ = ["load", "get", "set_all"]
+

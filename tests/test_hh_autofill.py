@@ -18,13 +18,16 @@ async def test_stage_rename_updates_mapping(monkeypatch):
 
     monkeypatch.setattr(hh_autofill, "_fetch_pipeline_statuses", fake_fetch_pipeline_statuses)
     monkeypatch.setattr(hh_autofill, "get_settings", lambda: DummySettings())
-    monkeypatch.setattr(hh_autofill, "hh_map_load", lambda: mapping_store.copy())
 
-    def fake_set(mapping):
+    async def fake_load():
+        return mapping_store.copy()
+
+    async def fake_set(mapping):
         nonlocal mapping_store
         mapping_store = mapping.copy()
         return mapping
 
+    monkeypatch.setattr(hh_autofill, "hh_map_load", fake_load)
     monkeypatch.setattr(hh_autofill, "hh_map_set", fake_set)
 
     fake_statuses = [{"id": 1, "name": "Собеседование"}]

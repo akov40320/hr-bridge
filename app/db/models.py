@@ -138,3 +138,17 @@ class Task(Base):
         onupdate=func.now(),  # pylint: disable=not-callable
     )
 
+
+class HhMapping(Base):
+    """Mapping between AmoCRM status IDs and HeadHunter state codes."""
+
+    __tablename__ = "hh_mapping"
+
+    amo_status_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    hh_code: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),  # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
+    )
+

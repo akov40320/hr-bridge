@@ -82,10 +82,10 @@ async def _fetch_pipeline_statuses(
 
 async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
     """
-    Строит {amo_status_id: hh_code} по названиям стадий двух воронок (master/operator)
-    и сохраняет в data/hh_mapping.json.
+    Строит {amo_status_id: hh_code} по названиям стадий двух воронок
+    (master/operator) и сохраняет их в таблицу ``hh_mapping``.
     """
-    existing = hh_map_load()
+    existing = await hh_map_load()
     result = existing.copy()
 
     s = get_settings()
@@ -120,8 +120,8 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
         log.info("hh-autofill: pipeline %s (%s): mapped %d statuses", label, pid, found)
 
     if result != existing:
-        hh_map_set(result)
-        log.info("hh-autofill: hh_mapping.json updated with %d keys", len(result))
+        await hh_map_set(result)
+        log.info("hh-autofill: hh_mapping table updated with %d keys", len(result))
     else:
         log.info("hh-autofill: mapping up-to-date (%d keys)", len(result))
 
