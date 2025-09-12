@@ -19,9 +19,9 @@ def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload
 
     try:
         data = json.loads(raw.decode() or "{}")
-    except Exception as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.warning("HH payload parse error: %s", exc)
-        raise ValueError("invalid json") from exc
+        raise ValueError("invalid HH payload") from exc
 
     action_type = str(data.get("action_type") or "").strip()
     if action_type and action_type != "NEW_NEGOTIATION_VACANCY":
@@ -85,21 +85,26 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:
     # 1) Безопасно декодируем тело
     try:
         body = raw.decode("utf-8")
-    except Exception:
-        body = raw.decode("utf-8", "ignore")
+    except UnicodeDecodeError as exc:
+        logger.warning("Avito payload decode error: %s", exc)
+        raise ValueError("invalid Avito payload encoding") from exc
 
     # 2) Пытаемся распарсить как JSON, иначе — как форму payload=<json>
     data = None
     try:
         data = json.loads(body or "{}")
-    except Exception:
-        try:
-            from urllib.parse import parse_qs
-            form = parse_qs(body)
-            if "payload" in form and form["payload"]:
+    except json.JSONDecodeError as json_exc:
+        logger.warning("Avito payload JSON decode error: %s", json_exc)
+        from urllib.parse import parse_qs
+        form = parse_qs(body)
+        if "payload" in form and form["payload"]:
+            try:
                 data = json.loads(form["payload"][0])
-        except Exception:
-            pass
+            except json.JSONDecodeError as form_exc:
+                logger.warning("Avito form payload parse error: %s", form_exc)
+                raise ValueError("invalid Avito payload JSON") from form_exc
+        else:
+            raise ValueError("missing payload field in Avito form") from json_exc
     if not isinstance(data, dict):
         raise ValueError("invalid Avito payload: not a JSON object")
 
