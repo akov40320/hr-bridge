@@ -69,4 +69,3 @@ async def webhook_avito(
         logger.info("avito:webhook ok (summary failed: %s) dt=%.1fms", e, dt)
 
     return resp
-

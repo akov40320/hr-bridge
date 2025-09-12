@@ -1,7 +1,7 @@
 """Обеспечивает корректную и идемпотентную регистрацию вебхуков HH."""
 
 from __future__ import annotations
-# pylint: disable=line-too-long
+# pylint: disable=line-too-long, too-many-nested-blocks
 
 import logging
 import json

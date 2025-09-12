@@ -1,5 +1,5 @@
 """Authentication guards for endpoints requiring admin privileges."""
-# pylint: disable=duplicate-code
+# pylint: disable=duplicate-code, R0801
 
 from fastapi import Header, HTTPException, status
 
