@@ -1,4 +1,5 @@
 """Database models for the HR Bridge application."""
+# pylint: disable=trailing-newlines
 
 from __future__ import annotations
 
@@ -35,7 +36,6 @@ class Token(Base):
         server_default=func.now(),  # pylint: disable=not-callable
         onupdate=func.now(),  # pylint: disable=not-callable
     )
-
     __table_args__ = (
         UniqueConstraint("service", "owner_id", name="ux_tokens_service_owner"),
     )

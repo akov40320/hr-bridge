@@ -158,7 +158,7 @@ class RabbitMQClient:
             assert self._exch is not None
             await self._exch.publish(msg, routing_key="tasks.dlq")
 
-    async def _republish(
+    async def _republish(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         message: amqp_abc.AbstractIncomingMessage,
         payload: dict,

@@ -25,7 +25,7 @@ def _verify_sig(raw: bytes, sent_sig: str | None) -> None:
         return
     if not sent_sig:
         raise HTTPException(status_code=401, detail="Missing signature")
-    # срежем возможный префикс
+    # Signature is HMAC-SHA256 in hex; header may be prefixed with 'sha256='
     if sent_sig.lower().startswith("sha256="):
         sent_sig = sent_sig[7:]
     calc = hmac.new(_AVITO_SECRET.encode(), raw, hashlib.sha256).hexdigest()
@@ -55,13 +55,12 @@ async def webhook_avito(
     resp = await process_job_board_webhook("avito", raw, http_client, parse)
 
     dt = (time.monotonic() - t0) * 1000
-    # пост-фактум — аккуратно пытаемся вытащить summary для лога (без падений)
     try:
         p = parse_avito_payload(extract_avito_payload(raw))
         logger.info(
             "avito:webhook ok source=avito event=%s channel=%s vacancy=%s owner=%s dt=%.1fms",
-            getattr(p, "raw_text", "")[:32],  # краткий хинт
-            p.applicant.id,                   # chat_id или app:<id>
+            str(getattr(p, "raw_text", ""))[:32],
+            p.applicant.id,
             p.vacancy_id,
             p.owner_id,
             dt,
@@ -70,3 +69,4 @@ async def webhook_avito(
         logger.info("avito:webhook ok (summary failed: %s) dt=%.1fms", e, dt)
 
     return resp
+

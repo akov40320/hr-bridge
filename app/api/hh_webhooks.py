@@ -4,6 +4,7 @@ from __future__ import annotations
 # pylint: disable=line-too-long
 
 import logging
+import json
 import re
 from typing import Any
 
@@ -169,7 +170,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:  # pylint: disab
                     # 2a) если "already_exist" — в аккаунте уже есть подписка, нужно обновить существующую
                     try:
                         err = cr.json()
-                    except Exception:  # noqa: BLE001
+                    except (ValueError, json.JSONDecodeError):
                         err = {}
                     if any(e.get("value") == "already_exist" for e in err.get("errors", [])):
                         log.info("HH webhook: подписка уже существует — пробую обновить существующую")

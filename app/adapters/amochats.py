@@ -170,7 +170,7 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments
     return conversation_id
 
 
-async def send_text_from_manager(  # pylint: disable=too-many-arguments
+async def send_text_from_manager(  # pylint: disable=too-many-arguments,too-many-locals
         *,
         conversation_id: str,  # здесь нужен уже существующий uuid/id чата
         user_id: int,

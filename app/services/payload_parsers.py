@@ -3,9 +3,9 @@
 
 import json
 import logging
+from urllib.parse import parse_qs
 
 from pydantic import ValidationError
-from urllib.parse import parse_qs
 
 from app.models import Applicant, IncomingPayload, AvitoPayload
 
