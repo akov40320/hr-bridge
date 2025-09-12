@@ -1,0 +1,142 @@
+import json
+import pytest
+from pydantic import ValidationError
+
+from app.models import IncomingPayload, AvitoPayload
+from app.services.payload_parsers import (
+    parse_hh_payload,
+    extract_avito_payload,
+    parse_avito_payload,
+)
+
+
+def test_parse_hh_payload_ok():
+    raw = json.dumps(
+        {
+            "response": {
+                "id": "resp1",
+                "vacancy": {"id": "vac1", "name": "Vac", "description": "Desc"},
+                "applicant": {"name": "John"},
+            },
+            "employer": {"id": "emp1"},
+        }
+    ).encode()
+
+    payload = parse_hh_payload(raw)
+    assert isinstance(payload, IncomingPayload)
+    assert payload.platform == "hh"
+    assert payload.owner_id == "emp1"
+    assert payload.vacancy_id == "vac1"
+    assert payload.applicant.id == "resp1"
+    assert payload.applicant.name == "John"
+
+
+def test_parse_hh_payload_missing_id():
+    raw = json.dumps({"response": {}}).encode()
+    with pytest.raises(ValueError):
+        parse_hh_payload(raw)
+
+
+def test_parse_hh_payload_new_negotiation():
+    raw = json.dumps(
+        {
+            "id": "notification1",
+            "action_type": "NEW_NEGOTIATION_VACANCY",
+            "payload": {
+                "topic_id": "topic1",
+                "resume_id": "resume1",
+                "vacancy_id": "vac1",
+                "employer_id": "emp1",
+                "chat_id": "chat1",
+            },
+        }
+    ).encode()
+
+    payload = parse_hh_payload(raw)
+    assert payload.platform == "hh"
+    assert payload.owner_id == "emp1"
+    assert payload.vacancy_id == "vac1"
+    assert payload.applicant.id == "topic1"
+    assert payload.applicant.name == "кандидат"
+
+
+def test_parse_hh_payload_unsupported_action():
+    raw = json.dumps(
+        {
+            "id": "notification2",
+            "action_type": "NEGOTIATION_EMPLOYER_STATE_CHANGE",
+            "payload": {
+                "topic_id": "topic1",
+                "vacancy_id": "vac1",
+                "employer_id": "emp1",
+            },
+        }
+    ).encode()
+
+    with pytest.raises(ValueError):
+        parse_hh_payload(raw)
+
+
+def test_parse_hh_payload_bad_json():
+    with pytest.raises(ValueError):
+        parse_hh_payload(b"{bad json")
+
+
+def test_extract_avito_payload_ok():
+    raw = json.dumps(
+        {
+            "payload": {
+                "value": {
+                    "chat_id": "chat1",
+                    "content": {"text": "hi"},
+                    "item": {"id": "item1", "title": "Vac", "description": "Desc"},
+                    "user_id": "u1",
+                },
+                "account_id": "acc1",
+            }
+        }
+    ).encode()
+
+    payload = extract_avito_payload(raw)
+    assert isinstance(payload, AvitoPayload)
+    assert payload.chat_id == "chat1"
+    assert payload.item_id == "item1"
+    assert payload.text == "hi"
+    assert payload.owner_id == "acc1"
+
+
+def test_parse_avito_payload_ok():
+    raw = json.dumps(
+        {
+            "payload": {
+                "value": {
+                    "chat_id": "chat1",
+                    "content": {"text": "hi"},
+                    "item": {"id": "item1", "title": "Vac", "description": "Desc"},
+                    "user_id": "u1",
+                },
+                "account_id": "acc1",
+            }
+        }
+    ).encode()
+
+    avito_payload = extract_avito_payload(raw)
+    payload = parse_avito_payload(avito_payload)
+    assert isinstance(payload, IncomingPayload)
+    assert payload.platform == "avito"
+    assert payload.owner_id == "acc1"
+    assert payload.vacancy_id == "item1"
+    assert payload.applicant.id == "chat1"
+    assert payload.applicant.name == "user:u1"
+    assert payload.raw_text == "hi"
+
+
+def test_extract_avito_payload_missing_chat_id():
+    raw = json.dumps({"payload": {"value": {}}}).encode()
+    with pytest.raises(ValidationError):
+        extract_avito_payload(raw)
+
+
+def test_extract_avito_payload_bad_json():
+    with pytest.raises(ValueError):
+        extract_avito_payload(b"not json")
