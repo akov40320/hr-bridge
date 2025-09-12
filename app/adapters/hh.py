@@ -6,8 +6,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.retry import with_retry
-from ._requests import request_with_retry
 from app.api.oauth2 import ensure_fresh_access, OAuth2Config
+from ._requests import request_with_retry
 
 
 class HHError(Exception):
@@ -20,6 +20,7 @@ async def set_state_action(
         employer_id: Optional[str],
         client: httpx.AsyncClient,
 ) -> None:
+    """Convenience wrapper mapping state action for a negotiation."""
     await set_employer_state(
         response_id=negotiation_id,
         target_state=action_id,
@@ -117,7 +118,7 @@ async def send_message(
     )
 
 
-async def fetch_applicant_details(
+async def fetch_applicant_details(  # pylint: disable=too-many-locals
         response_id: str,
         employer_id: Optional[str],
         client: httpx.AsyncClient,

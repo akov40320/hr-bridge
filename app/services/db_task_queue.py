@@ -55,7 +55,6 @@ async def process_next_task(handler: Callable[[Dict[str, Any]], Awaitable[None]]
             row.status = "pending"
             await session.commit()
             raise
-        else:
-            row.status = "done"
-            await session.commit()
-            return True
+        row.status = "done"
+        await session.commit()
+        return True

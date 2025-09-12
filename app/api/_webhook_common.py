@@ -53,7 +53,7 @@ async def process_job_board_webhook(
         await tag_lead(lead_id, kind, amo)
 
         return {"ok": True, "lead_id": lead_id}
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.exception("%s webhook: internal error", platform)
         return {"ok": False, "error": "internal_error"}
 

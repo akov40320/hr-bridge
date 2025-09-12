@@ -238,9 +238,7 @@ class RabbitMQClient:
                                 await self._republish(
                                     message, payload, attempts, max_attempts, e
                                 )
-                            except asyncio.CancelledError:
-                                raise
-                            except Exception as e:  # pragma: no cover - unexpected
+                            except Exception as e:  # pragma: no cover - unexpected  # pylint: disable=broad-exception-caught
                                 await self._republish(
                                     message, payload, attempts, max_attempts, e
                                 )

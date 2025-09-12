@@ -10,7 +10,7 @@ from app.services.hh_autofill import autofill_hh_mapping
 logger = logging.getLogger(__name__)
 
 
-async def handle_system_hh_autofill(payload: dict) -> None:
+async def handle_system_hh_autofill(_payload: dict) -> None:
     """Build HH status mapping based on AmoCRM pipelines."""
     logger.info("system.hh_autofill")
     tok = await DbTokenStore("amo").load()

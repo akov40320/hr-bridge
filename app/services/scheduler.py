@@ -1,3 +1,6 @@
+"""Background scheduler for token refresh, cleanup and task retries."""
+# pylint: disable=line-too-long
+
 import asyncio
 import json
 import logging
@@ -31,7 +34,9 @@ async def refresh_service_tokens() -> None:
         conf = cfg
         if conf is None:
             token_url = (
-                f"{s.AMO_BASE_URL.rstrip('/')}/oauth2/access_token" if service == "amo" else getattr(s, f"{service.upper()}_TOKEN_URL")
+                f"{s.AMO_BASE_URL.rstrip('/')}/oauth2/access_token"
+                if service == "amo"
+                else getattr(s, f"{service.upper()}_TOKEN_URL")
             )
             conf = OAuth2Config(
                 service=service,
@@ -42,7 +47,9 @@ async def refresh_service_tokens() -> None:
                 owner_id=owner_id,
             )
         try:
-            await refresh_tokens(config=conf, refresh_token=data["refresh_token"], http_client=client)
+            await refresh_tokens(
+                config=conf, refresh_token=data["refresh_token"], http_client=client
+            )
             log.info("%s token refreshed owner=%s", service, owner_id or "-")
         except Exception:  # pylint: disable=broad-exception-caught
             log.exception("failed to refresh %s token owner=%s", service, owner_id or "-")
@@ -90,8 +97,8 @@ async def retry_overdue_tasks(limit: int = 100) -> None:
     try:
         await rabbitmq.connect()
         s = get_settings()
-        assert rabbitmq._chan is not None  # type: ignore[attr-defined]
-        q = await rabbitmq._chan.get_queue(s.RMQ_DLQ_QUEUE)  # type: ignore[attr-defined]
+        assert rabbitmq._chan is not None  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        q = await rabbitmq._chan.get_queue(s.RMQ_DLQ_QUEUE)  # type: ignore[attr-defined]  # pylint: disable=protected-access
         count = 0
         for _ in range(limit):
             msg = await q.get(fail=False)

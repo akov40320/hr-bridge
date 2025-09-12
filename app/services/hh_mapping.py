@@ -31,7 +31,7 @@ async def load() -> dict[str, str]:
     mapping = {str(row.amo_status_id): row.hh_code for row in rows}
 
     async with _lock:
-        global _cache_expire
+        global _cache_expire  # pylint: disable=global-statement
         _cache.clear()
         _cache.update(mapping)
         _cache_expire = time.time() + _CACHE_TTL
@@ -63,7 +63,7 @@ async def set_all(mapping: dict[str, str]) -> dict[str, str]:
         await s.commit()
 
     async with _lock:
-        global _cache_expire
+        global _cache_expire  # pylint: disable=global-statement
         _cache.clear()
         _cache.update(mapping)
         _cache_expire = time.time() + _CACHE_TTL
@@ -71,4 +71,3 @@ async def set_all(mapping: dict[str, str]) -> dict[str, str]:
 
 
 __all__ = ["load", "get", "set_all"]
-

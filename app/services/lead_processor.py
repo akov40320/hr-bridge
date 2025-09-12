@@ -1,5 +1,5 @@
 """Сервисные утилиты для обработки лидов и кандидатов."""
-
+ # pylint: disable=line-too-long
 import json
 import logging
 import time

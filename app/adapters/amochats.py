@@ -1,4 +1,5 @@
 """Utilities for interacting with the AmoChats API."""
+# pylint: disable=line-too-long
 
 from typing import Any, cast
 import hashlib
@@ -122,10 +123,19 @@ async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncCli
         log.warning("AmoChats connect warning: %s", exc)
 
 
-async def send_text_from_client(
-        *, lead_id: int, text: str, tg_user_id: int, tg_user_name: str | None = None,
-        conversation_id: str | None = None, client: httpx.AsyncClient,
+async def send_text_from_client(  # pylint: disable=too-many-arguments
+        *,
+        lead_id: int,
+        text: str,
+        tg_user_id: int,
+        tg_user_name: str | None = None,
+        conversation_id: str | None = None,
+        client: httpx.AsyncClient,
 ) -> str | None:
+    """Send a text into AmoChats on behalf of a client.
+
+    Returns the conversation_id used (created if missing).
+    """
     ac = _get_client()
 
     if not conversation_id:
@@ -136,7 +146,7 @@ async def send_text_from_client(
     path = f"/v2/origin/custom/{ac.scope_id}"
     url = _base() + path
 
-    now_s = int(time.time());
+    now_s = int(time.time())
     now_ms = int(time.time() * 1000)
     payload = {
         "event_type": "new_message",
@@ -213,7 +223,7 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments
         raise AmoChatsError(f"send_text_from_manager failed {r.status_code}: {r.text}")
 
 
-async def ensure_chat_created(
+async def ensure_chat_created(  # pylint: disable=too-many-arguments,too-many-locals
         *,
         lead_id: int,
         tg_user_id: int,
@@ -232,8 +242,7 @@ async def ensure_chat_created(
     Возвращает:
         str: conversation_id (тот же детерминированный 'lead:<lead_id>')
     """
-
-    from app.adapters.amo_client import AmoClient
+    from app.adapters.amo_client import AmoClient  # pylint: disable=import-outside-toplevel
 
     ac = _get_client()
 
@@ -269,7 +278,7 @@ async def ensure_chat_created(
                 or (jr.get("payload") or {}).get("chat_id")
                 or (jr.get("_embedded") or {}).get("chats", [{}])[0].get("id")
         )
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover  # pylint: disable=broad-exception-caught
         logger.warning("ensure_chat_created: parse chat_id failed", exc_info=True)
 
     logger.info("ensure_chat_created: ok for %s -> conv_id=%s chat_id=%s",
@@ -282,7 +291,7 @@ async def ensure_chat_created(
             amo = await AmoClient.create(client)
             await amo.bind_chat_to_contact(bind_contact_id, chat_id)
             logger.info("chat bound to contact: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("bind chat to contact failed", exc_info=True)
 
     # 2) опционально отправить первое сообщение
@@ -335,7 +344,7 @@ async def ensure_chat_created(
             sys_headers = _build_headers(ac.secret, "POST", path_msg, sys_body, ac.account_id)
             await client.post(url_msg, content=sys_body, headers=sys_headers, timeout=30)
 
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("ensure_chat_created: initial message post failed", exc_info=True)
 
     return conv_id

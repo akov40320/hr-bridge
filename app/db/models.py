@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Any
 from sqlalchemy import BigInteger, Text, Integer, TIMESTAMP, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from typing import Any
 from .base import Base
 
 

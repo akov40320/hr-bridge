@@ -1,6 +1,7 @@
 """Эндпоинты для обработки входящих вебхуков AmoCRM."""
 
 from typing import Any, Mapping, cast
+# pylint: disable=line-too-long
 import json
 import logging
 

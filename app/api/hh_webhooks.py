@@ -1,6 +1,7 @@
 """Обеспечивает корректную и идемпотентную регистрацию вебхуков HH."""
 
 from __future__ import annotations
+# pylint: disable=line-too-long
 
 import logging
 import re
@@ -111,7 +112,7 @@ async def _find_sub_by_url(client: httpx.AsyncClient, headers: dict[str, str], u
     return None
 
 
-async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:
+async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:  # pylint: disable=too-many-branches,too-many-locals,too-many-statements,too-many-nested-blocks
     """Создать/обновить подписку HH, идемпотентно (POST/PUT/DELETE при необходимости)."""
     base_url = _target_url()
     if not base_url:

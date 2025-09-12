@@ -34,7 +34,7 @@ async def webhook_hh(
             return Response(status_code=400)
     try:
         log.info("HH webhook received raw: %s", raw.decode("utf-8"))
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         log.info("HH webhook received raw (binary): %s", raw)
     return await process_job_board_webhook(
         "hh", raw, http_client, lambda raw: parse_hh_payload(raw, owner_id)

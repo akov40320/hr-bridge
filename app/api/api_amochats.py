@@ -1,9 +1,8 @@
 """Handlers for AmoChats webhooks and related helpers."""
-import datetime
+# pylint: disable=fixme
 import hashlib
 import hmac
 import logging
-import base64
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -28,6 +27,7 @@ async def verify_amochats_signature(
         request: Request,
         settings=Depends(get_settings),
 ) -> None:
+    """Validate AmoChats webhook signature and stash raw body."""
     raw = await request.body()
 
     request.state.raw_body = raw

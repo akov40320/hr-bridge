@@ -19,7 +19,7 @@ from app.services.worker.mirror import (
 )
 
 
-async def handle_task(p: dict, attempts: int = 0):
+async def handle_task(p: dict, _attempts: int = 0):  # pylint: disable=too-many-return-statements,too-many-branches
     """Process background tasks based on platform and action."""
     if p.get("platform") == "system" and p.get("action") == "hh_autofill":
 

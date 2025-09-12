@@ -44,7 +44,7 @@ _STAGE_NAME_TO_HH: dict[str, str] = {}
 
 def reload_stage_mapping(path: Path | None = None) -> None:
     """Reload stage mapping from YAML file."""
-    global _STAGE_NAME_TO_HH
+    global _STAGE_NAME_TO_HH  # pylint: disable=global-statement
     _STAGE_NAME_TO_HH = _load_stage_mapping(path or MAPPING_FILE)
 
 

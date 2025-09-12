@@ -1,6 +1,7 @@
 """Utility helpers used across API modules."""
 
-import re, html
+import re
+import html
 from typing import Mapping
 
 

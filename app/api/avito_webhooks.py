@@ -1,3 +1,6 @@
+"""Utilities to ensure Avito webhooks are configured and up-to-date."""
+# pylint: disable=line-too-long, broad-exception-caught
+
 from __future__ import annotations
 import logging
 from typing import Any
@@ -148,7 +151,7 @@ async def _upsert_applications_webhook(client: httpx.AsyncClient, headers: dict[
 
 # -------------------- Public entry --------------------
 
-async def ensure_avito_webhooks(client: httpx.AsyncClient) -> None:
+async def ensure_avito_webhooks(client: httpx.AsyncClient) -> None:  # pylint: disable=too-many-branches
     """
     Идемпотентная регистрация Avito webhooks для всех известных владельцев.
     — Messenger: /messenger/v3/webhook

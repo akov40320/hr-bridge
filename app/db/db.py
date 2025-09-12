@@ -46,7 +46,7 @@ def _is_sqlite_memory_url(url: str) -> bool:
 def get_engine() -> AsyncEngine:
     """Return a cached :class:`~sqlalchemy.ext.asyncio.AsyncEngine` instance."""
 
-    global engine
+    global engine  # pylint: disable=global-statement
     if engine is not None:
         return engine
     if _STATE.engine is None:
@@ -64,7 +64,7 @@ def get_engine() -> AsyncEngine:
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     """Return a cached async session factory."""
 
-    global SessionLocal
+    global SessionLocal  # pylint: disable=global-statement
     if SessionLocal is not None:
         return SessionLocal
     if _STATE.session_maker is None:

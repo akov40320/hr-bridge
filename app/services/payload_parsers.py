@@ -1,21 +1,19 @@
 """Utilities for parsing webhook payloads from external job platforms."""
+# pylint: disable=line-too-long
 
 import json
 import logging
 
 from pydantic import ValidationError
+from urllib.parse import parse_qs
 
 from app.models import Applicant, IncomingPayload, AvitoPayload
 
 logger = logging.getLogger(__name__)
 
 
-def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload:
-    import json, logging
-    from pydantic import ValidationError
-    from app.models import Applicant, IncomingPayload
-
-    logger = logging.getLogger(__name__)
+def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload:  # pylint: disable=too-many-locals
+    """Parse HeadHunter webhook payload into an IncomingPayload."""
 
     try:
         data = json.loads(raw.decode() or "{}")
@@ -28,11 +26,11 @@ def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload
         raise ValueError(f"unsupported action_type: {action_type}")
 
     obj = (
-            data.get("object")
-            or data.get("negotiation")
-            or data.get("response")
-            or data.get("payload")
-            or {}
+        data.get("object")
+        or data.get("negotiation")
+        or data.get("response")
+        or data.get("payload")
+        or {}
     )
 
     negotiation_id = str(
@@ -81,7 +79,8 @@ def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload
     )
 
 
-def extract_avito_payload(raw: bytes) -> AvitoPayload:
+def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-many-locals,too-many-statements
+    """Extract Avito payload from JSON or form-encoded body."""
     # 1) Безопасно декодируем тело
     try:
         body = raw.decode("utf-8")
@@ -95,7 +94,6 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:
         data = json.loads(body or "{}")
     except json.JSONDecodeError as json_exc:
         logger.warning("Avito payload JSON decode error: %s", json_exc)
-        from urllib.parse import parse_qs
         form = parse_qs(body)
         if "payload" in form and form["payload"]:
             try:

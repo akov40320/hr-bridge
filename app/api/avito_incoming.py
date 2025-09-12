@@ -1,3 +1,5 @@
+"""FastAPI endpoint for incoming Avito webhooks with signature verification."""
+
 import os
 import hmac
 import hashlib
@@ -35,6 +37,7 @@ def _verify_sig(raw: bytes, sent_sig: str | None) -> None:
 async def webhook_avito(
     request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
 ):
+    """Handle Avito webhook, verify signature, and dispatch processing."""
     t0 = time.monotonic()
     raw = await request.body()
     sig = request.headers.get(_SIG_HEADER)
@@ -63,7 +66,7 @@ async def webhook_avito(
             p.owner_id,
             dt,
         )
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.info("avito:webhook ok (summary failed: %s) dt=%.1fms", e, dt)
 
     return resp

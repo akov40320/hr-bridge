@@ -21,6 +21,7 @@ logger = logging.getLogger("tg.router")
 
 def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:
     """Create a dispatcher with handlers for Telegram survey bots."""
+    # pylint: disable=too-many-statements
     dp = Dispatcher()
     svc = SurveyService(queue_client)
 

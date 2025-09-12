@@ -58,7 +58,7 @@ async def handle_mirror_amo_to_tg(payload: dict):
         await tg_send_with_retry(bot, user_id, text)
 
 
-async def handle_mirror_tg_to_amo(payload: dict):
+async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-locals
     """Mirror a Telegram message into AMO CRM (как реальное сообщение в чат сделки)."""
     msg_key = payload.get("msg_key") or ""
     if msg_key:
@@ -96,7 +96,7 @@ async def handle_mirror_tg_to_amo(payload: dict):
             contacts = emb.get("contacts") or []
             if contacts:
                 contact_id = int(contacts[0]["id"])
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
 
         # Создаём чат вида conversation_id="lead:<lead_id>" и ПРИВЯЗЫВАЕМ к контакту
@@ -136,7 +136,7 @@ async def handle_mirror_tg_to_amo(payload: dict):
 
 
 
-async def handle_mirror_bot_to_amo(payload: dict):
+async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-locals
     """Forward a bot-generated message to AMO chat.
 
     Args:
@@ -179,7 +179,7 @@ async def handle_mirror_bot_to_amo(payload: dict):
             contacts = emb.get("contacts") or []
             if contacts:
                 contact_id = int(contacts[0]["id"])
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
 
         conv_id = await with_retry(
