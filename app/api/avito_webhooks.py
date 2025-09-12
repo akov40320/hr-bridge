@@ -1,5 +1,5 @@
 """Utilities to ensure Avito webhooks are configured and up-to-date."""
-# pylint: disable=line-too-long, broad-exception-caught
+# pylint: disable=line-too-long, broad-exception-caught, trailing-newlines
 
 from __future__ import annotations
 import logging

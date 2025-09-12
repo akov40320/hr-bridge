@@ -1,4 +1,4 @@
-"""Administrative and diagnostic endpoints."""
+"""Административные и диагностические эндпоинты."""
 
 import logging
 import time
@@ -28,7 +28,7 @@ def _s():
 
 @router.get("/health")
 async def health() -> dict[str, object]:
-    """Return service health information."""
+    """Вернуть информацию о состоянии сервиса (health)."""
 
     info: dict[str, object] = {"ok": True}
     try:
@@ -44,14 +44,14 @@ async def health() -> dict[str, object]:
 
 @admin.get("/hh-mapping")
 async def get_hh_mapping() -> dict:
-    """Return the current HeadHunter mapping."""
+    """Вернуть текущую таблицу сопоставления (mapping) HeadHunter."""
 
     return {"ok": True, "mapping": await hh_map_load()}
 
 
 @admin.put("/hh-mapping")
 async def put_hh_mapping(payload: dict) -> dict:
-    """Replace the HeadHunter mapping with ``payload``."""
+    """Заменить таблицу сопоставления HeadHunter на ``payload``."""
 
     return {"ok": True, "mapping": await hh_map_set(payload)}
 
@@ -61,7 +61,7 @@ async def rmq_test(
     payload: dict | None = None,
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """Publish a test message to RabbitMQ."""
+    """Опубликовать тестовое сообщение в RabbitMQ."""
 
     msg = (payload or {}).get("msg", "hi")
     await queue_client.publish_task({"platform": "debug", "action": "echo", "msg": msg})
@@ -70,10 +70,10 @@ async def rmq_test(
 
 @admin.post("/dedup-clean")
 async def dedup_clean(hours: int = 72) -> dict:
-    """Clean deduplication entries older than ``hours``."""
+    """Очистить записи дедупликации старше ``hours`` часов."""
 
     deleted = await cleanup_older_than(hours * 3600)
-    logger.info("dedup cleanup removed=%s hours=%s", deleted, hours)
+    logger.info("дедуп‑очистка удалено=%s часов=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
 
 
@@ -83,7 +83,7 @@ async def hh_states(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
-    """Return the HeadHunter negotiation states."""
+    """Вернуть список состояний переговоров HeadHunter."""
 
     try:
         access = await hh_access(http_client, owner_id)
@@ -112,7 +112,7 @@ async def hh_states(
 async def hh_autofill_admin(
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """Queue a task that triggers HH autofill."""
+    """Поставить в очередь задачу автозаполнения HH."""
 
     await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
     return {"ok": True, "queued": True}

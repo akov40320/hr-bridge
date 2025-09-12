@@ -5,6 +5,7 @@
 подтягивать пакет с FastAPI‑роутерами на низком уровне адаптеров.
 """
 
+# pylint: disable=duplicate-code
 from __future__ import annotations
 
 import httpx
