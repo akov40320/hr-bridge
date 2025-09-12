@@ -113,7 +113,11 @@ async def retry_overdue_tasks(limit: int = 100) -> None:
 
 async def _periodic(interval: int, coro):
     while True:
-        await coro()
+        try:
+            await coro()
+            log.info("%s completed successfully", coro.__name__)
+        except Exception:  # pylint: disable=broad-exception-caught
+            log.exception("%s failed", coro.__name__)
         await asyncio.sleep(interval)
 
 
