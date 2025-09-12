@@ -1,13 +1,10 @@
 """Обработчики фоновых задач, используемых потребителем RMQ."""
 
 import logging
-import time as _time
 
 from app.adapters import avito as avito_adapt, hh as hh_adapt
 from app.adapters.amo_client import AmoClient
-from app.db.token_store import DbTokenStore
 from app.http_client import get_http_client
-from app.services.hh_autofill import autofill_hh_mapping
 from app.services.worker.amo import (
     handle_amo_add_note,
     handle_amo_add_tags,
@@ -18,6 +15,7 @@ from app.services.worker.mirror import (
     handle_mirror_bot_to_amo,
     handle_mirror_tg_to_amo,
 )
+from app.services.worker.system import handle_system_hh_autofill
 
 # Логгер для отслеживания выполнения задач
 logger = logging.getLogger(__name__)
@@ -32,17 +30,7 @@ async def handle_task(p: dict, _attempts: int = 0):
     logger.info("Получена задача: %s", p)
 
     if p.get("platform") == "system" and p.get("action") == "hh_autofill":
-        logger.info("system: автозаполнение HH")
-
-        tok = await DbTokenStore("amo").load()
-        if (
-            not tok
-            or not tok.get("access_token")
-            or int(tok.get("expires_at", 0)) <= int(_time.time()) + 30
-        ):
-            raise RuntimeError("токен amo отсутствует или просрочен")
-
-        await autofill_hh_mapping(get_http_client())
+        await handle_system_hh_autofill(p)
         return
 
     if p.get("platform") == "hh" and p.get("action") == "set_state":
