@@ -7,6 +7,7 @@ dictionary with details specific to the direction of the mirror.
 """
 
 import logging
+from typing import Optional, cast
 from aiogram import Bot
 
 from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
@@ -71,7 +72,7 @@ async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-lo
     text = payload["text"]
     tg_user_id = int(payload["tg_user_id"])
     tg_user_name = payload.get("tg_user_name")
-    conv_id = payload.get("conversation_id")
+    conv_id: Optional[str] = payload.get("conversation_id")
     bot_kind_val = payload.get("bot_kind")
     if not isinstance(bot_kind_val, str):
         raise RuntimeError("bot_kind is required")
@@ -114,6 +115,7 @@ async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-lo
             is_retryable=lambda e: True,
         )
         # сохраняем conversation_id, если он только что появился
+        assert isinstance(conv_id, str)
         await set_conversation(tg_user_id, bot_kind, conv_id)
 
     # Теперь отправляем как КЛИЕНТСКОЕ сообщение в чат сделки
@@ -132,7 +134,7 @@ async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-lo
 
     # Сохраняем новый conversation_id, если он изменился
     if new_cid is not None and new_cid != conv_id:
-        await set_conversation(tg_user_id, bot_kind, new_cid)
+        await set_conversation(tg_user_id, bot_kind, cast(str, new_cid))
 
 
 
@@ -162,7 +164,7 @@ async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-l
     text = payload["text"]
     user_id = int(payload["user_id"])
     user_name = payload.get("user_name")
-    conv_id = payload.get("conversation_id")
+    conv_id: Optional[str] = payload.get("conversation_id")
     lead_id = payload.get("lead_id")
     status_id = payload.get("status_id")
     bot_kind = payload.get("bot_kind")
@@ -196,7 +198,7 @@ async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-l
         )
 
         if isinstance(bot_kind, str):
-            await set_conversation(user_id, bot_kind, conv_id)
+            await set_conversation(user_id, bot_kind, cast(str, conv_id))
 
         if status_id is not None:
             dedup = calc_key("chat_status", f"{lead_id}:{status_id}")

@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 
 import httpx
-import yaml
+import yaml  # type: ignore[import-untyped]
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings

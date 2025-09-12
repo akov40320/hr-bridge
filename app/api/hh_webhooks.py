@@ -202,6 +202,8 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:  # pylint: disab
                     return
 
             # 3) если подписка с нашим URL уже есть — сверяем actions и обновляем при необходимости
+            if current is None:
+                continue
             curr_actions = current.get("actions", [])
             if not _same_actions(curr_actions, desired):
                 sub_id = current.get("id") or current.get("subscription_id")

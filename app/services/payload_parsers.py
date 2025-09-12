@@ -121,6 +121,10 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-ma
                 data.get("contacts", {}).get("chat", {}).get("value") or ""
             ) or None
 
+        # Ensure chat_id is present for this branch
+        if not chat_id:
+            raise ValueError("missing chat_id in Avito payload")
+
         content = val.get("content") or {}
         text = content.get("text") or ""
 

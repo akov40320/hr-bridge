@@ -150,8 +150,9 @@ async def resolve_links(
         links = await get_by_conversation(client_conv_id)
     if not links and lead_id:
         links = await get_by_lead(lead_id)
-        if links and (conv_ref_id or client_conv_id):
-            await set_conv_for_links(links, conv_ref_id or client_conv_id)
+        target_conv = conv_ref_id or client_conv_id
+        if links and target_conv:
+            await set_conv_for_links(links, target_conv)
     if not links:
         links = await links_from_ext_id(conv_ref_id or client_conv_id, sender, receiver)
     return links
