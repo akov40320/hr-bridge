@@ -7,6 +7,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.retry import with_retry
 from ._requests import request_with_retry
+from app.api.oauth2 import ensure_fresh_access, OAuth2Config
 
 
 class HHError(Exception):
@@ -34,8 +35,6 @@ async def set_employer_state(
         client: httpx.AsyncClient,
 ) -> None:
     """Перевести отклик в указанный этап через action."""
-    from app.api.oauth2 import OAuth2Config, ensure_fresh_access
-
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -80,8 +79,6 @@ async def send_message(
         client: httpx.AsyncClient,
 ) -> None:
     """Отправить сообщение в рамках переписки по отклику."""
-    from app.api.oauth2 import OAuth2Config, ensure_fresh_access
-
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -126,8 +123,6 @@ async def fetch_applicant_details(
         client: httpx.AsyncClient,
 ) -> dict:
     """Fetch basic applicant information such as name, city, phone and email."""
-    from app.api.oauth2 import OAuth2Config, ensure_fresh_access
-
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -193,8 +188,6 @@ async def fetch_vacancy_description(
         client: httpx.AsyncClient,
 ) -> str:
     """Fetch vacancy description text."""
-    from app.api.oauth2 import OAuth2Config, ensure_fresh_access
-
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
@@ -225,8 +218,6 @@ async def fetch_vacancy_title(
         client: httpx.AsyncClient,
 ) -> str:
     """Fetch vacancy title."""
-    from app.api.oauth2 import OAuth2Config, ensure_fresh_access
-
     s = get_settings()
     access = await ensure_fresh_access(
         config=OAuth2Config(
