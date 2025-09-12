@@ -114,16 +114,12 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-ma
     ):
         val = payload_root.get("value") or {}
 
-        chat_id = str(val.get("chat_id") or "") or None
-        if not chat_id:
-            # резервный вариант: иногда чат кладут сюда
-            chat_id = str(
-                data.get("contacts", {}).get("chat", {}).get("value") or ""
-            ) or None
-
-        # Ensure chat_id is present for this branch
-        if not chat_id:
-            raise ValueError("missing chat_id in Avito payload")
+        # produce string always; empty string will trigger Pydantic ValidationError
+        chat_id = str(
+            val.get("chat_id")
+            or data.get("contacts", {}).get("chat", {}).get("value")
+            or ""
+        )
 
         content = val.get("content") or {}
         text = content.get("text") or ""
@@ -215,7 +211,7 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-ma
     # ---------- ЛЕГАСИ-ФОЛБЭК (если прилетел минималистичный формат) ----------
     chat_id = str(
         data.get("contacts", {}).get("chat", {}).get("value") or ""
-    ) or None
+    )
     if not chat_id:
         raise ValueError("unrecognized Avito payload format (no payload/type, no application, no contacts.chat)")
 

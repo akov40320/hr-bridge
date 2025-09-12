@@ -1,4 +1,4 @@
-"""HTTP request helpers with automatic retry support."""
+"""Вспомогательные функции для HTTP‑запросов с автоматическими повторами."""
 
 from typing import Any, Callable, Optional, Type
 
@@ -8,7 +8,7 @@ from app.core.retry import with_retry
 
 
 def _is_retryable(status: int) -> bool:
-    """Return ``True`` if the status code represents a retryable error."""
+    """Возвращает ``True``, если код статуса означает ошибку, которую можно повторить."""
     return status == 429 or 500 <= status < 600
 
 
@@ -27,7 +27,7 @@ async def request_with_retry(
     action: str,
     retry_func: Callable = with_retry,
 ) -> httpx.Response:
-    """Perform an HTTP request and retry on transient failures."""
+    """Выполняет HTTP‑запрос и повторяет его при временных сбоях."""
     # pylint: disable=too-many-arguments
 
     async def attempt() -> httpx.Response:
@@ -51,7 +51,7 @@ async def request_with_retry(
                 and _is_retryable(e.response.status_code)
             ),
         )
-    except httpx.HTTPStatusError as e:  # pragma: no cover - network errors
+    except httpx.HTTPStatusError as e:  # pragma: no cover - сетевые ошибки
         raise error_cls(
-            f"{service} {action} failed {e.response.status_code}: {e.response.text}"
+            f"{service} {action}: ошибка {e.response.status_code}: {e.response.text}"
         ) from e

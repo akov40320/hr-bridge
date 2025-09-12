@@ -1,7 +1,7 @@
-"""Collection of available integration adapters.
+"""Набор доступных адаптеров интеграций.
 
-This module exposes the list of public adapter modules that can be imported
-when using ``from app.adapters import *``.
+Этот модуль объявляет список публичных адаптеров, которые можно импортировать
+через ``from app.adapters import *``.
 """
 
 __all__ = ["hh", "avito", "amochats", "amo_client"]
