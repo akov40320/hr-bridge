@@ -1,9 +1,9 @@
-"""Service layer for managing user surveys.
+"""Сервисный слой для управления пользовательскими опросами.
 
-This module provides the :class:`SurveyService` which coordinates starting,
-retrieving, updating and finishing surveys through asynchronous calls and a
-queue client.  The functions wrap lower level helpers and publish messages to
-other services when the survey state changes.
+Модуль предоставляет :class:`SurveyService`, который координирует запуск,
+получение, обновление и завершение опросов через асинхронные вызовы и клиент
+очереди. Функции оборачивают низкоуровневые помощники и публикуют сообщения в
+другие сервисы при изменении состояния опроса.
 """
 
 import logging
@@ -23,27 +23,27 @@ logger = logging.getLogger(__name__)
 
 
 class SurveyService:
-    """Operations for driving the survey lifecycle."""
+    """Операции для управления жизненным циклом опроса."""
 
     def __init__(self, queue_client: RabbitMQClient = rabbitmq) -> None:
-        """Initialize the service with a queue client."""
+        """Инициализировать сервис клиентом очереди."""
         self.queue_client = queue_client
 
     async def start(self, user_id: int, bot_kind: str, lead_id: int, identity: str) -> None:
-        """Start or reset survey and mark that user went to bot."""
+        """Запустить или сбросить опрос и отметить переход пользователя к боту."""
         await start_or_reset_survey(user_id, bot_kind, lead_id)
         await mark_went_to_bot_async(lead_id, bot_kind, identity, self.queue_client)
 
     async def get(self, user_id: int, bot_kind: str):
-        """Fetch the current survey state for the given user and bot."""
+        """Получить текущее состояние опроса для пользователя и бота."""
         return await get_survey(user_id, bot_kind)
 
     async def store_answer(self, user_id: int, bot_kind: str, text: str):
-        """Persist an answer and advance the survey."""
+        """Сохранить ответ и продвинуть опрос на следующий шаг."""
         return await store_answer_and_advance(user_id, bot_kind, text)
 
     async def finish(self, user_id: int, bot_kind: str, lead_id: int, summary: str) -> None:
-        """Finalize the survey and send results to the queue client."""
+        """Завершить опрос и отправить результаты в клиент очереди."""
         s = get_settings()
         try:
             await self.queue_client.publish_task(
@@ -55,7 +55,7 @@ class SurveyService:
                 }
             )
         except Exception:  # pylint: disable=broad-except
-            logger.exception("failed to publish tags lead_id=%s", lead_id)
+            logger.exception("ошибка публикации тегов lead_id=%s", lead_id)
             return
 
         try:
@@ -68,7 +68,7 @@ class SurveyService:
                 }
             )
         except Exception:  # pylint: disable=broad-except
-            logger.exception("failed to publish note lead_id=%s", lead_id)
+            logger.exception("ошибка публикации заметки lead_id=%s", lead_id)
             return
 
         stage_id = (
@@ -87,7 +87,7 @@ class SurveyService:
                 }
             )
         except Exception:  # pylint: disable=broad-except
-            logger.exception("failed to update status lead_id=%s", lead_id)
+            logger.exception("ошибка обновления статуса lead_id=%s", lead_id)
             return
 
         await delete_survey(user_id, bot_kind)

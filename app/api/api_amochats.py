@@ -1,4 +1,4 @@
-"""Handlers for AmoChats webhooks and related helpers."""
+"""Обработчики вебхуков AmoChats и связанные вспомогательные функции."""
 # pylint: disable=fixme
 import hashlib
 import hmac
@@ -27,7 +27,7 @@ async def verify_amochats_signature(
         request: Request,
         settings=Depends(get_settings),
 ) -> None:
-    """Validate AmoChats webhook signature and stash raw body."""
+    """Проверить подпись вебхука AmoChats и сохранить сырое тело запроса."""
     raw = await request.body()
 
     request.state.raw_body = raw
@@ -50,7 +50,7 @@ async def verify_amochats_signature(
 
 
 def parse_lead_id(client_id: str) -> int | None:
-    """Extract numeric lead id from a ``lead:<id>`` formatted string."""
+    """Извлечь числовой идентификатор сделки из строки ``lead:<id>``."""
     if isinstance(client_id, str) and client_id.startswith("lead:"):
         try:
             return int(client_id.split(":", 1)[1])
@@ -62,17 +62,17 @@ def parse_lead_id(client_id: str) -> int | None:
 async def parse_json(
         request: Request, raw: bytes, scope_id: str | None
 ) -> dict | None:
-    """Return the JSON body, logging an error if decoding fails."""
+    """Вернуть тело JSON; при ошибке декодирования записать в лог."""
     try:
         return await request.json()
     except ValueError:
         txt = raw[:500].decode("utf-8", "ignore")
-        logger.warning("amo-chats bad json (scope_id=%s); body=%r", scope_id, txt)
+        logger.warning("amo-chats некорректный JSON (scope_id=%s); body=%r", scope_id, txt)
         return None
 
 
 def extract_message(data: dict) -> tuple[str, str | None, str, dict, dict, str]:
-    """Pull message information from the webhook payload."""
+    """Извлечь информацию о сообщении из тела вебхука."""
     root = data.get("message") or data.get("payload") or {}
     msg = root.get("message") or {}
     text = (msg.get("text") or "").strip()
@@ -92,26 +92,26 @@ def extract_message(data: dict) -> tuple[str, str | None, str, dict, dict, str]:
 
 
 async def set_conv_for_links(links, conv_ref_id: str) -> None:
-    """Update links with the provided conversation reference."""
+    """Обновить связи, проставив идентификатор беседы."""
     for ln in links:
         if not ln.conversation_id:
             await set_conversation(ln.user_id, ln.bot_kind, conv_ref_id)
 
 
 def parse_tg_uid(ext_id: str) -> int | None:
-    """Extract Telegram user id from an external ``tg:<id>`` identifier."""
+    """Извлечь Telegram user id из внешнего идентификатора ``tg:<id>``."""
     if isinstance(ext_id, str) and ext_id.startswith("tg:"):
         try:
             return int(ext_id.split(":", 1)[1])
         except ValueError:
-            logger.warning("amo-chats failed to parse tg uid from ext_id %r", ext_id)
+            logger.warning("amo-chats: не удалось распарсить tg uid из ext_id %r", ext_id)
     return None
 
 
 async def links_from_ext_id(
         conv_ref_id: str | None, sender: dict, receiver: dict
 ):
-    """Return chat links using an external identifier such as Telegram UID."""
+    """Вернуть связи чата по внешнему идентификатору (например, Telegram UID)."""
     ext_id = (
             sender.get("client_id")
             or sender.get("id")
@@ -142,7 +142,7 @@ async def resolve_links(
         sender: dict,
         receiver: dict,
 ):
-    """Resolve links using conversation IDs, lead mapping, or external identifiers."""
+    """Определить связи по ID беседы, привязке сделки или внешним идентификаторам."""
     links = []
     if conv_ref_id:
         links = await get_by_conversation(conv_ref_id)
@@ -164,7 +164,7 @@ async def publish_links(
         msg_id: str,
         text: str,
 ) -> None:
-    """Publish mirrored messages to the queue for each link."""
+    """Опубликовать зеркальные сообщения в очередь для каждой связи."""
     for ln in links or []:
         key_src = (
             f"amo:{conv_ref_id}:{msg_id or hashlib.sha256((text or '').encode()).hexdigest()[:16]}"
@@ -182,7 +182,7 @@ async def publish_links(
 
 
 async def is_duplicate(raw: bytes) -> bool:
-    """Check if the incoming payload has been processed before."""
+    """Проверить, обрабатывался ли уже этот входящий payload."""
     key = calc_key("amo_chats", raw)
     return not await check_and_store(key)
 
@@ -194,11 +194,11 @@ async def amochats_in(
         scope_id: str,
         queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """Process incoming AmoChats webhook and mirror messages to Telegram."""
+    """Обработать входящий вебхук AmoChats и зеркалировать сообщения в Telegram."""
     raw = getattr(request.state, "raw_body", await request.body())
 
     if await is_duplicate(raw):
-        logger.info("amo-chats duplicate webhook skipped (scope_id=%s)", scope_id)
+        logger.info("amo-chats: дубликат вебхука пропущен (scope_id=%s)", scope_id)
         return {"ok": True, "duplicate": True}
 
     data = await parse_json(request, raw, scope_id)
@@ -221,7 +221,7 @@ async def amochats_in(
     links = await resolve_links(conv_ref_id, client_id, lead_id, sender, receiver)
 
     logger.info(
-        "amo-chats links found: %d (conv=%s client_conv=%s lead=%s)",
+        "amo-chats: найдено ссылок: %d (conv=%s client_conv=%s lead=%s)",
         len(links),
         conv_ref_id,
         client_id,
@@ -231,7 +231,7 @@ async def amochats_in(
     await publish_links(queue_client, links, conv_ref_id, msg_id, text)
 
     logger.info(
-        "amo-chats -> RMQ mirror ok (scope_id=%s, text_len=%d)",
+        "amo-chats -> RMQ: зеркалирование успешно (scope_id=%s, text_len=%d)",
         scope_id,
         len(text),
     )
@@ -246,6 +246,6 @@ amo_admin = APIRouter(
 
 @amo_admin.post("/connect")
 async def admin_connect(http_client: httpx.AsyncClient = Depends(get_http_client)):
-    """Initiate a one-time connection to AmoChats from the admin panel."""
+    """Инициировать одноразовое подключение к AmoChats из админ‑панели."""
     resp = await connect_channel(http_client)
     return {"ok": True, "response": resp}

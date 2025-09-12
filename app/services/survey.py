@@ -1,7 +1,7 @@
-"""Helper functions used by the survey Telegram bot.
+"""Вспомогательные функции, используемые Telegram‑ботом опроса.
 
-The helpers include utilities for parsing ``/start`` arguments, generating
-prompts and summaries for a short survey and formatting Telegram identities.
+Сюда входят утилиты для разбора аргумента ``/start``, генерации
+подсказок и итогов короткого опроса, а также форматирования идентификаторов Telegram.
 """
 
 from aiogram.types import Message
@@ -11,10 +11,10 @@ from app.services.queue import rabbitmq, RabbitMQClient
 
 
 def parse_start_arg(text: str) -> int | None:
-    """Extract integer ``/start`` argument from ``text``.
+    """Извлечь целочисленный аргумент ``/start`` из ``text``.
 
-    Returns the integer value if the message starts with ``/start <id>`` and the
-    argument can be parsed, otherwise ``None``.
+    Возвращает целое значение, если сообщение начинается с ``/start <id>`` и
+    аргумент успешно парсится; иначе возвращает ``None``.
     """
 
     parts = (text or "").strip().split(maxsplit=1)
@@ -27,7 +27,7 @@ def parse_start_arg(text: str) -> int | None:
 
 
 def survey_prompt(step: int) -> str:
-    """Return the prompt for the given survey ``step``."""
+    """Вернуть подсказку для указанного шага опроса ``step``."""
 
     if step == 0:
         return "В каком вы городе?"
@@ -39,7 +39,7 @@ def survey_prompt(step: int) -> str:
 
 
 def survey_summary(city: str | None, experience: str | None, time_pref: str | None) -> str:
-    """Compose a summary message using user-provided survey answers."""
+    """Сформировать итоговое сообщение на основе ответов пользователя."""
 
     return (
         "Итоги опроса:\n"
@@ -50,7 +50,7 @@ def survey_summary(city: str | None, experience: str | None, time_pref: str | No
 
 
 def pretty_tg_identity(m: Message) -> str:
-    """Return a human friendly representation of the Telegram user."""
+    """Вернуть человеко‑читаемое представление пользователя Telegram."""
 
     user = m.from_user
     if not user:
