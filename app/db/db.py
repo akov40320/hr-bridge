@@ -1,4 +1,4 @@
-"""Database utilities for asynchronous SQLAlchemy engine and sessions."""
+"""Утилиты работы с БД для асинхронного движка и сессий SQLAlchemy."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from .base import Base
 
 @dataclass
 class _DBState:
-    """Holds cached DB engine/sessionmaker and SQLite test flags."""
+    """Хранит кэш движка/фабрики сессий и флаги SQLite."""
 
     engine: Optional[AsyncEngine] = None
     session_maker: Optional[async_sessionmaker[AsyncSession]] = None
@@ -38,13 +38,13 @@ SessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
 def _is_sqlite_memory_url(url: str) -> bool:
-    """Return ``True`` if the URL points to an in-memory SQLite database."""
+    """Вернуть ``True``, если URL указывает на SQLite в памяти (in‑memory)."""
 
     return url.startswith("sqlite+aiosqlite:///:memory:") or "file::memory:" in url
 
 
 def get_engine() -> AsyncEngine:
-    """Return a cached :class:`~sqlalchemy.ext.asyncio.AsyncEngine` instance."""
+    """Вернуть кэшированный экземпляр :class:`~sqlalchemy.ext.asyncio.AsyncEngine`."""
 
     global engine  # pylint: disable=global-statement
     if engine is not None:
@@ -62,7 +62,7 @@ def get_engine() -> AsyncEngine:
 
 
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
-    """Return a cached async session factory."""
+    """Вернуть кэшированную фабрику асинхронных сессий."""
 
     global SessionLocal  # pylint: disable=global-statement
     if SessionLocal is not None:
@@ -76,7 +76,7 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
 
 
 async def _ensure_tables_created_once() -> None:
-    """Create tables for in-memory SQLite on each new event loop."""
+    """Создавать таблицы для SQLite in‑memory на каждом новом event loop."""
 
     if not _STATE.sqlite_memory:
         # не тестовый ин-мемори — ничего не делаем
@@ -107,7 +107,7 @@ async def _ensure_tables_created_once() -> None:
 
 @asynccontextmanager
 async def get_session() -> AsyncIterator[AsyncSession]:
-    """Provide a single :class:`AsyncSession` instance."""
+    """Предоставить единичный экземпляр :class:`AsyncSession`."""
 
     # важно: сначала инициализируем движок (определится _SQLITE_MEMORY), затем — схема
     get_engine()
@@ -119,7 +119,7 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 async def init_db() -> None:
-    """Initialize database schema (development only; production uses Alembic)."""
+    """Инициализировать схему БД (только разработка; в проде используется Alembic)."""
 
     from . import models  # pylint: disable=unused-import, import-outside-toplevel
 
@@ -128,7 +128,7 @@ async def init_db() -> None:
 
 
 async def dispose_engine() -> None:
-    """Reset cached state and dispose the engine (used in tests)."""
+    """Сбросить кэшированное состояние и освободить движок (используется в тестах)."""
 
     if _STATE.engine is not None:
         await _STATE.engine.dispose()

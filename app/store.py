@@ -1,4 +1,4 @@
-"""Persistence helpers for links between leads and external resources."""
+"""Вспомогательные функции для хранения связей сделок с внешними ресурсами."""
 
 from __future__ import annotations
 from typing import Any, Optional
@@ -56,7 +56,7 @@ async def save_link(
 
 
 async def find_link(lead_id: int) -> Optional[dict[str, Any]]:
-    """Fetch link data for a lead if it exists."""
+    """Вернуть данные связи для сделки, если они существуют."""
     async with get_session() as s:
         row = (
             await s.execute(select(LeadLink).where(LeadLink.lead_id == lead_id))

@@ -1,4 +1,4 @@
-"""Handlers for internal system tasks."""
+"""Обработчики внутренних системных задач."""
 
 import logging
 import time
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_system_hh_autofill(_payload: dict) -> None:
-    """Build HH status mapping based on AmoCRM pipelines."""
+    """Построить сопоставление статусов HH на основе воронок AmoCRM."""
     logger.info("system.hh_autofill")
     tok = await DbTokenStore("amo").load()
     if (

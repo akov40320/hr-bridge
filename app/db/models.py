@@ -1,4 +1,4 @@
-"""Database models for the HR Bridge application."""
+"""Модели базы данных приложения HR Bridge."""
 # pylint: disable=trailing-newlines
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from .base import Base
 
 
 class Token(Base):
-    """OAuth tokens for external services."""
+    """OAuth‑токены внешних сервисов."""
 
     __tablename__ = "tokens"
 
@@ -42,7 +42,7 @@ class Token(Base):
 
 
 class LeadLink(Base):
-    """Associates internal leads with external platform records."""
+    """Связывает внутренние сделки с записями внешних платформ."""
 
     __tablename__ = "lead_links"
 
@@ -62,7 +62,7 @@ class LeadLink(Base):
 
 
 class TgLink(Base):
-    """Links Telegram users to leads and conversations."""
+    """Связи пользователей Telegram со сделками и диалогами."""
 
     __tablename__ = "tg_links"
 
@@ -82,7 +82,7 @@ class TgLink(Base):
 
 
 class TgSurvey(Base):
-    """Stores survey responses collected via Telegram bots."""
+    """Ответы опроса, собранные через Telegram‑ботов."""
 
     __tablename__ = "tg_surveys"
 
@@ -107,7 +107,7 @@ class TgSurvey(Base):
 
 
 class EventDedup(Base):
-    """Tracks processed events to avoid duplicates."""
+    """Учёт обработанных событий для предотвращения дублей."""
 
     __tablename__ = "events_dedup"
 
@@ -119,7 +119,7 @@ class EventDedup(Base):
 
 
 class Task(Base):
-    """Background tasks with idempotent processing semantics."""
+    """Фоновые задачи с идемпотентной семантикой обработки."""
 
     __tablename__ = "tasks"
 
@@ -140,7 +140,7 @@ class Task(Base):
 
 
 class HhMapping(Base):
-    """Mapping between AmoCRM status IDs and HeadHunter state codes."""
+    """Сопоставление ID статусов AmoCRM и кодов состояний HeadHunter."""
 
     __tablename__ = "hh_mapping"
 

@@ -1,4 +1,4 @@
-"""Shared Pydantic models used throughout the service."""
+"""Общие модели Pydantic, используемые по всему сервису."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class Applicant(BaseModel):
-    """Applicant details parsed from incoming payload."""
+    """Данные кандидата, извлечённые из входящего payload."""
 
     id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
@@ -18,7 +18,7 @@ class Applicant(BaseModel):
 
 
 class IncomingPayload(BaseModel):
-    """Normalized incoming payload from external platforms."""
+    """Нормализованный входящий payload от внешних платформ."""
 
     platform: str
     owner_id: str | None = None
@@ -33,7 +33,7 @@ class IncomingPayload(BaseModel):
 
 
 class AvitoPayload(BaseModel):
-    """Raw Avito webhook payload after initial extraction."""
+    """Сырые данные вебхука Avito после начального извлечения."""
 
     chat_id: str = Field(..., min_length=1)
     item_id: str | None = None

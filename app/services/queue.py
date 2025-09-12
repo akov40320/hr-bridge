@@ -32,7 +32,12 @@ def _int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
     except ValueError:  # pragma: no cover - defensive
-        logger.warning("Некорректное целое значение для %s, используется по умолчанию %s", name, default)
+        logger.warning("Некорректное целое значение для %s, "
+            +
+            "используется по умолчанию %s",
+            name,
+            default,
+        )
         return default
 
 
@@ -259,3 +264,4 @@ rabbitmq = RabbitMQClient()
 
 
 __all__ = ["RabbitMQClient", "rabbitmq"]
+

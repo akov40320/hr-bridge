@@ -1,8 +1,7 @@
-"""Utilities for performing asynchronous HTTP requests.
+"""Утилиты для выполнения асинхронных HTTP‑запросов.
 
-This module provides a helper for executing callables with a shared
-HTTP client, allowing callers to reuse the same client across multiple
-requests.
+Модуль предоставляет помощник для вызова функций с общим HTTP‑клиентом,
+позволяя переиспользовать один клиент для нескольких запросов.
 """
 
 import typing
@@ -17,10 +16,10 @@ async def perform_request(
         client=None,
         **kwargs: typing.Any,
 ) -> T:
-    """Execute *func* with a shared HTTP client.
+    """Выполнить *func* с общим HTTP‑клиентом.
 
-    If *client* is not provided, :func:`get_http_client` is used.
-    Additional positional and keyword arguments are forwarded to *func*.
+    Если *client* не передан, используется :func:`get_http_client`.
+    Прочие позиционные и именованные аргументы пробрасываются в *func*.
     """
     if client is None:
         client = get_http_client()
