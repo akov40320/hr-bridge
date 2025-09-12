@@ -1,10 +1,15 @@
-import os, hmac, hashlib
+import os
+import hmac
+import hashlib
+import time
+import logging
+
 import httpx
 from fastapi import APIRouter, Depends, Request, HTTPException
 
 from app.api._webhook_common import process_job_board_webhook
 from app.http_client import get_http_client
-import time, logging
+from app.services.payload_parsers import extract_avito_payload, parse_avito_payload
 
 router = APIRouter()
 _AVITO_SECRET = os.getenv("AVITO_WEBHOOK_SECRET", "").strip()
@@ -49,7 +54,6 @@ async def webhook_avito(
     dt = (time.monotonic() - t0) * 1000
     # пост-фактум — аккуратно пытаемся вытащить summary для лога (без падений)
     try:
-        from app.services.payload_parsers import extract_avito_payload, parse_avito_payload
         p = parse_avito_payload(extract_avito_payload(raw))
         logger.info(
             "avito:webhook ok source=avito event=%s channel=%s vacancy=%s owner=%s dt=%.1fms",
