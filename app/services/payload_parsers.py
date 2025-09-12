@@ -1,4 +1,4 @@
-"""Utilities for parsing webhook payloads from external job platforms."""
+"""Утилиты для разбора webhook‑payload от внешних платформ вакансий."""
 # pylint: disable=line-too-long
 
 import json
@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload:  # pylint: disable=too-many-locals
-    """Parse HeadHunter webhook payload into an IncomingPayload."""
+    """Разобрать webhook от HeadHunter в ``IncomingPayload``."""
 
     try:
         data = json.loads(raw.decode() or "{}")
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        logger.warning("HH payload parse error: %s", exc)
+        logger.warning("HH: ошибка разбора payload: %s", exc)
         raise ValueError("invalid HH payload") from exc
 
     action_type = str(data.get("action_type") or "").strip()
@@ -67,7 +67,7 @@ def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload
     ).strip() or None
 
     # Лог для контроля
-    logger.info("hh: parsed nid=%s vacancy_id=%s", negotiation_id, vacancy_id)
+    logger.info("HH: разобрано nid=%s vacancy_id=%s", negotiation_id, vacancy_id)
 
     return IncomingPayload(
         platform="hh",
@@ -80,12 +80,12 @@ def parse_hh_payload(raw: bytes, owner_id: str | None = None) -> IncomingPayload
 
 
 def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-many-locals,too-many-statements
-    """Extract Avito payload from JSON or form-encoded body."""
+    """Извлечь payload Avito из JSON или form-encoded тела."""
     # 1) Безопасно декодируем тело
     try:
         body = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        logger.warning("Avito payload decode error: %s", exc)
+        logger.warning("Avito: ошибка декодирования payload: %s", exc)
         raise ValueError("invalid Avito payload encoding") from exc
 
     # 2) Пытаемся распарсить как JSON, иначе — как форму payload=<json>
@@ -93,13 +93,13 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-ma
     try:
         data = json.loads(body or "{}")
     except json.JSONDecodeError as json_exc:
-        logger.warning("Avito payload JSON decode error: %s", json_exc)
+        logger.warning("Avito: ошибка разбора JSON payload: %s", json_exc)
         form = parse_qs(body)
         if "payload" in form and form["payload"]:
             try:
                 data = json.loads(form["payload"][0])
             except json.JSONDecodeError as form_exc:
-                logger.warning("Avito form payload parse error: %s", form_exc)
+                logger.warning("Avito: ошибка разбора payload формы: %s", form_exc)
                 raise ValueError("invalid Avito payload JSON") from form_exc
         else:
             raise ValueError("missing payload field in Avito form") from json_exc
@@ -114,7 +114,7 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-ma
     ):
         val = payload_root.get("value") or {}
 
-        # produce string always; empty string will trigger Pydantic ValidationError
+        # всегда приводим к строке; пустая строка вызовет Pydantic ValidationError
         chat_id = str(
             val.get("chat_id")
             or data.get("contacts", {}).get("chat", {}).get("value")
@@ -227,7 +227,7 @@ def extract_avito_payload(raw: bytes) -> AvitoPayload:  # pylint: disable=too-ma
 
 
 def parse_avito_payload(payload: AvitoPayload) -> IncomingPayload:
-    """Normalize :class:`AvitoPayload` into :class:`IncomingPayload`."""
+    """Нормализовать :class:`AvitoPayload` в :class:`IncomingPayload`."""
 
     try:
         return IncomingPayload(

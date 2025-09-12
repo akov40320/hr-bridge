@@ -1,4 +1,4 @@
-"""Background scheduler for token refresh, cleanup and task retries."""
+"""Фоновый планировщик для обновления токенов, очистки и повторных попыток задач."""
 # pylint: disable=line-too-long
 
 import asyncio
@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 
 async def refresh_service_tokens() -> None:
-    """Refresh OAuth tokens for all services if they are about to expire."""
+    """Обновить OAuth‑токены всех сервисов, если срок их действия скоро истечёт."""
     s = get_settings()
     client = get_http_client()
 
@@ -51,9 +51,9 @@ async def refresh_service_tokens() -> None:
             await refresh_tokens(
                 config=conf, refresh_token=data["refresh_token"], http_client=client
             )
-            log.info("%s token refreshed owner=%s", service, owner_id or "-")
+            log.info("токен %s обновлён owner=%s", service, owner_id or "-")
         except Exception:  # pylint: disable=broad-exception-caught
-            log.exception("failed to refresh %s token owner=%s", service, owner_id or "-")
+            log.exception("не удалось обновить токен %s owner=%s", service, owner_id or "-")
 
     await _refresh("amo")
 
@@ -69,17 +69,17 @@ async def refresh_service_tokens() -> None:
 
 
 async def cleanup_dedup_tables() -> None:
-    """Clean deduplication table from old entries."""
+    """Очистить таблицу дедупликации от старых записей."""
     try:
         removed = await cleanup_older_than()
         if removed:
-            log.info("dedup cleanup removed=%s", removed)
+            log.info("очистка dedup удалено=%s", removed)
     except Exception:  # pylint: disable=broad-exception-caught
-        log.exception("dedup cleanup failed")
+        log.exception("ошибка очистки dedup")
 
 
 async def retry_overdue_tasks(limit: int = 100) -> None:
-    """Republish tasks from DLQ back to retry queue."""
+    """Переопубликовать задачи из DLQ обратно в очередь повторов."""
     try:
         await rabbitmq.connect()
         s = get_settings()
@@ -99,23 +99,23 @@ async def retry_overdue_tasks(limit: int = 100) -> None:
             finally:
                 await msg.ack()
         if count:
-            log.info("requeued %s tasks from DLQ", count)
+            log.info("перепоставлено %s задач из DLQ", count)
     except Exception:  # pylint: disable=broad-exception-caught
-        log.exception("retry_overdue_tasks failed")
+        log.exception("ошибка retry_overdue_tasks")
 
 
 async def _periodic(interval: int, coro):
     while True:
         try:
             await coro()
-            log.info("%s completed successfully", coro.__name__)
+            log.info("%s успешно завершён", coro.__name__)
         except Exception:  # pylint: disable=broad-exception-caught
-            log.exception("%s failed", coro.__name__)
+            log.exception("%s завершился ошибкой", coro.__name__)
         await asyncio.sleep(interval)
 
 
 async def run_forever() -> None:
-    """Run scheduler tasks indefinitely."""
+    """Запускать задания планировщика бесконечно."""
     await asyncio.gather(
         _periodic(300, refresh_service_tokens),
         _periodic(3600, cleanup_dedup_tables),

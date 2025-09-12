@@ -1,7 +1,7 @@
-"""Initialization for the services package.
+"""Инициализация пакета ``services``.
 
-This package exposes selected helper functions for use throughout the
-application, such as :func:`tg_send_with_retry`.
+Пакет предоставляет отдельные вспомогательные функции для всего
+приложения, такие как :func:`tg_send_with_retry`.
 """
 
 from .telegram import tg_send_with_retry

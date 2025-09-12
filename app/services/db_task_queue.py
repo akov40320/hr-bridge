@@ -1,4 +1,4 @@
-"""Database-backed task queue ensuring idempotent processing."""
+"""Очередь задач на базе БД, обеспечивающая идемпотентную обработку."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.db.models import Task
 
 
 async def enqueue_task(task_id: str, candidate_id: str, payload: Dict[str, Any]) -> Task:
-    """Insert a new task if it doesn't exist and return it."""
+    """Вставить новую задачу, если она отсутствует, и вернуть её."""
     async with get_session() as session:
         stmt = (
             insert(Task)
@@ -29,11 +29,11 @@ async def enqueue_task(task_id: str, candidate_id: str, payload: Dict[str, Any])
 
 
 async def process_next_task(handler: Callable[[Dict[str, Any]], Awaitable[None]]) -> bool:
-    """Fetch the next pending task and process it with ``handler``.
+    """Извлечь следующую ожидающую задачу и обработать её с помощью ``handler``.
 
-    Returns ``True`` if a task was processed, otherwise ``False``.
-    If ``handler`` raises an exception, the task is returned to ``pending``
-    and the exception is propagated.
+    Возвращает ``True``, если задача была обработана, иначе ``False``.
+    Если ``handler`` возбуждает исключение, задача возвращается в состояние
+    ``pending``, а исключение пробрасывается дальше.
     """
     async with get_session() as session:
         row = (
