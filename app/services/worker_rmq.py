@@ -46,7 +46,7 @@ def _is_transient(exc: Exception) -> bool:
 async def handle_debug_echo(payload: dict) -> None:
     """Залогировать отладочное сообщение, пришедшее из очереди."""
 
-    logger.info("RMQ ECHO: %s", payload.get("msg"))
+    logger.info("RMQ эхо: %s", payload.get("msg"))
 
 
 HANDLERS = {

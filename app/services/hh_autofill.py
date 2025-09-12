@@ -1,7 +1,8 @@
-"""Mapping utility for the HH autofill service.
+"""Утилита сопоставления для сервиса автозаполнения HH.
 
-The module fetches Amo CRM pipeline statuses and builds a mapping to
-HeadHunter status codes. The resulting mapping is stored for later reuse.
+Модуль получает статусы воронок Amo CRM и строит сопоставление с кодами
+статусов HeadHunter. Полученное сопоставление сохраняется для повторного
+использования.
 """
 
 import re
@@ -33,9 +34,9 @@ def _load_stage_mapping(path: Path) -> dict[str, str]:
             data = yaml.safe_load(f) or {}
         return {str(k): str(v) for k, v in data.items()}
     except FileNotFoundError:
-        log.warning("hh-autofill: mapping file %s not found", path)
+        log.warning("hh-autofill: файл сопоставления %s не найден", path)
     except yaml.YAMLError as e:
-        log.warning("hh-autofill: cannot parse mapping file %s: %s", path, e)
+        log.warning("hh-autofill: не удалось разобрать файл сопоставления %s: %s", path, e)
     return {}
 
 
@@ -43,7 +44,7 @@ _STAGE_NAME_TO_HH: dict[str, str] = {}
 
 
 def reload_stage_mapping(path: Path | None = None) -> None:
-    """Reload stage mapping from YAML file."""
+    """Перезагрузить сопоставление стадий из файла YAML."""
     global _STAGE_NAME_TO_HH  # pylint: disable=global-statement
     _STAGE_NAME_TO_HH = _load_stage_mapping(path or MAPPING_FILE)
 
@@ -58,7 +59,7 @@ async def _fetch_pipeline_statuses(
     try:
         tok = await DbTokenStore("amo").load()
     except (RuntimeError, SQLAlchemyError) as e:
-        log.warning("hh-autofill: no amo token: %s", e)
+        log.warning("hh-autofill: нет токена amo: %s", e)
         return []
 
     s = get_settings()
@@ -76,7 +77,7 @@ async def _fetch_pipeline_statuses(
         pj = r.json() or {}
         return (pj.get("_embedded") or {}).get("statuses") or []
     except (httpx.HTTPError, ValueError) as e:
-        log.warning("hh-autofill: cannot fetch pipeline %s: %s", pipeline_id, e)
+        log.warning("hh-autofill: не удалось получить воронку %s: %s", pipeline_id, e)
         return []
 
 
@@ -96,12 +97,12 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
 
     for label, pid in pipelines:
         if not pid:
-            log.info("hh-autofill: pipeline %s is not configured — skip", label)
+            log.info("hh-autofill: воронка %s не настроена — пропуск", label)
             continue
 
         statuses = await _fetch_pipeline_statuses(int(pid), client)
         if not statuses:
-            log.info("hh-autofill: no statuses for pipeline %s (%s)", label, pid)
+            log.info("hh-autofill: нет статусов для воронки %s (%s)", label, pid)
             continue
 
         found = 0
@@ -117,12 +118,12 @@ async def autofill_hh_mapping(client: httpx.AsyncClient) -> dict[str, str]:
             result[sid] = hh_code
             found += 1
 
-        log.info("hh-autofill: pipeline %s (%s): mapped %d statuses", label, pid, found)
+        log.info("hh-autofill: воронка %s (%s): сопоставлено %d статусов", label, pid, found)
 
     if result != existing:
         await hh_map_set(result)
-        log.info("hh-autofill: hh_mapping table updated with %d keys", len(result))
+        log.info("hh-autofill: таблица hh_mapping обновлена, ключей: %d", len(result))
     else:
-        log.info("hh-autofill: mapping up-to-date (%d keys)", len(result))
+        log.info("hh-autofill: сопоставление актуально (%d ключей)", len(result))
 
     return result

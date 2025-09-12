@@ -1,4 +1,4 @@
-"""Helpers for enriching AmoCRM leads with applicant data."""
+"""Помощники для обогащения сделок AmoCRM данными кандидата."""
 
 import logging
 
@@ -17,7 +17,7 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
     vacancy_title: str | None,
     email: str | None,
 ) -> None:
-    """Attach extra data to a newly created lead."""
+    """Прикрепить дополнительные данные к только что созданной сделке."""
     s = get_settings()
 
     contact_id = None
@@ -26,8 +26,8 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
             cr = await amo.create_contact(applicant_name or "Кандидат", phone, email)
             contact_id = cr["_embedded"]["contacts"][0]["id"]
             await amo.link_contact_to_lead(lead_id, contact_id)
-        except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-            logger.warning("create/link contact failed: %s", e)
+        except Exception as e:  # pragma: no cover - только лог  # pylint: disable=broad-exception-caught
+            logger.warning("не удалось создать/привязать контакт: %s", e)
 
     cf: dict[int, str] = {}
     if s.AMO_CF_LEAD_CITY_ID:
@@ -42,8 +42,8 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
         cf[s.AMO_CF_LEAD_APPLICANT_EMAIL_ID] = email or ""
     try:
         await amo.update_lead_custom_fields(lead_id, cf)
-    except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-        logger.warning("update lead CF failed: %s", e)
+    except Exception as e:  # pragma: no cover - только лог  # pylint: disable=broad-exception-caught
+        logger.warning("не удалось обновить пользовательские поля сделки: %s", e)
 
     if not any(
         [
@@ -64,8 +64,8 @@ async def enrich_lead(  # pylint: disable=too-many-arguments
                 f"• Email: {email or '-'}"
             )
             await amo.add_note(lead_id, note)
-        except Exception as e:  # pragma: no cover - log only  # pylint: disable=broad-exception-caught
-            logger.warning("add note (candidate data) error: %s", e)
+        except Exception as e:  # pragma: no cover - только лог  # pylint: disable=broad-exception-caught
+            logger.warning("ошибка добавления заметки (данные кандидата): %s", e)
 
 
 __all__ = ["enrich_lead"]

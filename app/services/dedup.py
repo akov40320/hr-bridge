@@ -1,4 +1,4 @@
-"""Utilities for deduplicating events."""
+"""Утилиты для удаления дубликатов событий."""
 
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ from app.db.models import EventDedup
 
 
 def calc_key(source: str, payload: str | bytes) -> str:
-    """Return deduplication key for an event payload."""
+    """Вернуть ключ дедупликации для полезной нагрузки события."""
     if isinstance(payload, str):
         payload = payload.encode("utf-8")
     return f"{source}:{hashlib.sha256(payload).hexdigest()}"
 
 
 async def check_and_store(key: str) -> bool:
-    """Store the key if it's not present and return whether it was inserted."""
+    """Сохранить ключ, если его нет, и вернуть, был ли он вставлен."""
     async with get_session() as s:
         stmt = (
             insert(EventDedup)
@@ -34,7 +34,7 @@ async def check_and_store(key: str) -> bool:
 
 
 async def cleanup_older_than(seconds: int = 72 * 3600) -> int:
-    """Remove deduplication entries older than the given number of seconds."""
+    """Удалить записи дедупликации, старше указанного количества секунд."""
     async with get_session() as s:
         q = text(
             "DELETE FROM events_dedup WHERE created_at < (NOW() AT TIME ZONE 'utc') - "

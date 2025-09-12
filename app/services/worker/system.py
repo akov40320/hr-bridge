@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def handle_system_hh_autofill(_payload: dict) -> None:
     """Построить сопоставление статусов HH на основе воронок AmoCRM."""
-    logger.info("system.hh_autofill")
+    logger.info("system: автозаполнение HH")
     tok = await DbTokenStore("amo").load()
     if (
         not tok

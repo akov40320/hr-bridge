@@ -31,7 +31,7 @@ def _int(name: str, default: int) -> int:
     """
     try:
         return int(os.getenv(name, str(default)))
-    except ValueError:  # pragma: no cover - defensive
+    except ValueError:  # pragma: no cover - защитный код
         logger.warning("Некорректное целое значение для %s, "
             +
             "используется по умолчанию %s",
@@ -259,7 +259,7 @@ class RabbitMQClient:
                 tg.create_task(_worker())
 
 
-# Global instance used across the project
+# Глобальный экземпляр, используемый по всему проекту
 rabbitmq = RabbitMQClient()
 
 

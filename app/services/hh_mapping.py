@@ -1,8 +1,8 @@
-"""Utilities for storing and retrieving HeadHunter status mappings.
+"""Утилиты для сохранения и получения сопоставлений статусов HeadHunter.
 
-The mappings are stored in the ``hh_mapping`` database table and mirrored in
-an in-memory cache for fast access.  The cache has a simple TTL to avoid
-frequent database hits.
+Сопоставления хранятся в таблице БД ``hh_mapping`` и дублируются в
+кэше в памяти для быстрого доступа. Кэш имеет простой TTL, чтобы избегать
+частых обращений к базе данных.
 """
 
 from __future__ import annotations
@@ -16,15 +16,15 @@ from sqlalchemy import delete, insert, select
 from app.db.db import get_session
 from app.db.models import HhMapping
 
-# Cache settings
-_CACHE_TTL = 60  # seconds
+# Настройки кэша
+_CACHE_TTL = 60  # секунд
 _cache: dict[str, str] = {}
 _cache_expire: float = 0
 _lock = asyncio.Lock()
 
 
 async def load() -> dict[str, str]:
-    """Load mappings from the database and refresh the cache."""
+    """Загрузить сопоставления из базы данных и обновить кэш."""
 
     async with get_session() as s:
         rows = (await s.execute(select(HhMapping))).scalars().all()
@@ -39,7 +39,7 @@ async def load() -> dict[str, str]:
 
 
 async def get(status_id: int) -> Optional[str]:
-    """Return the mapped value for ``status_id`` if present."""
+    """Вернуть значение сопоставления для ``status_id``, если оно есть."""
 
     async with _lock:
         if _cache and time.time() < _cache_expire:
@@ -50,7 +50,7 @@ async def get(status_id: int) -> Optional[str]:
 
 
 async def set_all(mapping: dict[str, str]) -> dict[str, str]:
-    """Replace mapping in the database and refresh the cache."""
+    """Заменить сопоставление в базе данных и обновить кэш."""
 
     async with get_session() as s:
         await s.execute(delete(HhMapping))

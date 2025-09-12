@@ -1,6 +1,6 @@
-"""Worker handlers for the HeadHunter (hh.ru) service.
+"""Обработчики воркера для сервиса HeadHunter (hh.ru).
 
-Функции-обработчики воркера. Проксируют задачи в адаптер HH.
+Функции-обработчики воркера проксируют задачи в адаптер HH.
 """
 
 import logging
@@ -26,7 +26,7 @@ async def handle_hh_send_message(payload: dict):
     text = payload["text"]
     owner_id = payload.get("owner_id")
 
-    logger.info("hh.send_message: %s текст=%r", nid, text[:40])
+    logger.info("hh: отправка сообщения: %s текст=%r", nid, text[:40])
     client = get_http_client()
     await hh_adapt.send_message(
         response_id=nid,
@@ -54,7 +54,7 @@ async def handle_hh_set_state(payload: dict):
         raise ValueError("action_id or target_state is required")
     owner_id = payload.get("owner_id")
 
-    logger.info("hh.set_state: %s -> %s", nid, target_state)
+    logger.info("hh: изменение состояния: %s -> %s", nid, target_state)
     client = get_http_client()
     await hh_adapt.set_employer_state(
         response_id=nid,
