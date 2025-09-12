@@ -1,4 +1,4 @@
-"""Persistence helpers for mapping Telegram chats to leads and conversations."""
+"""Вспомогательные функции для сохранения сопоставления чатов Telegram с лидами и диалогами."""
 
 from typing import Optional
 
@@ -11,10 +11,10 @@ from app.db.models import TgLink
 
 
 async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:
-    """Create or update mapping between a Telegram user and lead.
+    """Создаёт или обновляет сопоставление между пользователем Telegram и лидом.
 
-    Ensures that the `TgLink` entry reflects the specified `lead_id` for
-    the given user and bot kind, refreshing the ``updated_at`` timestamp.
+    Гарантирует, что запись `TgLink` отражает указанный `lead_id` для
+    данного пользователя и типа бота, обновляя поле ``updated_at``.
     """
 
     async with get_session() as s:
@@ -47,7 +47,7 @@ async def upsert_tg_link(user_id: int, bot_kind: str, lead_id: int) -> None:
 
 
 async def set_conversation(user_id: int, bot_kind: str, conversation_id: str) -> None:
-    """Persist conversation identifier for a user and bot kind."""
+    """Сохраняет идентификатор диалога для пользователя и типа бота."""
 
     async with get_session() as s:
         await s.execute(
@@ -59,7 +59,7 @@ async def set_conversation(user_id: int, bot_kind: str, conversation_id: str) ->
 
 
 async def get_by_lead(lead_id: int) -> list[TgLink]:
-    """Return all chat links associated with the given lead."""
+    """Возвращает все ссылки чатов, связанные с указанным лидом."""
 
     async with get_session() as s:
         res = await s.execute(select(TgLink).where(TgLink.lead_id == lead_id))
@@ -67,7 +67,7 @@ async def get_by_lead(lead_id: int) -> list[TgLink]:
 
 
 async def get_by_user(user_id: int, bot_kind: str) -> Optional[TgLink]:
-    """Fetch chat link for a user and bot kind if present."""
+    """Возвращает ссылку на чат для пользователя и типа бота, если она существует."""
 
     async with get_session() as s:
         return (await s.execute(
@@ -76,7 +76,7 @@ async def get_by_user(user_id: int, bot_kind: str) -> Optional[TgLink]:
 
 
 async def get_by_conversation(conversation_id: str) -> list[TgLink]:
-    """Return chat links sharing the specified conversation identifier."""
+    """Возвращает ссылки на чаты, имеющие указанный идентификатор диалога."""
 
     async with get_session() as s:
         res = await s.execute(
