@@ -5,7 +5,8 @@ from typing import Optional
 import httpx
 
 from app.core.config import get_settings
-from app.core.oauth_helpers import avito_access
+from app.core.oauth_helpers import avito_config
+from app.api.oauth2 import ensure_fresh_access
 from app.core.retry import with_retry
 from ._requests import request_with_retry
 
@@ -17,7 +18,7 @@ class AvitoError(Exception):
 async def _access_token(owner_id: Optional[str], client: httpx.AsyncClient) -> str:
     """Retrieve a fresh access token for the Avito API."""
 
-    return await avito_access(client, owner_id)
+    return await ensure_fresh_access(config=avito_config(owner_id), http_client=client)
 
 
 async def send_message(

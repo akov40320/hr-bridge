@@ -6,7 +6,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.retry import with_retry
-from app.core.oauth_helpers import hh_access
+from app.core.oauth_helpers import hh_config
+from app.api.oauth2 import ensure_fresh_access
 from ._requests import request_with_retry
 
 
@@ -37,7 +38,7 @@ async def set_employer_state(
 ) -> None:
     """Перевести отклик в указанный этап через action."""
     s = get_settings()
-    access = await hh_access(client, employer_id)
+    access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
     ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
                                                       None) or "hr-bridge/1.0 (support@example.com)"
@@ -70,7 +71,7 @@ async def send_message(
 ) -> None:
     """Отправить сообщение в рамках переписки по отклику."""
     s = get_settings()
-    access = await hh_access(client, employer_id)
+    access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
     ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
                                                       None) or "hr-bridge/1.0 (support@example.com)"
@@ -103,7 +104,7 @@ async def fetch_applicant_details(  # pylint: disable=too-many-locals
 ) -> dict:
     """Fetch basic applicant information such as name, city, phone and email."""
     s = get_settings()
-    access = await hh_access(client, employer_id)
+    access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
     headers = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
     base_url = s.HH_API_BASE.rstrip("/")
