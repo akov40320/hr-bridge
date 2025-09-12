@@ -1,4 +1,4 @@
-"""Background task handlers used by RMQ consumer."""
+"""Обработчики фоновых задач, используемых потребителем RMQ."""
 
 import time as _time
 
@@ -20,7 +20,7 @@ from app.services.worker.mirror import (
 
 
 async def handle_task(p: dict, _attempts: int = 0):  # pylint: disable=too-many-return-statements,too-many-branches
-    """Process background tasks based on platform and action."""
+    """Обработать фоновую задачу в зависимости от платформы и действия."""
     if p.get("platform") == "system" and p.get("action") == "hh_autofill":
 
         tok = await DbTokenStore("amo").load()

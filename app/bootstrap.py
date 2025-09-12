@@ -1,9 +1,8 @@
-"""Utilities for seeding persistent storage during application start-up.
+"""Утилиты для инициализации постоянного хранилища при запуске приложения.
 
-This module provides helpers used when the application boots to ensure that
-authentication tokens required by integrations are available. If tokens are
-missing from the database but provided via environment variables, they are
-persisted so that subsequent components can access them.
+Модуль содержит помощники, которые при старте приложения проверяют наличие
+требуемых для интеграций токенов. Если в базе токены отсутствуют, но заданы
+в переменных окружения, они сохраняются для последующего использования.
 """
 
 import logging
@@ -18,11 +17,11 @@ settings = get_settings()
 
 
 async def ensure_tokens() -> None:
-    """Populate the token store from environment variables when necessary.
+    """Заполнить хранилище токенов из переменных окружения при необходимости.
 
-    For each supported service, this function checks whether a token is
-    already persisted. If not, it attempts to load credentials from the
-    corresponding environment variables and saves them to the database.
+    Для каждого поддерживаемого сервиса проверяется наличие сохранённых
+    токенов. Если их нет, берутся значения из переменных окружения и
+    сохраняются в базу данных.
     """
     # пара (service, ENV-префикс)
     pairs = [("amo", "AMO"), ("hh", "HH"), ("avito", "AVITO")]
@@ -36,7 +35,7 @@ async def ensure_tokens() -> None:
             # токен отсутствует, попробуем загрузить из ENV
             pass
         except Exception:  # pragma: no cover - log only
-            log.exception("Failed to load token for service %s", service)
+            log.exception("Не удалось загрузить токен для сервиса %s", service)
             raise
 
         at = getattr(settings, f"{prefix}_ACCESS_TOKEN", None)

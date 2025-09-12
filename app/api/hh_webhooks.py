@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.oauth2 import OAuth2Config, ensure_fresh_access
+from app.api.oauth2 import ensure_fresh_access
 from app.core.oauth_helpers import hh_config
 from app.db.token_store import DbTokenStore
 from app.core.config import get_settings
@@ -134,7 +134,6 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:  # pylint: disab
         log.warning("HH webhook: нет валидных событий — пропускаю регистрацию")
         return
 
-    s = get_settings()
     for employer_id in owners:
         url = f"{base_url.rstrip('/')}/{employer_id}"
         try:

@@ -1,4 +1,4 @@
-"""Utility helpers used across API modules."""
+"""Вспомогательные утилиты, используемые в модулях API."""
 
 import re
 import html
@@ -13,10 +13,10 @@ def _plain_text(s: str) -> str:
 
 
 def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
-    """Extract lead/status pairs from AmoCRM webhook form.
+    """Извлечь пары (lead_id, status_id) из формы вебхука AmoCRM.
 
-    Args:
-        form: Mapping of form field names to their values.
+    Аргументы:
+        form: Отображение имён полей формы в их значения.
     """
     keys = list(form.keys())
     idxs: set[int] = set()
@@ -38,7 +38,7 @@ def events_from_form(form: Mapping[str, str]) -> list[tuple[int, int]]:
 
 
 def route_kind(*, desc: str = "", raw: str = "") -> str:
-    """Return pipeline kind based on hashtags in vacancy description or raw text."""
+    """Определить тип воронки по хештегам в описании вакансии или тексте."""
     blob = " ".join([_plain_text(desc), (raw or "")])
     m = HASHTAG_RE.search(blob)
     if not m:
@@ -62,7 +62,7 @@ _REFUSAL_NAMES = {
 
 
 def is_refusal_code(code: str | None) -> bool:
-    """Return ``True`` if the given code represents a refusal."""
+    """Вернуть ``True``, если указанный код означает отказ."""
     if not code:
         return False
     return code.startswith("discard") or code.startswith("reject")
@@ -84,7 +84,7 @@ REFUSAL_TEXT_TO_HH = {
 
 
 def norm_reason(s: str | None) -> str:
-    """Normalize reason text by stripping whitespace and lowering case."""
+    """Нормализовать причину: обрезать пробелы и привести к нижнему регистру."""
     return (s or "").strip().lower()
 
 

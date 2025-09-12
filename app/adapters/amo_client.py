@@ -1,4 +1,4 @@
-"""Client for interacting with the AmoCRM API."""
+"""Клиент для взаимодействия с AmoCRM API."""
 
 import time
 import logging
@@ -10,14 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 class ReauthRequired(Exception):
-    """Raised when reauthorization with AmoCRM is required."""
+    """Требуется повторная авторизация в AmoCRM."""
 
 
 class AmoClient:
-    """High level wrapper around the AmoCRM HTTP API."""
+    """Высокоуровневая обёртка над HTTP‑API AmoCRM."""
 
     def __init__(self, tokens: TokenData, store: DbTokenStore, client: httpx.AsyncClient):
-        """Initialize the client with token data and an HTTP client."""
+        """Инициализировать клиент данными токенов и HTTP‑клиентом."""
         self._s = get_settings()
         self.base = self._s.AMO_BASE_URL.rstrip("/")
         self.store = store
@@ -28,18 +28,18 @@ class AmoClient:
 
     @classmethod
     async def create(cls, client: httpx.AsyncClient):
-        """Factory method building the client using tokens from storage."""
+        """Фабричный метод: создать клиент, загрузив токены из хранилища."""
         store = DbTokenStore("amo")
         tokens = await store.load()
         return cls(tokens, store, client)
 
     @property
     def headers(self):
-        """Default headers for AmoCRM requests."""
+        """Заголовки по умолчанию для запросов AmoCRM."""
         return {"Authorization": f"Bearer {self._access}", "Accept": "application/json"}
 
     async def _refresh_token(self) -> None:
-        """Refresh an expired access token using the refresh token."""
+        """Обновить просроченный access‑токен с помощью refresh‑токена."""
         url = f"{self.base}/oauth2/access_token"
         payload = {
             "client_id": self._s.AMO_CLIENT_ID,
@@ -67,12 +67,12 @@ class AmoClient:
         ))
 
     async def _ensure_token(self):
-        """Refresh the token if it will expire soon."""
+        """Обновить токен, если он скоро истечёт."""
         if time.time() >= self._expires_at - 120:
             await self._refresh_token()
 
     async def _request(self, method: str, url: str, **kw):
-        """Send an HTTP request handling token refresh and error logging."""
+        """Отправить HTTP‑запрос, обрабатывая обновление токена и логирование ошибок."""
         await self._ensure_token()
         r = await self.client.request(method, url, headers=self.headers, timeout=30, **kw)
         if r.status_code == 401:
@@ -81,7 +81,7 @@ class AmoClient:
         if r.is_error:
             payload = kw.get("json") or kw.get("data")
             logger.error(
-                "AMO ERROR: status=%s, text=%s, url=%s, payload=%s",
+                "AMO ОШИБКА: status=%s, text=%s, url=%s, payload=%s",
                 r.status_code,
                 r.text,
                 getattr(r, "url", url),
@@ -91,18 +91,18 @@ class AmoClient:
         return r.json() if r.content else None
 
     async def create_leads(self, leads: list[dict]):
-        """Create AmoCRM leads in bulk."""
+        """Создать несколько сделок (leads) в AmoCRM."""
         url = f"{self.base}/api/v4/leads"
         return await self._request("POST", url, json=leads)
 
     async def add_tags(self, lead_id: int, tags: list[str]):
-        """Attach tags to a lead."""
+        """Добавить теги к сделке."""
         url = f"{self.base}/api/v4/leads"
         body = [{"id": lead_id, "_embedded": {"tags": [{"name": t} for t in tags]}}]
         return await self._request("PATCH", url, json=body)
 
     async def add_note(self, lead_id: int, text: str):
-        """Add a common note to a lead's timeline."""
+        """Добавить обычную заметку в таймлайн сделки."""
         url = f"{self.base}/api/v4/leads/notes"
         body = [{
             "entity_id": lead_id,
@@ -114,7 +114,7 @@ class AmoClient:
     async def create_contact(
         self, name: str, phone: str | None = None, email: str | None = None
     ):
-        """Create a contact with optional phone and email."""
+        """Создать контакт с необязательными телефоном и email."""
         url = f"{self.base}/api/v4/contacts"
         cfv = []
         if phone:
@@ -125,19 +125,19 @@ class AmoClient:
         return await self._request("POST", url, json=body)
 
     async def link_contact_to_lead(self, lead_id: int, contact_id: int):
-        """Link a contact to a lead."""
+        """Привязать контакт к сделке."""
         url = f"{self.base}/api/v4/leads/{lead_id}/link"
         body = [{"to_entity_id": contact_id, "to_entity_type": "contacts"}]
         return await self._request("POST", url, json=body)
 
     async def update_status(self, lead_id: int, status_id: int):
-        """Update the status of a lead."""
+        """Обновить этап (status) сделки."""
         url = f"{self.base}/api/v4/leads"
         body = [{"id": lead_id, "status_id": status_id}]
         return await self._request("PATCH", url, json=body)
 
     async def update_lead_custom_fields(self, lead_id: int, fields: dict[int, str]):
-        """Update custom field values for a lead."""
+        """Обновить значения пользовательских полей сделки."""
         if not fields:
             return None
         url = f"{self.base}/api/v4/leads"
@@ -150,22 +150,22 @@ class AmoClient:
         return await self._request("PATCH", url, json=body)
 
     async def get_lead(self, lead_id: int):
-        """Retrieve a lead by its identifier."""
+        """Получить сделку по идентификатору."""
         url = f"{self.base}/api/v4/leads/{lead_id}"
         return await self._request("GET", url)
 
     async def get_lead_with_contacts(self, lead_id: int):
-        """Retrieve a lead with embedded contacts."""
+        """Получить сделку вместе с контактами (embedded)."""
         url = f"{self.base}/api/v4/leads/{int(lead_id)}?with=contacts"
         return await self._request("GET", url)
 
     async def bind_chat_to_contact(self, contact_id: int, chat_id: str):
-        """Bind a chat to a contact (POST /api/v4/contacts/chats).
+        """Привязать чат к контакту (POST /api/v4/contacts/chats).
 
-        AmoCRM requires ``scope_id`` when working with custom channels via the
-        AmoChats API. Without it the server responds with
-        ``Channel must be linked to your client``. Include the configured
-        ``AMO_CHATS_SCOPE_ID`` alongside identifiers so the chat can be linked.
+        AmoCRM требует ``scope_id`` при работе с кастомными каналами через
+        AmoChats API. Без него сервер отвечает
+        ``Channel must be linked to your client``. Передавайте настроенный
+        ``AMO_CHATS_SCOPE_ID`` вместе с идентификаторами, чтобы связать чат.
         """
         url = f"{self.base}/api/v4/contacts/chats"
         body = [

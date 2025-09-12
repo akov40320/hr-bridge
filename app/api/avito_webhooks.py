@@ -8,9 +8,10 @@ from typing import Any
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.oauth2 import OAuth2Config, ensure_fresh_access
+from app.api.oauth2 import ensure_fresh_access
 from app.db.token_store import DbTokenStore
 from app.core.config import get_settings
+from app.core.oauth_helpers import avito_config
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +44,8 @@ def _secret() -> str | None:
 
 
 async def _auth_headers(owner_id: str, client: httpx.AsyncClient) -> dict[str, str]:
-    """Достаём свежий access_token для Аккаунта Avito конкретного владельца."""
-    s = get_settings()
-    access = await avito_access(client, owner_id)
+    """Build Authorization headers using a fresh Avito access token."""
+    access = await ensure_fresh_access(config=avito_config(owner_id), http_client=client)
     return {
         "Authorization": f"Bearer {access}",
         "Accept": "application/json",
@@ -202,4 +202,8 @@ async def ensure_avito_webhooks(client: httpx.AsyncClient) -> None:  # pylint: d
                 log.info("Avito applications webhook: уже настроено -> %s", url)
         except httpx.HTTPError as e:
             log.exception("Avito applications webhook: ошибка регистрации: %s", e)
+
+
+
+
 

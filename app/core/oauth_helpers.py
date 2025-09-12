@@ -1,8 +1,8 @@
-"""Small helpers to build OAuth2 configs and fetch fresh access tokens.
+"""Небольшие помощники для сборки конфигов OAuth2 и получения свежих токенов.
 
-Centralizing this logic avoids duplication and circular imports.
-Imports from ``app.api.oauth2`` are performed lazily inside functions to
-avoid importing the FastAPI router package during low-level adapter imports.
+Централизация логики позволяет избежать дублирования и циклических импортов.
+Импорты из ``app.api.oauth2`` выполняются лениво внутри функций, чтобы не
+подтягивать пакет с FastAPI‑роутерами на низком уровне адаптеров.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from app.core.config import get_settings
 
 
 def hh_config(owner_id: str | None):  # -> OAuth2Config
-    """Build HH OAuth2Config lazily to avoid import cycles."""
+    """Построить HH OAuth2Config лениво, чтобы избежать циклических импортов."""
     # local import to avoid importing app.api at module import time
     from app.api.oauth2 import OAuth2Config  # pylint: disable=import-outside-toplevel
 
@@ -29,7 +29,7 @@ def hh_config(owner_id: str | None):  # -> OAuth2Config
 
 
 def avito_config(owner_id: str | None):  # -> OAuth2Config
-    """Build Avito OAuth2Config lazily to avoid import cycles."""
+    """Построить Avito OAuth2Config лениво, чтобы избежать циклических импортов."""
     from app.api.oauth2 import OAuth2Config  # pylint: disable=import-outside-toplevel
 
     s = get_settings()
@@ -45,14 +45,14 @@ def avito_config(owner_id: str | None):  # -> OAuth2Config
 
 
 async def hh_access(http_client: httpx.AsyncClient, owner_id: str | None) -> str:
-    """Return fresh HH access token for ``owner_id`` (imports lazily)."""
+    """Вернуть свежий HH access token для ``owner_id`` (ленивые импорты)."""
     from app.api.oauth2 import ensure_fresh_access  # pylint: disable=import-outside-toplevel
 
     return await ensure_fresh_access(config=hh_config(owner_id), http_client=http_client)
 
 
 async def avito_access(http_client: httpx.AsyncClient, owner_id: str | None) -> str:
-    """Return fresh Avito access token for ``owner_id`` (imports lazily)."""
+    """Вернуть свежий Avito access token для ``owner_id`` (ленивые импорты)."""
     from app.api.oauth2 import ensure_fresh_access  # pylint: disable=import-outside-toplevel
 
     return await ensure_fresh_access(config=avito_config(owner_id), http_client=http_client)

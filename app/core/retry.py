@@ -1,4 +1,4 @@
-"""Utility for retrying coroutines with exponential backoff."""
+"""Утилита для повторных попыток корутин с экспоненциальной задержкой."""
 
 import asyncio
 from typing import Awaitable, Callable, TypeVar, Union
@@ -12,11 +12,12 @@ async def with_retry(
     attempts: int,
     is_retryable: RetryCheck,
 ) -> T:
-    """Execute ``coro`` with exponential backoff.
+    """Выполнить ``coro`` с экспоненциальной задержкой между попытками.
 
-    ``is_retryable`` should return either ``True`` to use exponential backoff
-    delay, ``False`` to stop retrying and re-raise the exception, or a ``float``
-    specifying a custom delay before the next attempt.
+    ``is_retryable`` должен вернуть либо ``True`` — использовать
+    экспоненциальную задержку; ``False`` — прекратить попытки и пробросить
+    исключение; или ``float`` — задать пользовательскую задержку перед
+    следующей попыткой.
     """
     backoff = 0.5
     for attempt in range(attempts):

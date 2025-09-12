@@ -1,4 +1,4 @@
-"""Configuration models and helpers for application settings."""
+"""Модели конфигурации и вспомогательные функции для настроек приложения."""
 
 from functools import lru_cache
 from typing import Optional
@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """Настройки приложения, загружаемые из переменных окружения."""
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -167,6 +167,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return cached application settings instance."""
+    """Вернуть кэшированный экземпляр настроек приложения."""
 
     return Settings()

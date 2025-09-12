@@ -1,4 +1,4 @@
-"""Logging setup using a JSON formatter."""
+"""Настройка логирования с использованием JSON‑форматтера."""
 
 import logging
 import sys
@@ -7,12 +7,12 @@ from pythonjsonlogger import jsonlogger
 
 
 def setup_logging(level: str = "INFO") -> None:
-    """Configure root logger with JSON formatting.
+    """Настроить корневой логгер c JSON‑форматированием.
 
-    Parameters
+    Параметры
     ----------
     level: str
-        Logging level for root logger.
+        Уровень логирования для корневого логгера.
     """
 
     root = logging.getLogger()

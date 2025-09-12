@@ -1,4 +1,4 @@
-"""Utilities for sending messages through Telegram with retry support."""
+"""Утилиты для отправки сообщений в Telegram с поддержкой повторов."""
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
@@ -7,14 +7,14 @@ from app.core.retry import with_retry
 
 
 async def tg_send_with_retry(bot: Bot, chat_id: int, text: str) -> None:
-    """Send ``text`` to ``chat_id`` via *bot*, retrying on transient failures."""
+    """Отправить ``text`` в ``chat_id`` через *bot*, повторяя при временных сбоях."""
 
     async def send() -> None:
-        """Perform the actual API call to send the message."""
+        """Выполнить фактический вызов API для отправки сообщения."""
         await bot.send_message(chat_id=chat_id, text=text)
 
     def _is_retryable(exc: Exception):
-        """Return delay or True if *exc* should trigger a retry."""
+        """Вернуть задержку или True, если *exc* должен приводить к повтору."""
         if isinstance(exc, TelegramRetryAfter):
             return exc.retry_after
         if isinstance(exc, TelegramAPIError):

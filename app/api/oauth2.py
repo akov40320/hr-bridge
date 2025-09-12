@@ -1,4 +1,4 @@
-"""Utilities for refreshing OAuth2 tokens and ensuring valid access tokens."""
+"""Утилиты для обновления токенов OAuth2 и получения валидных access‑токенов."""
 
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ from app.http_client import get_http_client
 
 
 class OAuth2RefreshError(Exception):
-    """Raised when the OAuth2 refresh flow fails."""
+    """Исключение, возникающее при неуспешном обновлении OAuth2‑токена."""
 
 
 @dataclass
 class OAuth2Config:
-    """Configuration required for OAuth2 token refreshes."""
+    """Конфигурация, необходимая для обновления OAuth2‑токенов."""
 
     service: str
     token_url: str
@@ -35,7 +35,7 @@ async def refresh_tokens(
     refresh_token: str,
     http_client: httpx.AsyncClient | None = None,
 ) -> TokenData:
-    """Refresh OAuth2 tokens using the provided configuration."""
+    """Обновить OAuth2‑токены согласно переданной конфигурации."""
 
     data = {"grant_type": "refresh_token", "refresh_token": refresh_token}
     auth = (
@@ -81,7 +81,7 @@ async def ensure_fresh_access(
     margin_sec: int = 120,
     http_client: httpx.AsyncClient | None = None,
 ) -> str:
-    """Return a valid access token, refreshing it when necessary."""
+    """Вернуть валидный access‑токен, при необходимости обновив его."""
 
     store = DbTokenStore(config.service, config.owner_id)
     data = await store.load()

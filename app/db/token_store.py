@@ -1,4 +1,4 @@
-"""Utilities for storing and retrieving OAuth tokens."""
+"""Утилиты для хранения и получения OAuth‑токенов."""
 
 import time
 from typing import Optional, TypedDict
@@ -11,7 +11,7 @@ from .models import Token
 
 
 class TokenData(TypedDict):
-    """OAuth token information."""
+    """Информация об OAuth‑токене."""
 
     access_token: str
     refresh_token: str
@@ -92,7 +92,7 @@ class DbTokenStore:
             await s.commit()
 
     async def will_expire_soon(self, margin_sec: int = 120) -> bool:
-        """Check whether the token expires within ``margin_sec`` seconds."""
+        """Проверить, истекает ли токен в течение ``margin_sec`` секунд."""
 
         try:
             data = await self.load()
@@ -102,7 +102,7 @@ class DbTokenStore:
 
     @staticmethod
     async def list_owners(service: str) -> list[str]:
-        """List owners that have tokens for the specified service."""
+        """Список владельцев, у которых есть токены для указанного сервиса."""
 
         async with get_session() as s:
             rows = (

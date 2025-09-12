@@ -1,4 +1,4 @@
-"""RabbitMQ worker entry point."""
+"""Точка входа воркера RabbitMQ."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ WORKER_MAX_ATTEMPTS = int(os.getenv("WORKER_MAX_ATTEMPTS", "6"))
 
 
 def _is_transient(exc: Exception) -> bool:
-    """Return True if the exception is temporary and can be retried."""
+    """Вернуть True, если исключение временное и операцию можно повторить."""
 
     if isinstance(exc, (TimeoutException, ConnectError)):
         return True
@@ -44,7 +44,7 @@ def _is_transient(exc: Exception) -> bool:
 
 
 async def handle_debug_echo(payload: dict) -> None:
-    """Log a debug message coming from the queue."""
+    """Залогировать отладочное сообщение, пришедшее из очереди."""
 
     logger.info("RMQ ECHO: %s", payload.get("msg"))
 
@@ -69,7 +69,7 @@ HANDLERS = {
 async def handle(
     payload: dict, attempts: int, queue_client: RabbitMQClient = rabbitmq
 ) -> None:
-    """Dispatch the payload to the appropriate handler with retry logic."""
+    """Диспетчеризировать payload в соответствующий обработчик с логикой повторов."""
 
     try:
         plat = payload.get("platform")
@@ -82,28 +82,28 @@ async def handle(
         await handler(payload)
 
     except ReauthRequired as err:
-        logger.warning("ReauthRequired: %s", err)
+        logger.warning("Требуется повторная авторизация: %s", err)
         await queue_client.publish_dlq(payload, attempts + 1, f"ReauthRequired: {err}")
 
     except Exception as err:  # pylint: disable=broad-exception-caught
         if _is_transient(err) and attempts + 1 < WORKER_MAX_ATTEMPTS:
             await queue_client.publish_retry(payload, attempts + 1)
         else:
-            logger.exception("Task failed terminally")
+            logger.exception("Задача завершилась окончательной ошибкой")
             await queue_client.publish_dlq(payload, attempts + 1, str(err))
 
 
 async def run_forever(queue_client: RabbitMQClient = rabbitmq) -> None:
-    """Continuously consume tasks from the queue."""
+    """Непрерывно потреблять задачи из очереди."""
     logger.info(
-        "worker:start RABBITMQ_URL=%s EX=%s Q=%s RETRY_Q=%s DLQ=%s",
+        "worker:старт RABBITMQ_URL=%s EX=%s Q=%s RETRY_Q=%s DLQ=%s",
         os.getenv("RABBITMQ_URL"),
         os.getenv("RMQ_EXCHANGE"),
         os.getenv("RMQ_TASK_QUEUE"),
         os.getenv("RMQ_RETRY_QUEUE"),
         os.getenv("RMQ_DLQ_QUEUE"),
     )
-    logger.info("worker:consuming ...")
+    logger.info("worker:потребление ...")
     await queue_client.consume(
         lambda payload, attempts: handle(payload, attempts, queue_client)
     )

@@ -158,18 +158,7 @@ async def fetch_vacancy_description(
 ) -> str:
     """Fetch vacancy description text."""
     s = get_settings()
-    access = await ensure_fresh_access(
-        config=OAuth2Config(
-            service="hh",
-            token_url=s.HH_TOKEN_URL,
-            client_id=s.HH_CLIENT_ID,
-            client_secret=s.HH_CLIENT_SECRET,
-            redirect_uri=s.HH_REDIRECT_URI,
-            use_basic_auth=False,
-            owner_id=employer_id,
-        ),
-        http_client=client,
-    )
+    access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
     resp = await client.get(
         f"{s.HH_API_BASE.rstrip('/')}/vacancies/{vacancy_id}",
@@ -188,18 +177,7 @@ async def fetch_vacancy_title(
 ) -> str:
     """Fetch vacancy title."""
     s = get_settings()
-    access = await ensure_fresh_access(
-        config=OAuth2Config(
-            service="hh",
-            token_url=s.HH_TOKEN_URL,
-            client_id=s.HH_CLIENT_ID,
-            client_secret=s.HH_CLIENT_SECRET,
-            redirect_uri=s.HH_REDIRECT_URI,
-            use_basic_auth=False,
-            owner_id=employer_id,
-        ),
-        http_client=client,
-    )
+    access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
     resp = await client.get(
         f"{s.HH_API_BASE.rstrip('/')}/vacancies/{vacancy_id}",
