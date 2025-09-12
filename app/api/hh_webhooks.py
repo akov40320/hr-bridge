@@ -11,7 +11,8 @@ from typing import Any
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.oauth2 import OAuth2Config, ensure_fresh_access
+from app.api.oauth2 import OAuth2Config
+from app.core.oauth_helpers import hh_access
 from app.db.token_store import DbTokenStore
 from app.core.config import get_settings
 
@@ -137,18 +138,7 @@ async def ensure_hh_webhook(client: httpx.AsyncClient) -> None:  # pylint: disab
     for employer_id in owners:
         url = f"{base_url.rstrip('/')}/{employer_id}"
         try:
-            access = await ensure_fresh_access(
-                config=OAuth2Config(
-                    service="hh",
-                    token_url=s.HH_TOKEN_URL,
-                    client_id=s.HH_CLIENT_ID,
-                    client_secret=s.HH_CLIENT_SECRET,
-                    redirect_uri=s.HH_REDIRECT_URI,
-                    use_basic_auth=False,
-                    owner_id=employer_id,
-                ),
-                http_client=client,
-            )
+            access = await hh_access(client, employer_id)
         except (RuntimeError, SQLAlchemyError):
             continue
 

@@ -8,6 +8,7 @@ import logging
 from app.core.logging_setup import setup_logging
 from app.core.config import get_settings
 from app.api.oauth2 import OAuth2Config, refresh_tokens
+from app.core.oauth_helpers import hh_config, avito_config
 from app.db.token_store import DbTokenStore
 from app.services.dedup import cleanup_older_than
 from app.services.queue import rabbitmq
@@ -58,27 +59,12 @@ async def refresh_service_tokens() -> None:
 
     hh_owners = await DbTokenStore.list_owners("hh")
     for owner in hh_owners:
-        cfg = OAuth2Config(
-            service="hh",
-            token_url=s.HH_TOKEN_URL,
-            client_id=s.HH_CLIENT_ID,
-            client_secret=s.HH_CLIENT_SECRET,
-            redirect_uri=s.HH_REDIRECT_URI,
-            owner_id=owner,
-            use_basic_auth=False,
-        )
+        cfg = hh_config(owner)
         await _refresh("hh", owner_id=owner, cfg=cfg)
 
     avito_owners = await DbTokenStore.list_owners("avito")
     for owner in avito_owners:
-        cfg = OAuth2Config(
-            service="avito",
-            token_url=s.AVITO_TOKEN_URL,
-            client_id=s.AVITO_CLIENT_ID,
-            client_secret=s.AVITO_CLIENT_SECRET,
-            redirect_uri=s.AVITO_REDIRECT_URI,
-            owner_id=owner,
-        )
+        cfg = avito_config(owner)
         await _refresh("avito", owner_id=owner, cfg=cfg)
 
 

@@ -6,7 +6,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.retry import with_retry
-from app.api.oauth2 import ensure_fresh_access, OAuth2Config
+from app.core.oauth_helpers import hh_access
 from ._requests import request_with_retry
 
 
@@ -37,18 +37,7 @@ async def set_employer_state(
 ) -> None:
     """Перевести отклик в указанный этап через action."""
     s = get_settings()
-    access = await ensure_fresh_access(
-        config=OAuth2Config(
-            service="hh",
-            token_url=s.HH_TOKEN_URL,
-            client_id=s.HH_CLIENT_ID,
-            client_secret=s.HH_CLIENT_SECRET,
-            redirect_uri=s.HH_REDIRECT_URI,
-            use_basic_auth=False,
-            owner_id=employer_id,
-        ),
-        http_client=client,
-    )
+    access = await hh_access(client, employer_id)
 
     ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
                                                       None) or "hr-bridge/1.0 (support@example.com)"
@@ -81,18 +70,7 @@ async def send_message(
 ) -> None:
     """Отправить сообщение в рамках переписки по отклику."""
     s = get_settings()
-    access = await ensure_fresh_access(
-        config=OAuth2Config(
-            service="hh",
-            token_url=s.HH_TOKEN_URL,
-            client_id=s.HH_CLIENT_ID,
-            client_secret=s.HH_CLIENT_SECRET,
-            redirect_uri=s.HH_REDIRECT_URI,
-            use_basic_auth=False,
-            owner_id=employer_id,
-        ),
-        http_client=client,
-    )
+    access = await hh_access(client, employer_id)
 
     ua = getattr(s, "HH_USER_AGENT", None) or getattr(s, "APP_USER_AGENT",
                                                       None) or "hr-bridge/1.0 (support@example.com)"
@@ -125,18 +103,7 @@ async def fetch_applicant_details(  # pylint: disable=too-many-locals
 ) -> dict:
     """Fetch basic applicant information such as name, city, phone and email."""
     s = get_settings()
-    access = await ensure_fresh_access(
-        config=OAuth2Config(
-            service="hh",
-            token_url=s.HH_TOKEN_URL,
-            client_id=s.HH_CLIENT_ID,
-            client_secret=s.HH_CLIENT_SECRET,
-            redirect_uri=s.HH_REDIRECT_URI,
-            use_basic_auth=False,
-            owner_id=employer_id,
-        ),
-        http_client=client,
-    )
+    access = await hh_access(client, employer_id)
 
     headers = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
     base_url = s.HH_API_BASE.rstrip("/")

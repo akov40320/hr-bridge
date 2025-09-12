@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.services.dedup import cleanup_older_than
 from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 from app.services.queue import rabbitmq, RabbitMQClient
-from app.api.oauth2 import OAuth2Config, ensure_fresh_access
+from app.core.oauth_helpers import hh_access
 from app.db.token_store import DbTokenStore
 
 router = APIRouter()
@@ -86,18 +86,7 @@ async def hh_states(
     """Return the HeadHunter negotiation states."""
 
     try:
-        access = await ensure_fresh_access(
-            config=OAuth2Config(
-                service="hh",
-                token_url=s.HH_TOKEN_URL,
-                client_id=s.HH_CLIENT_ID,
-                client_secret=s.HH_CLIENT_SECRET,
-                redirect_uri=s.HH_REDIRECT_URI,
-                use_basic_auth=False,
-                owner_id=owner_id,
-            ),
-            http_client=http_client,
-        )
+        access = await hh_access(http_client, owner_id)
     except (RuntimeError, SQLAlchemyError) as exc:
         return {"ok": False, "error": f"no hh token: {exc}"}
 

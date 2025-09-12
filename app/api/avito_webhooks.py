@@ -45,18 +45,7 @@ def _secret() -> str | None:
 async def _auth_headers(owner_id: str, client: httpx.AsyncClient) -> dict[str, str]:
     """Достаём свежий access_token для Аккаунта Avito конкретного владельца."""
     s = get_settings()
-    access = await ensure_fresh_access(
-        config=OAuth2Config(
-            service="avito",
-            token_url=s.AVITO_TOKEN_URL,
-            client_id=s.AVITO_CLIENT_ID,
-            client_secret=s.AVITO_CLIENT_SECRET,
-            redirect_uri=s.AVITO_REDIRECT_URI,
-            use_basic_auth=True,  # у Avito токен-эндпоинт обычно в basic, оставь так если у тебя уже так
-            owner_id=owner_id,
-        ),
-        http_client=client,
-    )
+    access = await avito_access(client, owner_id)
     return {
         "Authorization": f"Bearer {access}",
         "Accept": "application/json",
@@ -213,3 +202,4 @@ async def ensure_avito_webhooks(client: httpx.AsyncClient) -> None:  # pylint: d
                 log.info("Avito applications webhook: уже настроено -> %s", url)
         except httpx.HTTPError as e:
             log.exception("Avito applications webhook: ошибка регистрации: %s", e)
+
