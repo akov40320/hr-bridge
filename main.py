@@ -28,7 +28,7 @@ from app.services.queue import rabbitmq
 
 async def hh_autofill_task() -> None:
     await rabbitmq.publish_task({"platform": "system", "action": "hh_autofill"})
-    log.info("Scheduled hh_autofill queued")
+    log.info("Задача hh_autofill поставлена в очередь")
 
 log = logging.getLogger(__name__)
 setup_logging("INFO")
@@ -65,7 +65,7 @@ async def auto_register_telegram_webhooks() -> None:
     secret = s.TELEGRAM_WEBHOOK_SECRET or None
     allowed = ["message"]
 
-    # master
+    # мастер
     if s.TELEGRAM_MASTER_BOT_TOKEN:
         try:
             async with Bot(s.TELEGRAM_MASTER_BOT_TOKEN) as m_bot:
@@ -76,11 +76,11 @@ async def auto_register_telegram_webhooks() -> None:
                     drop_pending_updates=True,
                 )
                 info = await m_bot.get_webhook_info()
-                log.info("Master webhook set -> %s (pending=%s)", info.url, info.pending_update_count)
+                log.info("Вебхук мастера установлен -> %s (в ожидании=%s)", info.url, info.pending_update_count)
         except Exception:
-            log.exception("Failed to set master webhook")
+            log.exception("Не удалось установить вебхук мастера")
 
-    # operator
+    # оператор
     if s.TELEGRAM_OPERATOR_BOT_TOKEN:
         try:
             async with Bot(s.TELEGRAM_OPERATOR_BOT_TOKEN) as o_bot:
@@ -95,26 +95,26 @@ async def auto_register_telegram_webhooks() -> None:
                         )
                         info = await o_bot.get_webhook_info()
                         log.info(
-                            "Operator webhook set -> %s (pending=%s)",
+                            "Вебхук оператора установлен -> %s (в ожидании=%s)",
                             info.url,
                             info.pending_update_count,
                         )
                         break
                     except TelegramNetworkError as e:
                         log.warning(
-                            "Attempt %d to set operator webhook failed: %s",
+                            "Попытка %d установить вебхук оператора не удалась: %s",
                             attempt + 1,
                             e,
                         )
                         if attempt + 1 == s.TELEGRAM_WEBHOOK_RETRIES:
                             log.exception(
-                                "Failed to set operator webhook after %d attempts",
+                                "Не удалось установить вебхук оператора после %d попыток",
                                 s.TELEGRAM_WEBHOOK_RETRIES,
                             )
                             raise RuntimeError("Failed to set operator webhook") from e
                         await asyncio.sleep(s.TELEGRAM_WEBHOOK_RETRY_DELAY)
         except Exception:
-            log.exception("Failed to set operator webhook")
+            log.exception("Не удалось установить вебхук оператора")
             raise
 
 
@@ -135,16 +135,16 @@ async def on_startup():
         if amo_tok and amo_tok.get("access_token") and int(amo_tok.get("expires_at", 0)) > int(time.time()) + 30:
             if not await load_hh_mapping():
                 await rabbitmq.publish_task({"platform": "system", "action": "hh_autofill"})
-                log.info("Queued hh_autofill on startup")
+                log.info("При запуске поставлена в очередь задача hh_autofill")
     except Exception:
-        log.info("Amo token not ready on startup — hh_autofill will be queued after OAuth")
+        log.info("Токен Amo не готов при запуске — hh_autofill будет поставлена в очередь после OAuth")
 
-    # стартуем RMQ consumer
+    # запускаем потребитель RMQ
     try:
         app.state.rmq_task = asyncio.create_task(rabbitmq.consume(_handle_task, max_attempts=10))
-        log.info("RMQ consumer started")
+        log.info("Потребитель RMQ запущен")
     except Exception:
-        log.exception("Failed to start RMQ consumer")
+        log.exception("Не удалось запустить потребителя RMQ")
 
     client = get_http_client()
     await ensure_hh_webhook(client)
@@ -157,7 +157,7 @@ async def on_startup():
         scheduler.add_job(hh_autofill_task, "interval", hours=s.HH_AUTOFILL_INTERVAL_HOURS)
         scheduler.start()
         app.state.scheduler = scheduler
-        log.info("HH autofill scheduler started interval=%s h", s.HH_AUTOFILL_INTERVAL_HOURS)
+        log.info("Планировщик HH autofill запущен, интервал=%s ч", s.HH_AUTOFILL_INTERVAL_HOURS)
 
 
 @app.on_event("shutdown")
