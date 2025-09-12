@@ -229,6 +229,24 @@ class RabbitMQClient:
                                         )
                                 except aio_exc.AMQPError:  # pragma: no cover - log only
                                     logger.exception("failed to republish to retry/DLQ")
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as e:  # pragma: no cover - unexpected
+                                await message.ack()
+                                try:
+                                    cur_attempts = attempts + 1
+                                    if cur_attempts >= max_attempts:
+                                        await self.publish_dlq(payload, cur_attempts, str(e))
+                                        logger.exception(
+                                            "sent to DLQ after attempts=%s", cur_attempts
+                                        )
+                                    else:
+                                        await self.publish_retry(payload, cur_attempts)
+                                        logger.exception(
+                                            "requeued to retry, attempt=%s", cur_attempts
+                                        )
+                                except aio_exc.AMQPError:  # pragma: no cover - log only
+                                    logger.exception("failed to republish to retry/DLQ")
                 except asyncio.CancelledError:
                     break
                 except aio_exc.AMQPError:  # pragma: no cover - network errors
