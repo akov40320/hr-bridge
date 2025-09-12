@@ -28,7 +28,7 @@ router = APIRouter()
 
 
 async def parse_status_events(request: Request) -> list[tuple[int, int]]:
-    """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РїР°СЂ (lead_id, status_id) РёР· РїРѕР»РµР·РЅРѕР№ РЅР°РіСЂСѓР·РєРё РІРµР±С…СѓРєР° Amo."""
+    """Возвращает список пар (lead_id, status_id) из полезной нагрузки вебхука Amo."""
     events: list[tuple[int, int]] = []
     data: Any | None = None
     ctype = request.headers.get("content-type", "")
@@ -38,7 +38,7 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
         except json.JSONDecodeError as exc:
             body = (await request.body()).decode("utf-8", errors="replace")
             logger.warning(
-                "РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°Р·РѕР±СЂР°С‚СЊ РІРµР±С…СѓРє СЃС‚Р°С‚СѓСЃР° AmoCRM: %s; body=%s", exc, body[:200]
+                "Не удалось разобрать вебхук статуса AmoCRM: %s; body=%s", exc, body[:200]
             )
     if data is not None:
         try:
@@ -50,13 +50,13 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
         except (KeyError, ValueError) as exc:
             body = (await request.body()).decode("utf-8", errors="replace")
             logger.warning(
-                "РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°Р·РѕР±СЂР°С‚СЊ РІРµР±С…СѓРє СЃС‚Р°С‚СѓСЃР° AmoCRM: %s; body=%s", exc, body[:200]
+                "Не удалось разобрать вебхук статуса AmoCRM: %s; body=%s", exc, body[:200]
             )
             raise HTTPException(status_code=400, detail=f"Invalid payload: {exc}") from exc
 
     if not events:
         form = await request.form()
-        # РџСЂРµРѕР±СЂР°Р·СѓРµРј FormData Рє СЃР»РѕРІР°СЂСЋ РІРёРґР° dict[str, str]
+        # Преобразуем FormData к словарю вида dict[str, str]
         data_map: Mapping[str, str] = {
             k: (v if isinstance(v, str) else getattr(v, "filename", str(v)))
             for k, v in form.multi_items()
@@ -68,12 +68,12 @@ async def parse_status_events(request: Request) -> list[tuple[int, int]]:
 async def _fetch_refusal_reason(
     lead_id: int, client: httpx.AsyncClient, field_id: int
 ) -> str | None:
-    """РџРѕР»СѓС‡Р°РµС‚ С‚РµРєСЃС‚ РїСЂРёС‡РёРЅС‹ РѕС‚РєР°Р·Р° РґР»СЏ СѓРєР°Р·Р°РЅРЅРѕРіРѕ Р»РёРґР°."""
+    """Получает текст причины отказа для указанного лида."""
     try:
         amo = await AmoClient.create(client)
         lead = await amo.get_lead(lead_id)
     except httpx.HTTPError as exc:  # pragma: no cover - network failure
-        logger.exception("РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ Р»РёРґ %s: %s", lead_id, exc)
+        logger.exception("Не удалось получить лид %s: %s", lead_id, exc)
         return None
 
     cfv = lead.get("custom_fields_values") or []
@@ -99,14 +99,14 @@ async def handle_hh_event(
     http_client: httpx.AsyncClient,
     queue_client: RabbitMQClient = rabbitmq,
 ) -> None:
-    """РћР±РЅРѕРІР»СЏРµС‚ СЃРѕСЃС‚РѕСЏРЅРёРµ РІ HH РЅР° РѕСЃРЅРѕРІРµ РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃР° РІ AmoCRM."""
+    """Обновляет состояние в HH на основе изменения статуса в AmoCRM."""
     s = get_settings()
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
     state = await hh_map_get(status_id)
     if state is None:
         await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
-        logger.info("РќРµРёР·РІРµСЃС‚РЅС‹Р№ СЃС‚Р°С‚СѓСЃ Amo %s вЂ” РїРѕСЃС‚Р°РІР»РµРЅР° Р·Р°РґР°С‡Р° hh_autofill", status_id)
+        logger.info("Неизвестный статус Amo %s — поставлена задача hh_autofill", status_id)
         return
     if not ext_id:
         return
@@ -128,7 +128,7 @@ async def handle_hh_event(
                         lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
                     )
                 except httpx.HTTPError:
-                    logger.warning("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ С‚РµРєСЃС‚ РїСЂРёС‡РёРЅС‹ РѕС‚РєР°Р·Р°")
+                    logger.warning("Не удалось скопировать текст причины отказа")
 
     await queue_client.publish_task(
         {
@@ -147,7 +147,7 @@ async def handle_avito_event(
     link: dict[str, Any],
     queue_client: RabbitMQClient = rabbitmq,
 ) -> None:
-    """РџРѕРјРµС‡Р°РµС‚ РїРµСЂРµРїРёСЃРєСѓ Avito РєР°Рє РїСЂРѕС‡РёС‚Р°РЅРЅСѓСЋ РґР»СЏ РґР°РЅРЅРѕРіРѕ Р»РёРґР°."""
+    """Помечает переписку Avito как прочитанную для данного лида."""
     ext_id = link.get("external_id")
     owner_id = link.get("owner_id")
     await queue_client.publish_task(
@@ -166,7 +166,8 @@ async def amo_webhook(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
-    """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РІРµР±С…СѓРє AmoCRM Рё СЃРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµС‚ СЃС‚Р°С‚СѓСЃС‹ Р»РёРґР° РІРѕ РІРЅРµС€РЅРёРµ РїР»Р°С‚С„РѕСЂРјС‹."""
+    """Обрабатывает вебхук AmoCRM и синхронизирует статусы лида во внешние
+    платформы."""
     raw = await request.body()
     key = calc_key("amo", raw)
     if not await check_and_store(key):
@@ -178,7 +179,7 @@ async def amo_webhook(
     for lead_id, status_id in events:
         link = await find_link(lead_id)
         if not link:
-            logger.warning("РќР•Рў РЎР’РЇР—Р Р”Р›РЇ Р›РР”Рђ %s", lead_id)
+            logger.warning("НЕТ СВЯЗИ ДЛЯ ЛИДА %s", lead_id)
             continue
 
         platform = link.get("platform")

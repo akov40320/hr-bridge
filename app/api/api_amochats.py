@@ -32,7 +32,7 @@ async def verify_amochats_signature(
 
     request.state.raw_body = raw
 
-    # Basic HMAC-SHA1 signature check (keep TODO below for future enhancements)
+    # Простейшая проверка подписи HMAC-SHA1 (см. TODO ниже для будущих улучшений)
     x_sig = request.headers.get("X-Signature")
     calc = hmac.new(
         settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1

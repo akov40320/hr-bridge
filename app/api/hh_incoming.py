@@ -1,4 +1,4 @@
-"""Endpoints handling incoming HeadHunter webhooks."""
+"""Эндпоинты для обработки входящих вебхуков HeadHunter."""
 
 import logging
 import httpx
@@ -20,10 +20,10 @@ async def webhook_hh(
     request: Request,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ):
-    """Handle HeadHunter webhook events.
+    """Обработать вебхук HeadHunter.
 
-    Fetches the raw request body and passes it to the generic job board
-    webhook processor along with the HeadHunter payload parser.
+    Получает необработанное тело запроса и передает его общему обработчику
+    вебхуков вместе с парсером payload для HeadHunter.
     """
     if request.method == "HEAD" or request.headers.get("content-length") in (None, "0"):
         raw = b""
@@ -33,9 +33,9 @@ async def webhook_hh(
         except ClientDisconnect:
             return Response(status_code=400)
     try:
-        log.info("HH webhook received raw: %s", raw.decode("utf-8"))
+        log.info("HH webhook: получены данные: %s", raw.decode("utf-8"))
     except Exception:  # pylint: disable=broad-exception-caught
-        log.info("HH webhook received raw (binary): %s", raw)
+        log.info("HH webhook: получены бинарные данные: %s", raw)
     return await process_job_board_webhook(
         "hh", raw, http_client, lambda raw: parse_hh_payload(raw, owner_id)
     )

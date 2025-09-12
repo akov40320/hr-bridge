@@ -1,4 +1,4 @@
-"""FastAPI endpoint for incoming Avito webhooks with signature verification."""
+"""Эндпоинт FastAPI для входящих вебхуков Avito с проверкой подписи."""
 
 import os
 import hmac
@@ -24,26 +24,26 @@ def _verify_sig(raw: bytes, sent_sig: str | None) -> None:
     if not _AVITO_SECRET:
         return
     if not sent_sig:
-        raise HTTPException(status_code=401, detail="Missing signature")
-    # Signature is HMAC-SHA256 in hex; header may be prefixed with 'sha256='
+        raise HTTPException(status_code=401, detail="Отсутствует подпись")
+    # Подпись — HMAC-SHA256 в шестнадцатеричном виде; заголовок может иметь префикс 'sha256='
     if sent_sig.lower().startswith("sha256="):
         sent_sig = sent_sig[7:]
     calc = hmac.new(_AVITO_SECRET.encode(), raw, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(calc, sent_sig):
-        raise HTTPException(status_code=401, detail="Bad signature")
+        raise HTTPException(status_code=401, detail="Неверная подпись")
 
 
 @router.post("/webhooks/avito")
 async def webhook_avito(
     request: Request, http_client: httpx.AsyncClient = Depends(get_http_client)
 ):
-    """Handle Avito webhook, verify signature, and dispatch processing."""
+    """Обработать вебхук Avito, проверить подпись и запустить обработку."""
     t0 = time.monotonic()
     raw = await request.body()
     sig = request.headers.get(_SIG_HEADER)
 
     logger.info(
-        "avito:webhook received len=%d sig_present=%s ua=%s",
+        "avito:webhook получен len=%d sig_present=%s ua=%s",
         len(raw), bool(sig), request.headers.get("User-Agent")
     )
 
@@ -66,6 +66,6 @@ async def webhook_avito(
             dt,
         )
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.info("avito:webhook ok (summary failed: %s) dt=%.1fms", e, dt)
+        logger.info("avito:webhook ok (сводка не получена: %s) dt=%.1fms", e, dt)
 
     return resp

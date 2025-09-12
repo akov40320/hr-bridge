@@ -69,7 +69,7 @@ def is_refusal_code(code: str | None) -> bool:
 
 
 def refusal_text(code: str | None) -> str | None:
-    """Map a refusal code to its human‑readable description."""
+    """Преобразовать код отказа в человекочитаемое описание."""
     return _REFUSAL_NAMES.get(code or "")
 
 
