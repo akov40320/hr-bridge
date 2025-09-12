@@ -1,4 +1,4 @@
-"""Authentication guards for endpoints requiring admin privileges."""
+"""Проверки аутентификации для эндпоинтов с админскими правами."""
 # pylint: disable=duplicate-code, R0801
 
 from fastapi import Header, HTTPException, status
@@ -10,7 +10,7 @@ async def require_admin(
     authorization: str | None = Header(None),
     x_admin_token: str | None = Header(None),
 ):
-    """Validate admin credentials via Authorization or X-Admin-Token headers."""
+    """Проверить админские учётные данные через заголовки Authorization или X-Admin-Token."""
     token = get_settings().ADMIN_TOKEN
     if not token:
         raise RuntimeError("ADMIN_TOKEN must be set")

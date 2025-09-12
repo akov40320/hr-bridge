@@ -1,4 +1,4 @@
-"""OAuth related endpoints."""
+"""Эндпоинты, связанные с OAuth."""
 
 import logging
 import re
@@ -24,7 +24,7 @@ router = APIRouter()
 # ---------- HH OAuth ----------
 @router.get("/oauth/hh/start")
 def hh_start(s=Depends(get_settings)):
-    """Redirect to HeadHunter for OAuth authorization."""
+    """Перенаправить на HeadHunter для OAuth‑авторизации."""
 
     params = {
         "response_type": "code",
@@ -42,7 +42,7 @@ async def hh_callback(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
-    """Handle HH OAuth callback and persist tokens."""
+    """Обработать обратный вызов HH OAuth и сохранить токены."""
 
     if not code:
         return {"ok": False, "error": "no code"}
@@ -110,7 +110,7 @@ async def hh_callback(
 # ---------- Avito OAuth ----------
 @router.get("/oauth/avito/start")
 def avito_start(s=Depends(get_settings)):
-    """Redirect to Avito OAuth authorization endpoint."""
+    """Перенаправить на эндпоинт авторизации Avito OAuth."""
 
     if not (
         s.AVITO_CLIENT_ID
@@ -215,7 +215,7 @@ async def avito_callback(
     http_client: httpx.AsyncClient = Depends(get_http_client),
     s=Depends(get_settings),
 ):
-    """Handle Avito OAuth callback and persist tokens."""
+    """Обработать обратный вызов Avito OAuth и сохранить токены."""
 
     if not code:
         return {"ok": False, "error": "no code"}

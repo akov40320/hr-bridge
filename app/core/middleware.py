@@ -1,4 +1,4 @@
-"""Middleware for request logging and Prometheus metrics collection."""
+"""Промежуточное ПО (middleware) для логирования запросов и метрик Prometheus."""
 
 import logging
 import time
@@ -8,7 +8,7 @@ from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-# Prometheus metrics definitions
+# Определения метрик Prometheus
 REQUEST_COUNT = Counter(
     "http_requests_total", "Total HTTP requests", ["method", "path", "status"]
 )
@@ -18,7 +18,7 @@ REQUEST_LATENCY = Histogram(
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
-    """ASGI middleware for structured request/response logging and metrics."""
+    """ASGI‑middleware для структурированного логирования запросов/ответов и метрик."""
 
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
@@ -44,5 +44,5 @@ class LoggingMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-m
 
 
 async def metrics_endpoint() -> StarletteResponse:
-    """Expose Prometheus metrics."""
+    """Отдавать метрики Prometheus."""
     return StarletteResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)

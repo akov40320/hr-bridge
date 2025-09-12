@@ -264,4 +264,3 @@ rabbitmq = RabbitMQClient()
 
 
 __all__ = ["RabbitMQClient", "rabbitmq"]
-

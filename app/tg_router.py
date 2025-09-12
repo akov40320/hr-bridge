@@ -1,4 +1,4 @@
-"""Telegram bot router for mirroring messages and collecting survey responses."""
+"""Роутер Telegram‑бота для зеркалирования сообщений и сбора ответов опроса."""
 
 import logging
 
@@ -20,7 +20,7 @@ logger = logging.getLogger("tg.router")
 
 
 def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispatcher:
-    """Create a dispatcher with handlers for Telegram survey bots."""
+    """Создать диспетчер с хендлерами для Telegram‑ботов опроса."""
     # pylint: disable=too-many-statements
     dp = Dispatcher()
     svc = SurveyService(queue_client)
@@ -28,7 +28,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
     async def mirror_prompt_to_amo(
         m: Message, text: str, lead_id: int, conv_id: str | None, key: str
     ) -> None:
-        """Mirror bot's prompt to the CRM queue."""
+        """Отправить подсказку бота в очередь CRM (зеркалирование)."""
         user = m.from_user
         if user is None:
             return
@@ -49,7 +49,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
 
     @dp.message(CommandStart())
     async def on_start(m: Message) -> None:
-        """Handle /start command to register user and start survey."""
+        """Обработать команду /start: зарегистрировать пользователя и начать опрос."""
         user = m.from_user
         if user is None:
             return
@@ -81,7 +81,7 @@ def make_router(bot_kind: str, queue_client: RabbitMQClient = rabbitmq) -> Dispa
 
     @dp.message(F.text)
     async def on_text(m: Message) -> None:
-        """Process text messages, mirror to CRM, and advance survey."""
+        """Обработать текстовые сообщения: отправить в CRM и продвинуть опрос."""
         user = m.from_user
         if user is None:
             return

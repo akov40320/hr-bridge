@@ -1,8 +1,7 @@
-"""Helpers for processing tasks related to amoCRM.
+"""Помощники для обработки задач, связанных с amoCRM.
 
-The functions defined here are small asynchronous handlers that are used by the
-worker service.  Each handler delegates to :class:`app.adapters.amo_client.AmoClient`
-to perform the actual API call.
+Ниже определены небольшие асинхронные обработчики, используемые сервисом‑воркером.
+Каждый обработчик делегирует вызов в :class:`app.adapters.amo_client.AmoClient`.
 """
 
 import logging
@@ -16,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_amo_create_lead(payload: dict) -> None:
-    """Create a lead in amoCRM.
+    """Создать сделку в amoCRM.
 
-    Args:
-        payload: Mapping with a ``lead_body`` key describing the lead to create.
+    Аргументы:
+        payload: Содержит ключ ``lead_body`` с описанием создаваемой сделки.
     """
 
     logger.info("amo.create_lead")
@@ -28,10 +27,10 @@ async def handle_amo_create_lead(payload: dict) -> None:
 
 
 async def handle_amo_add_note(payload: dict) -> None:
-    """Attach a note to a lead in amoCRM.
+    """Добавить заметку к сделке в amoCRM.
 
-    Args:
-        payload: Must contain ``lead_id`` and ``text`` for the note contents.
+    Аргументы:
+        payload: Должен содержать ``lead_id`` и ``text`` для содержимого заметки.
     """
 
     logger.info("amo.add_note: %s", payload.get("lead_id"))
@@ -40,16 +39,16 @@ async def handle_amo_add_note(payload: dict) -> None:
         await amo.add_note(int(payload["lead_id"]), payload["text"])
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
-            logger.warning("amo.add_note failed: %s", err)
+            logger.warning("amo.add_note: ошибка: %s", err)
         else:
             raise
 
 
 async def handle_amo_add_tags(payload: dict) -> None:
-    """Add tags to a lead in amoCRM.
+    """Добавить теги к сделке в amoCRM.
 
-    Args:
-        payload: Must contain ``lead_id`` and may include a list of ``tags``.
+    Аргументы:
+        payload: Должен содержать ``lead_id`` и, при наличии, список ``tags``.
     """
 
     logger.info("amo.add_tags: %s", payload.get("lead_id"))
@@ -58,17 +57,16 @@ async def handle_amo_add_tags(payload: dict) -> None:
         await amo.add_tags(int(payload["lead_id"]), list(payload.get("tags") or []))
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
-            logger.warning("amo.add_tags failed: %s", err)
+            logger.warning("amo.add_tags: ошибка: %s", err)
         else:
             raise
 
 
 async def handle_amo_update_status(payload: dict) -> None:
-    """Update lead status in amoCRM.
+    """Обновить этап сделки в amoCRM.
 
-    Args:
-        payload: Must contain ``lead_id`` and ``status_id`` specifying the new
-            status for the lead.
+    Аргументы:
+        payload: Должен содержать ``lead_id`` и ``status_id`` — новый этап сделки.
     """
 
     logger.info("amo.update_status: %s", payload.get("lead_id"))
@@ -77,6 +75,6 @@ async def handle_amo_update_status(payload: dict) -> None:
         await amo.update_status(int(payload["lead_id"]), int(payload["status_id"]))
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
-            logger.warning("amo.update_status failed: %s", err)
+            logger.warning("amo.update_status: ошибка: %s", err)
         else:
             raise

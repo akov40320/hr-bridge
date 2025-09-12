@@ -1,9 +1,8 @@
-"""Workers handling Avito specific tasks.
+"""Обработчики для задач, специфичных для Avito.
 
-This module provides async handlers used by the background worker to interact
-with the Avito API.  The functions are small wrappers around the underlying
-adapter calls.  They are intentionally similar to the respective HH handlers in
-order to keep the behaviour consistent across job boards.
+Модуль содержит асинхронные обработчики, используемые воркером для работы с
+Avito API. Функции представляют собой небольшие обёртки над вызовами адаптера
+и намеренно похожи на обработчики для HH для единообразия поведения.
 """
 
 # pylint: disable=duplicate-code
@@ -17,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_avito_send_message(payload: dict) -> None:
-    """Send a message to a candidate via Avito.
+    """Отправить сообщение кандидату через Avito.
 
-    Args:
-        payload: Mapping that must contain the external message ID and text. It
-            may optionally include an ``owner_id`` specifying the account.
+    Аргументы:
+        payload: Должен содержать внешний ID переписки и текст сообщения;
+            опционально может содержать ``owner_id`` (ID аккаунта).
     """
 
     logger.info("avito.send_message: %s", payload.get("external_id"))
@@ -34,11 +33,11 @@ async def handle_avito_send_message(payload: dict) -> None:
 
 
 async def handle_avito_mark_read(payload: dict) -> None:
-    """Mark a conversation as read on Avito.
+    """Пометить переписку как прочитанную в Avito.
 
-    Args:
-        payload: Mapping that must contain the external message ID and may
-            include an ``owner_id`` specifying the account.
+    Аргументы:
+        payload: Должен содержать внешний ID переписки и, при необходимости,
+            ``owner_id`` (ID аккаунта).
     """
 
     logger.info("avito.mark_read: %s", payload.get("external_id"))
