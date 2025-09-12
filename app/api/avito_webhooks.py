@@ -44,7 +44,7 @@ def _secret() -> str | None:
 
 
 async def _auth_headers(owner_id: str, client: httpx.AsyncClient) -> dict[str, str]:
-    """Build Authorization headers using a fresh Avito access token."""
+    """Сформировать заголовки авторизации с использованием свежего access‑токена Avito."""
     access = await ensure_fresh_access(config=avito_config(owner_id), http_client=client)
     return {
         "Authorization": f"Bearer {access}",
@@ -54,7 +54,7 @@ async def _auth_headers(owner_id: str, client: httpx.AsyncClient) -> dict[str, s
     }
 
 
-# -------------------- Messenger --------------------
+# -------------------- Мессенджер --------------------
 
 _MESSENGER_GET_CANDIDATES = [
     "/messenger/v3/webhook",
@@ -68,15 +68,15 @@ async def _get_messenger_webhook(client, headers):
         try:
             r = await client.get(f"{API_BASE}{path}", headers=headers, timeout=20)
             if r.status_code == 404:
-                log.info("avito: messenger get %s -> 404", path)
+                log.info("avito: messenger запрос %s -> 404", path)
                 continue
-            log.info("avito: messenger get %s -> %s", path, r.status_code)
+            log.info("avito: messenger запрос %s -> %s", path, r.status_code)
             r.raise_for_status()
             js = r.json()
-            log.debug("avito: messenger current: %s", js)
+            log.debug("avito: текущее состояние messenger: %s", js)
             return js
         except httpx.HTTPStatusError as e:
-            log.warning("avito: messenger get %s failed: %s %s", path, e.response.status_code, e.response.text[:200])
+            log.warning("avito: запрос messenger %s завершился ошибкой: %s %s", path, e.response.status_code, e.response.text[:200])
             continue
     return None
 
@@ -86,14 +86,14 @@ async def _upsert_messenger_webhook(client: httpx.AsyncClient, headers: dict[str
     body: dict[str, Any] = {"url": url, "events": events}
     if secret:
         body["secret"] = secret
-    log.info("avito: messenger upsert %s events=%s", _MESSENGER_POST, ",".join(events))
+    log.info("avito: messenger обновление %s события=%s", _MESSENGER_POST, ",".join(events))
     r = await client.post(f"{API_BASE}{_MESSENGER_POST}", headers=headers, json=body, timeout=20)
-    log.info("avito: messenger upsert resp=%s body=%s", r.status_code, (r.text[:200] if r.text else ""))
+    log.info("avito: ответ на messenger обновление=%s body=%s", r.status_code, (r.text[:200] if r.text else ""))
     r.raise_for_status()
     return r.json()
 
 
-# -------------------- Job / Applications --------------------
+# -------------------- Работа / Отклики --------------------
 
 # На разных ревизиях доки встречается singular/plural — сделаем авто-детект.
 _APPLICATIONS_GET_CANDIDATES = [
@@ -113,15 +113,15 @@ async def _get_applications_webhook(client: httpx.AsyncClient, headers: dict[str
         try:
             r = await client.get(f"{API_BASE}{path}", headers=headers, timeout=20)
             if r.status_code == 404:
-                log.info("avito: applications get %s -> 404", path)
+                log.info("avito: applications запрос %s -> 404", path)
                 continue
-            log.info("avito: applications get %s -> %s", path, r.status_code)
+            log.info("avito: applications запрос %s -> %s", path, r.status_code)
             r.raise_for_status()
             js = r.json()
-            log.debug("avito: applications current: %s", js)
+            log.debug("avito: текущее состояние applications: %s", js)
             return (path, js)
         except httpx.HTTPStatusError as e:
-            log.warning("avito: applications get %s failed: %s %s", path, e.response.status_code, e.response.text[:200])
+            log.warning("avito: запрос applications %s завершился ошибкой: %s %s", path, e.response.status_code, e.response.text[:200])
             continue
     return (None, None)
 
@@ -131,14 +131,14 @@ async def _upsert_applications_webhook(client: httpx.AsyncClient, headers: dict[
     body: dict[str, Any] = {"url": url}
     if secret:
         body["secret"] = secret
-    log.info("avito: applications upsert %s", post_path)
+    log.info("avito: обновление applications %s", post_path)
     r = await client.post(f"{API_BASE}{post_path}", headers=headers, json=body, timeout=20)
-    log.info("avito: applications upsert resp=%s body=%s", r.status_code, (r.text[:200] if r.text else ""))
+    log.info("avito: ответ на applications обновление=%s body=%s", r.status_code, (r.text[:200] if r.text else ""))
     r.raise_for_status()
     return r.json()
 
 
-# -------------------- Public entry --------------------
+# -------------------- Публичный вход --------------------
 
 async def ensure_avito_webhooks(client: httpx.AsyncClient) -> None:  # pylint: disable=too-many-branches
     """

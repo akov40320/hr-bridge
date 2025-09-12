@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ---------- HH OAuth ----------
+# ---------- OAuth HH ----------
 @router.get("/oauth/hh/start")
 def hh_start(s=Depends(get_settings)):
     """Перенаправить на HeadHunter для OAuth‑авторизации."""
@@ -107,7 +107,7 @@ async def hh_callback(
     return error_response
 
 
-# ---------- Avito OAuth ----------
+# ---------- OAuth Avito ----------
 @router.get("/oauth/avito/start")
 def avito_start(s=Depends(get_settings)):
     """Перенаправить на эндпоинт авторизации Avito OAuth."""
@@ -123,7 +123,7 @@ def avito_start(s=Depends(get_settings)):
     raw_scope = getattr(s, "AVITO_SCOPE", "") or ""
     scope = ",".join([s.strip() for s in re.split(r"[,\s]+", raw_scope) if s.strip()])
 
-    state = secrets.token_urlsafe(16)  # CSRF
+    state = secrets.token_urlsafe(16)  # защита от CSRF
     params = {
         "response_type": "code",
         "client_id": s.AVITO_CLIENT_ID,
@@ -157,7 +157,7 @@ async def _exchange_avito_code(http_client: httpx.AsyncClient, s, code: str):
             "status": e.response.status_code,
             "body": e.response.text,
         }
-    except httpx.HTTPError as e:  # pragma: no cover - network errors
+    except httpx.HTTPError as e:  # pragma: no cover - сетевые ошибки
         return None, {"step": "token-exchange-exception", "error": str(e)}
 
     tok = r.json()
@@ -184,7 +184,7 @@ async def _fetch_avito_account(http_client: httpx.AsyncClient, access: str):
             "status": e.response.status_code,
             "body": e.response.text,
         }
-    except httpx.HTTPError as e:  # pragma: no cover - network errors
+    except httpx.HTTPError as e:  # pragma: no cover - сетевые ошибки
         return None, {"step": "self", "error": str(e)}
 
     account_id = str(me.json().get("id") or "")
@@ -242,10 +242,10 @@ async def avito_callback(
     return {"ok": True, "account_id": account_id}
 
 
-# ---------- AmoCRM OAuth ----------
+# ---------- OAuth AmoCRM ----------
 @router.get("/oauth/amo/start")
 def amo_start(s=Depends(get_settings)):
-    """Start amo OAuth flow and redirect to portal for authorization."""
+    """Запустить поток OAuth amo и перенаправить на портал для авторизации."""
     state = secrets.token_urlsafe(16)
     params = {
         "client_id": s.AMO_CLIENT_ID,
@@ -265,7 +265,7 @@ async def amo_callback(
     queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
     s=Depends(get_settings),
 ):
-    """Process AmoCRM OAuth callback and store tokens."""
+    """Обработать обратный вызов AmoCRM OAuth и сохранить токены."""
 
     if not code:
         return {"ok": False, "provider": "amo", "step": "callback", "error": "no code"}
@@ -320,9 +320,9 @@ async def amo_callback(
 
         try:
             await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
-            logger.info("Queued hh_autofill after amo oauth")
+            logger.info("Поставлена в очередь hh_autofill после OAuth Amo")
         except aio_exc.AMQPError:
-            logger.exception("Failed to queue hh_autofill after amo oauth")
+            logger.exception("Не удалось поставить в очередь hh_autofill после OAuth Amo")
 
     except SQLAlchemyError as e:
         return {

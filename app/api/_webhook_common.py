@@ -1,4 +1,4 @@
-"""Shared logic for processing job board webhooks."""
+"""Общая логика обработки вебхуков с сайтов вакансий."""
 
 import logging
 from typing import Callable
@@ -24,9 +24,9 @@ async def process_job_board_webhook(
     http_client: httpx.AsyncClient,
     parse_payload: Callable[[bytes], IncomingPayload],
 ) -> dict:
-    """Process an incoming job board webhook.
+    """Обработать входящий вебхук job board.
 
-    Handles deduplication, payload parsing and lead processing.
+    Выполняет дедупликацию, парсинг payload и обработку лида.
     """
     key = calc_key(platform, raw)
     if not await check_and_store(key):
@@ -35,7 +35,7 @@ async def process_job_board_webhook(
     try:
         payload = parse_payload(raw)
     except ValueError as exc:
-        logger.warning("%s webhook: %s; payload=%s", platform, exc, raw)
+        logger.warning("вебхук %s: %s; payload=%s", platform, exc, raw)
         return {"ok": True, "skipped": True}
 
     try:
@@ -54,7 +54,7 @@ async def process_job_board_webhook(
 
         return {"ok": True, "lead_id": lead_id}
     except Exception:  # pylint: disable=broad-exception-caught
-        logger.exception("%s webhook: internal error", platform)
+        logger.exception("вебхук %s: внутренняя ошибка", platform)
         return {"ok": False, "error": "internal_error"}
 
 

@@ -1,4 +1,4 @@
-"""Application API routers."""
+"""API‑роутеры приложения."""
 
 from fastapi import APIRouter, Depends
 
@@ -10,7 +10,7 @@ __all__ = ["build_routers"]
 
 
 def build_routers() -> tuple[APIRouter, APIRouter]:
-    """Build and return public and administrative API routers."""
+    """Построить и вернуть публичный и административный роутеры API."""
 
     router = APIRouter()
     admin = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
