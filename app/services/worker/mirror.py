@@ -1,9 +1,9 @@
-"""Handlers that mirror messages between AMO CRM and Telegram bots.
+"""Обработчики, зеркалирующие сообщения между amoCRM и ботами Telegram.
 
-This module provides asynchronous worker handlers used to forward messages
-from AMO CRM to Telegram chats, relay Telegram messages back to AMO, and send
-bot-generated messages into AMO chats. All handlers accept a ``payload``
-dictionary with details specific to the direction of the mirror.
+Модуль содержит асинхронные обработчики для пересылки сообщений из amoCRM в
+Telegram-чаты, доставки сообщений из Telegram обратно в amoCRM и отправки
+текстов, сгенерированных ботом, в чаты amoCRM. Все обработчики принимают
+словарь ``payload`` с подробностями, зависящими от направления зеркала.
 """
 
 import logging
@@ -24,26 +24,26 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_mirror_amo_to_tg(payload: dict):
-    """Forward a message from AMO CRM to a Telegram user.
+    """Переслать сообщение из amoCRM пользователю в Telegram.
 
-    Args:
-        payload: Mapping containing message details. Expected keys are
-            ``bot_kind`` (``"master"`` or ``"operator"``) to choose a bot,
-            ``user_id`` for the Telegram recipient, ``text`` with the message
-            body and optional ``msg_key`` used for deduplication.
+    Аргументы:
+        payload: Содержит детали сообщения. Ожидаемые ключи:
+            ``bot_kind`` (``"master"`` или ``"operator"``) — выбор бота,
+            ``user_id`` — получатель в Telegram, ``text`` — текст сообщения,
+            опциональный ``msg_key`` для дедупликации.
 
-    Behaviour:
-        Uses the appropriate Telegram bot to deliver the text. When ``msg_key``
-        is provided and already processed, the message is skipped.
+    Поведение:
+        Использует соответствующего бота Telegram для доставки текста. Если
+        указан ``msg_key`` и он уже обработан, сообщение пропускается.
 
-    Returns:
+    Возвращает:
         None
     """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
-            logger.info("mirror: duplicate %s -> skip", dedup)
+            logger.info("mirror: дубликат %s -> пропуск", dedup)
             return
 
     bot_kind = payload["bot_kind"]
@@ -60,12 +60,12 @@ async def handle_mirror_amo_to_tg(payload: dict):
 
 
 async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-locals
-    """Mirror a Telegram message into AMO CRM (как реальное сообщение в чат сделки)."""
+    """Отразить сообщение из Telegram в amoCRM (как реальное сообщение в чат сделки)."""
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
-            logger.info("mirror: duplicate %s -> skip", dedup)
+            logger.info("mirror: дубликат %s -> пропуск", dedup)
             return
 
     lead_id = int(payload["lead_id"])
@@ -98,7 +98,7 @@ async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-lo
             if contacts:
                 contact_id = int(contacts[0]["id"])
         except Exception:  # pylint: disable=broad-exception-caught
-            logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
+            logger.warning("не удалось получить контакт для сделки %s", lead_id, exc_info=True)
 
         # Создаём чат вида conversation_id="lead:<lead_id>" и ПРИВЯЗЫВАЕМ к контакту
         conv_id = await with_retry(
@@ -139,26 +139,26 @@ async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-lo
 
 
 async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-locals
-    """Forward a bot-generated message to AMO chat.
+    """Переслать сообщение, сгенерированное ботом, в чат amoCRM.
 
-    Args:
-        payload: Mapping that contains ``text`` and ``user_id``. Optional keys
-            are ``user_name``, ``conversation_id``, ``lead_id`` and ``msg_key``
-            used for deduplication.
+    Аргументы:
+        payload: Содержит ``text`` и ``user_id``. Необязательные ключи —
+            ``user_name``, ``conversation_id``, ``lead_id`` и ``msg_key``
+            для дедупликации.
 
-    Behaviour:
-        Ensures an AMO chat conversation exists for the Telegram user and
-        sends the text as a manager message. Duplicate payloads are ignored
-        when ``msg_key`` has already been processed.
+    Поведение:
+        Обеспечивает существование беседы amoCRM для пользователя Telegram и
+        отправляет текст как сообщение менеджера. Повторные payload игнорируются,
+        если ``msg_key`` уже обработан.
 
-    Returns:
+    Возвращает:
         None
     """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
-            logger.info("mirror: duplicate %s -> skip", dedup)
+            logger.info("mirror: дубликат %s -> пропуск", dedup)
             return
 
     text = payload["text"]
@@ -182,7 +182,7 @@ async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-l
             if contacts:
                 contact_id = int(contacts[0]["id"])
         except Exception:  # pylint: disable=broad-exception-caught
-            logger.warning("failed to fetch contact for lead %s", lead_id, exc_info=True)
+            logger.warning("не удалось получить контакт для сделки %s", lead_id, exc_info=True)
 
         conv_id = await with_retry(
             lambda: ensure_chat_created(

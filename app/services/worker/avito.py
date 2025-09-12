@@ -23,7 +23,7 @@ async def handle_avito_send_message(payload: dict) -> None:
             опционально может содержать ``owner_id`` (ID аккаунта).
     """
 
-    logger.info("avito.send_message: %s", payload.get("external_id"))
+    logger.info("avito.отправка_сообщения: %s", payload.get("external_id"))
     await perform_request(
         avito_adapt.send_message,
         payload["external_id"],
@@ -40,7 +40,7 @@ async def handle_avito_mark_read(payload: dict) -> None:
             ``owner_id`` (ID аккаунта).
     """
 
-    logger.info("avito.mark_read: %s", payload.get("external_id"))
+    logger.info("avito.пометка_прочитанным: %s", payload.get("external_id"))
     await perform_request(
         avito_adapt.mark_read,
         payload["external_id"],

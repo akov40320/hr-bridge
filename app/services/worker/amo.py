@@ -21,7 +21,7 @@ async def handle_amo_create_lead(payload: dict) -> None:
         payload: Содержит ключ ``lead_body`` с описанием создаваемой сделки.
     """
 
-    logger.info("amo.create_lead")
+    logger.info("amo.создание_сделки")
     amo = await AmoClient.create(get_http_client())
     await amo.create_leads(payload["lead_body"])
 
@@ -33,13 +33,13 @@ async def handle_amo_add_note(payload: dict) -> None:
         payload: Должен содержать ``lead_id`` и ``text`` для содержимого заметки.
     """
 
-    logger.info("amo.add_note: %s", payload.get("lead_id"))
+    logger.info("amo.добавление_заметки: %s", payload.get("lead_id"))
     amo = await AmoClient.create(get_http_client())
     try:
         await amo.add_note(int(payload["lead_id"]), payload["text"])
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
-            logger.warning("amo.add_note: ошибка: %s", err)
+            logger.warning("amo.добавление_заметки: ошибка: %s", err)
         else:
             raise
 
@@ -51,13 +51,13 @@ async def handle_amo_add_tags(payload: dict) -> None:
         payload: Должен содержать ``lead_id`` и, при наличии, список ``tags``.
     """
 
-    logger.info("amo.add_tags: %s", payload.get("lead_id"))
+    logger.info("amo.добавление_тегов: %s", payload.get("lead_id"))
     amo = await AmoClient.create(get_http_client())
     try:
         await amo.add_tags(int(payload["lead_id"]), list(payload.get("tags") or []))
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
-            logger.warning("amo.add_tags: ошибка: %s", err)
+            logger.warning("amo.добавление_тегов: ошибка: %s", err)
         else:
             raise
 
@@ -69,12 +69,12 @@ async def handle_amo_update_status(payload: dict) -> None:
         payload: Должен содержать ``lead_id`` и ``status_id`` — новый этап сделки.
     """
 
-    logger.info("amo.update_status: %s", payload.get("lead_id"))
+    logger.info("amo.обновление_статуса: %s", payload.get("lead_id"))
     amo = await AmoClient.create(get_http_client())
     try:
         await amo.update_status(int(payload["lead_id"]), int(payload["status_id"]))
     except HTTPStatusError as err:  # pylint: disable=broad-except
         if err.response is not None and err.response.status_code < 500:
-            logger.warning("amo.update_status: ошибка: %s", err)
+            logger.warning("amo.обновление_статуса: ошибка: %s", err)
         else:
             raise
