@@ -1,4 +1,4 @@
-"""Utilities for interacting with the HeadHunter API."""
+"""Утилиты для работы с HeadHunter API."""
 
 from typing import Optional
 
@@ -12,7 +12,7 @@ from ._requests import request_with_retry
 
 
 class HHError(Exception):
-    """Base exception for HeadHunter related errors."""
+    """Базовое исключение для ошибок, связанных с HeadHunter."""
 
 
 async def set_state_action(
@@ -21,7 +21,7 @@ async def set_state_action(
         employer_id: Optional[str],
         client: httpx.AsyncClient,
 ) -> None:
-    """Convenience wrapper mapping state action for a negotiation."""
+    """Удобная обёртка для установки действия состояния в переписке (negotiation)."""
     await set_employer_state(
         response_id=negotiation_id,
         target_state=action_id,
@@ -44,6 +44,8 @@ async def set_employer_state(
                                                       None) or "hr-bridge/1.0 (support@example.com)"
     # Вызов HeadHunter API требует, чтобы действие (state) стояло перед идентификатором
     # отклика. Ранее аргументы в URL были перепутаны местами, что приводило к 404.
+    # В API HeadHunter изменение статуса (state) выполняется через ресурс negotiations.
+    # Неверный URL может приводить к 404.
     url = f"{s.HH_API_BASE.rstrip('/')}/negotiations/{target_state}/{response_id}"
 
     await request_with_retry(
@@ -102,14 +104,14 @@ async def fetch_applicant_details(  # pylint: disable=too-many-locals
         employer_id: Optional[str],
         client: httpx.AsyncClient,
 ) -> dict:
-    """Fetch basic applicant information such as name, city, phone and email."""
+    """Получить основные данные кандидата: имя, город, телефон и email."""
     s = get_settings()
     access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
     headers = {"Authorization": f"Bearer {access}", "Accept": "application/json"}
     base_url = s.HH_API_BASE.rstrip("/")
 
-    # 1) negotiation -> resume id
+    # 1) negotiation -> id резюме
     negotiation = await client.get(
         f"{base_url}/negotiations/{response_id}", headers=headers, timeout=30
     )
@@ -119,7 +121,7 @@ async def fetch_applicant_details(  # pylint: disable=too-many-locals
     if not resume_id:
         return {}
 
-    # 2) resume -> phone, email, city, full name
+    # 2) resume -> телефон, email, город, полное имя
     resume_resp = await client.get(
         f"{base_url}/resumes/{resume_id}?with_contacts=true",
         headers=headers,
@@ -156,7 +158,7 @@ async def fetch_vacancy_description(
         employer_id: Optional[str],
         client: httpx.AsyncClient,
 ) -> str:
-    """Fetch vacancy description text."""
+    """Получить текст описания вакансии."""
     s = get_settings()
     access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 
@@ -175,7 +177,7 @@ async def fetch_vacancy_title(
         employer_id: Optional[str],
         client: httpx.AsyncClient,
 ) -> str:
-    """Fetch vacancy title."""
+    """Получить заголовок вакансии."""
     s = get_settings()
     access = await ensure_fresh_access(config=hh_config(employer_id), http_client=client)
 

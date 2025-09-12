@@ -1,4 +1,4 @@
-"""Utilities for interacting with the Avito API."""
+"""Утилиты для работы с Avito API."""
 
 from typing import Optional
 
@@ -12,11 +12,11 @@ from ._requests import request_with_retry
 
 
 class AvitoError(Exception):
-    """Error raised when Avito API communication fails."""
+    """Исключение при ошибке взаимодействия с Avito API."""
 
 
 async def _access_token(owner_id: Optional[str], client: httpx.AsyncClient) -> str:
-    """Retrieve a fresh access token for the Avito API."""
+    """Получить свежий access token для Avito API."""
 
     return await ensure_fresh_access(config=avito_config(owner_id), http_client=client)
 
@@ -27,7 +27,7 @@ async def send_message(
     owner_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
-    """Send a text message in an Avito negotiation."""
+    """Отправить текстовое сообщение в переписке Avito (negotiation)."""
 
     s = get_settings()
     access = await _access_token(owner_id, client)
@@ -57,7 +57,7 @@ async def mark_read(
     owner_id: Optional[str],
     client: httpx.AsyncClient,
 ) -> None:
-    """Mark messages in an Avito negotiation as read."""
+    """Пометить сообщения в переписке Avito как прочитанные."""
 
     s = get_settings()
     access = await _access_token(owner_id, client)

@@ -1,4 +1,4 @@
-"""Utilities for interacting with the AmoChats API."""
+"""Утилиты для работы с AmoChats API."""
 # pylint: disable=line-too-long
 
 from typing import Any, cast
@@ -20,11 +20,11 @@ settings = get_settings()
 
 
 class AmoChatsError(Exception):
-    """Generic error raised for AmoChats integration issues."""
+    """Общее исключение для проблем интеграции с AmoChats."""
 
 
 class AmoChatsClient:  # pylint: disable=too-few-public-methods
-    """Helper validating required AmoChats settings once."""
+    """Помощник, который единожды валидирует обязательные настройки AmoChats."""
 
     def __init__(self) -> None:
         req = {
@@ -49,7 +49,7 @@ class AmoChatsClient:  # pylint: disable=too-few-public-methods
 
 @lru_cache(maxsize=1)
 def _get_client() -> AmoChatsClient:
-    """Return a cached :class:`AmoChatsClient` instance."""
+    """Вернуть кэшированный экземпляр :class:`AmoChatsClient`."""
     return AmoChatsClient()
 
 
@@ -91,7 +91,7 @@ def _build_headers(
 
 
 async def connect_channel(client: httpx.AsyncClient) -> dict[str, Any]:
-    """Connect AmoChats channel once, safe to call multiple times."""
+    """Подключить канал AmoChats (операция идемпотентна)."""
     ac = _get_client()
 
     path = f"/v2/origin/custom/{ac.channel_id}/connect"
@@ -111,16 +111,16 @@ async def connect_channel(client: httpx.AsyncClient) -> dict[str, Any]:
 
 
 async def ensure_amo_chats_connected(log: logging.Logger, client: httpx.AsyncClient) -> None:
-    """Ensure AmoChats channel is connected when autoconnect is enabled."""
+    """Убедиться, что канал AmoChats подключён при включённом автоподключении."""
     if not getattr(settings, "AMO_CHATS_AUTOCONNECT", False):
-        log.info("AmoChats autoconnect disabled")
+        log.info("Автоподключение AmoChats отключено")
         return
     try:
         await connect_channel(client)
-        log.info("AmoChats channel connected (v2)")
+        log.info("Канал AmoChats подключен (v2)")
     except AmoChatsError as exc:
         # если уже подключён — Amo обычно вернёт 200/204; на всякий логируем warning
-        log.warning("AmoChats connect warning: %s", exc)
+        log.warning("Предупреждение при подключении AmoChats: %s", exc)
 
 
 async def send_text_from_client(  # pylint: disable=too-many-arguments
@@ -132,9 +132,9 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments
         conversation_id: str | None = None,
         client: httpx.AsyncClient,
 ) -> str | None:
-    """Send a text into AmoChats on behalf of a client.
+    """Отправить текст в AmoChats от имени клиента.
 
-    Returns the conversation_id used (created if missing).
+    Возвращает используемый conversation_id (создаётся при отсутствии).
     """
     ac = _get_client()
 
@@ -163,10 +163,10 @@ async def send_text_from_client(  # pylint: disable=too-many-arguments
     headers = _build_headers(ac.secret, "POST", path, body, ac.account_id)
     r = await client.post(url, content=body, headers=headers, timeout=30)
     if r.status_code >= 400:
-        raise AmoChatsError(f"send_text_from_client failed {r.status_code}: {r.text}")
+        raise AmoChatsError(f"send_text_from_client: ошибка {r.status_code}: {r.text}")
 
     # можно просто вернуть тот же интеграционный conversation_id
-    logger.info("send_from_client: ok conv_id=%s text_len=%d", conversation_id, len(text))
+    logger.info("отправка_клиента: ok conv_id=%s text_len=%d", conversation_id, len(text))
     return conversation_id
 
 
@@ -215,12 +215,12 @@ async def send_text_from_manager(  # pylint: disable=too-many-arguments,too-many
     if r.status_code >= 400:
         body_for_log = body.decode('utf-8', errors='ignore')
         logger.error(
-            "send_text_from_manager failed: status=%s text=%s payload=%s",
+            "send_text_from_manager: ошибка: status=%s text=%s payload=%s",
             r.status_code,
             r.text,
             body_for_log
         )
-        raise AmoChatsError(f"send_text_from_manager failed {r.status_code}: {r.text}")
+        raise AmoChatsError(f"send_text_from_manager: ошибка {r.status_code}: {r.text}")
 
 
 async def ensure_chat_created(  # pylint: disable=too-many-arguments,too-many-locals
@@ -263,9 +263,9 @@ async def ensure_chat_created(  # pylint: disable=too-many-arguments,too-many-lo
     headers_chats = _build_headers(ac.secret, "POST", path_chats, body_chats, ac.account_id)
     r = await client.post(url_chats, content=body_chats, headers=headers_chats, timeout=30)
     if r.status_code >= 400:
-        raise AmoChatsError(f"ensure_chat_created failed {r.status_code}: {r.text}")
+        raise AmoChatsError(f"ensure_chat_created: ошибка {r.status_code}: {r.text}")
 
-    logger.info("ensure_chat_created: ok for lead=%s -> conv_id=%s", lead_id, conv_id)
+    logger.info("ensure_chat_created: ok для lead=%s -> conv_id=%s", lead_id, conv_id)
 
     # попытаться вытащить chat_id из ответа
     chat_id: str | None = None
@@ -279,9 +279,9 @@ async def ensure_chat_created(  # pylint: disable=too-many-arguments,too-many-lo
                 or (jr.get("_embedded") or {}).get("chats", [{}])[0].get("id")
         )
     except Exception:  # pragma: no cover  # pylint: disable=broad-exception-caught
-        logger.warning("ensure_chat_created: parse chat_id failed", exc_info=True)
+        logger.warning("ensure_chat_created: не удалось разобрать chat_id", exc_info=True)
 
-    logger.info("ensure_chat_created: ok for %s -> conv_id=%s chat_id=%s",
+    logger.info("ensure_chat_created: ok для %s -> conv_id=%s chat_id=%s",
                 ("contact" if contact_id else "lead"),
                 conv_id, chat_id or "-")
 
@@ -290,9 +290,9 @@ async def ensure_chat_created(  # pylint: disable=too-many-arguments,too-many-lo
         try:
             amo = await AmoClient.create(client)
             await amo.bind_chat_to_contact(bind_contact_id, chat_id)
-            logger.info("chat bound to contact: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
+            logger.info("чат привязан к контакту: contact_id=%s chat_id=%s", bind_contact_id, chat_id)
         except Exception:  # pylint: disable=broad-exception-caught
-            logger.warning("bind chat to contact failed", exc_info=True)
+            logger.warning("не удалось привязать чат к контакту", exc_info=True)
 
     # 2) опционально отправить первое сообщение
     path_msg = f"/v2/origin/custom/{ac.scope_id}"
