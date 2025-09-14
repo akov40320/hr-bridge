@@ -1,4 +1,4 @@
-"""Incoming webhook for HeadHunter (HH)."""
+"""Обработчик входящих вебхуков от HeadHunter (HH)."""
 
 import logging
 import json
@@ -22,9 +22,9 @@ async def webhook_hh(
     request: Request,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ):
-    """Handle HH webhook and forward new negotiations downstream.
+    """Обработать вебхук HH и передать новые отклики дальше.
 
-    Skips employer state change events (only logs and returns ok).
+    Пропускает события смены статуса работодателя (только логирует и возвращает ok).
     """
     if request.method == "HEAD" or request.headers.get("content-length") in (None, "0"):
         raw = b""
@@ -34,18 +34,21 @@ async def webhook_hh(
         except ClientDisconnect:
             return Response(status_code=400)
 
-    # Log payload safely
+    # Безопасное логирование тела
     try:
-        log.info("HH webhook: received body: %s", raw.decode("utf-8"))
+        log.info("HH webhook: получено тело: %s", raw.decode("utf-8"))
     except UnicodeDecodeError:
-        log.info("HH webhook: received (binary) body: %s", raw)
+        log.info("HH webhook: получено (бинарное) тело: %s", raw)
 
-    # Ignore status change events
+    # Игнорирование событий смены статуса
     try:
         data = json.loads(raw.decode("utf-8") or "{}")
         action_type = str(data.get("action_type") or "").strip().upper()
         if action_type == "NEGOTIATION_EMPLOYER_STATE_CHANGE":
-            log.info("HH webhook: status change -> skip (owner_id=%s)", owner_id)
+            log.info(
+                "HH webhook: смена статуса -> пропуск (owner_id=%s)",
+                owner_id,
+            )
             return {"ok": True, "ignored": True, "event": action_type}
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, AttributeError):  # pragma: no cover
         pass
@@ -56,4 +59,3 @@ async def webhook_hh(
 
 
 __all__ = ["router"]
-
