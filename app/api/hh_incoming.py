@@ -26,7 +26,10 @@ async def webhook_hh(
 
     Пропускает события смены статуса работодателя (только логирует и возвращает ok).
     """
-    if request.method == "HEAD" or request.headers.get("content-length") in (None, "0"):
+    if (
+        request.method == "HEAD"
+        or request.headers.get("content-length") in (None, "0")
+    ):
         raw = b""
     else:
         try:
@@ -50,7 +53,12 @@ async def webhook_hh(
                 owner_id,
             )
             return {"ok": True, "ignored": True, "event": action_type}
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, AttributeError):  # pragma: no cover
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        TypeError,
+        AttributeError,
+    ):  # pragma: no cover
         pass
 
     return await process_job_board_webhook(
