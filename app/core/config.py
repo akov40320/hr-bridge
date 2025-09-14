@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     AVITO_API_BASE: str = "https://api.avito.ru"
     AVITO_SEND_MESSAGE_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/messages"
     AVITO_MARK_READ_PATH: str = "/messenger/v1/accounts/me/chats/{negotiation_id}/read"
+    # List own ads (items). Default to Core API "self"; override via env if needed.
+    AVITO_LIST_ITEMS_PATH: str = "/core/v1/accounts/self/items"
     AVITO_WEBHOOK_URL: str = ""
     AVITO_MESSENGER_EVENTS: str = "message"
     AVITO_WEBHOOK_SECRET: str | None = None
@@ -111,6 +113,8 @@ class Settings(BaseSettings):
     AMO_CHATS_SENDER_NAME: str = "tg-bridge"
     AMO_CHATS_AUTOCONNECT: bool = True
     AMOCHATS_INCOMING_SECRET: str = ""
+    # Dev-only: bypass incoming AmoChats signature verification (do NOT use in prod)
+    AMOCHATS_SKIP_SIGNATURE: bool = False
 
     # HH webhooks
     HH_WEBHOOK_URL: str = ""

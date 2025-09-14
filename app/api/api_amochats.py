@@ -32,6 +32,13 @@ async def verify_amochats_signature(
 
     request.state.raw_body = raw
 
+    # Temporary bypass for development/testing (controlled by AMOCHATS_SKIP_SIGNATURE)
+    if getattr(settings, "AMOCHATS_SKIP_SIGNATURE", False):
+        logger.warning(
+            "AmoChats signature verification is DISABLED via AMOCHATS_SKIP_SIGNATURE. Do not use in production."
+        )
+        return
+
     # Простейшая проверка подписи HMAC-SHA1 (см. TODO ниже для будущих улучшений)
     x_sig = request.headers.get("X-Signature")
     calc = hmac.new(

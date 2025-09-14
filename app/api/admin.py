@@ -14,6 +14,7 @@ from app.services.hh_mapping import load as hh_map_load, set_all as hh_map_set
 from app.services.queue import rabbitmq, RabbitMQClient
 from app.core.oauth_helpers import hh_access
 from app.db.token_store import DbTokenStore
+from app.adapters import avito as avito_adapter
 
 router = APIRouter()
 admin = APIRouter()
@@ -116,6 +117,40 @@ async def hh_autofill_admin(
 
     await queue_client.publish_task({"platform": "system", "action": "hh_autofill"})
     return {"ok": True, "queued": True}
+
+
+@admin.get("/avito-items")
+async def avito_items(
+    owner_id: str,  # Avito account_id
+    limit: int = 50,
+    offset: int = 0,
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
+    """List Avito ads (items) for a given `owner_id` (account_id).
+
+    Requires Avito OAuth token stored for that `owner_id`.
+    Returns raw Avito JSON and a best-effort `items` extraction for convenience.
+    """
+    try:
+        # Ensure there is a token; will raise if missing
+        await DbTokenStore("avito", owner_id).load()
+    except (RuntimeError, SQLAlchemyError) as exc:
+        return {"ok": False, "error": f"no avito token for owner_id={owner_id}: {exc}"}
+
+    try:
+        js = await avito_adapter.list_items(owner_id=owner_id, client=http_client, limit=limit, offset=offset)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        return {"ok": False, "error": str(e)}
+
+    # Try common shapes: {items: [...]}, {result: {items: [...]}}
+    items = []
+    if isinstance(js, dict):
+        if isinstance(js.get("items"), list):
+            items = js.get("items") or []
+        elif isinstance(js.get("result"), dict) and isinstance(js["result"].get("items"), list):
+            items = js["result"]["items"] or []
+
+    return {"ok": True, "owner_id": owner_id, "limit": limit, "offset": offset, "items": items, "raw": js}
 
 
 __all__ = ["router", "admin"]

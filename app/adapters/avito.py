@@ -78,3 +78,50 @@ async def mark_read(
         action="mark_read",
         retry_func=with_retry,
     )
+
+
+async def list_items(
+    *,
+    owner_id: Optional[str],
+    client: httpx.AsyncClient,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Fetch account ads (items) via Avito Core API.
+
+    Uses the token bound to ``owner_id`` and path from settings
+    (``AVITO_LIST_ITEMS_PATH``). Supports limit/offset pagination.
+    Returns raw JSON from Avito.
+    """
+
+    s = get_settings()
+    access = await _access_token(owner_id, client)
+
+    base = s.AVITO_API_BASE.rstrip("/")
+    path = getattr(s, "AVITO_LIST_ITEMS_PATH", "/core/v1/accounts/self/items")
+    # Build URL with query parameters explicitly (request_with_retry lacks params)
+    q = []
+    if isinstance(limit, int) and limit > 0:
+        q.append(f"limit={int(limit)}")
+    if isinstance(offset, int) and offset >= 0:
+        q.append(f"offset={int(offset)}")
+    url = f"{base}{path}"
+    if q:
+        url = f"{url}?{'&'.join(q)}"
+
+    r = await request_with_retry(
+        client,
+        "GET",
+        url,
+        headers={
+            "Authorization": f"Bearer {access}",
+            "Accept": "application/json",
+        },
+        timeout=20,
+        error_cls=AvitoError,
+        service="Avito",
+        action="list_items",
+        retry_func=with_retry,
+    )
+
+    return r.json() or {}
