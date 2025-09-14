@@ -2,6 +2,7 @@
 
 import logging
 import time
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -18,7 +19,6 @@ from app.adapters import avito as avito_adapter
 
 router = APIRouter()
 admin = APIRouter()
-
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ async def dedup_clean(hours: int = 72) -> dict:
     """Очистить записи дедупликации старше ``hours`` часов."""
 
     deleted = await cleanup_older_than(hours * 3600)
-    logger.info("дедуп‑очистка удалено=%s часов=%s", deleted, hours)
+    logger.info("дедуп-очистка удалено=%s часов=%s", deleted, hours)
     return {"ok": True, "removed": deleted, "hours": hours}
 
 
@@ -148,12 +148,16 @@ async def avito_items(
         return {"ok": False, "error": str(e)}
 
     # Try common shapes: {items: [...]}, {result: {items: [...]}}
-    items = []
+
+    items: list[dict[str, Any]] = []
+
     if isinstance(js, dict):
-        if isinstance(js.get("items"), list):
-            items = js.get("items") or []
-        elif isinstance(js.get("result"), dict) and isinstance(js["result"].get("items"), list):
-            items = js["result"]["items"] or []
+        direct = js.get("items")
+        nested = js.get("result")
+        if isinstance(direct, list):
+            items = direct or []
+        elif isinstance(nested, dict) and isinstance(nested.get("items"), list):
+            items = nested.get("items") or []
 
     return {
         "ok": True,
