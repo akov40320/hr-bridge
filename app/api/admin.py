@@ -138,7 +138,12 @@ async def avito_items(
         return {"ok": False, "error": f"no avito token for owner_id={owner_id}: {exc}"}
 
     try:
-        js = await avito_adapter.list_items(owner_id=owner_id, client=http_client, limit=limit, offset=offset)
+        js = await avito_adapter.list_items(
+            owner_id=owner_id,
+            client=http_client,
+            limit=limit,
+            offset=offset,
+        )
     except Exception as e:  # pylint: disable=broad-exception-caught
         return {"ok": False, "error": str(e)}
 
@@ -150,7 +155,14 @@ async def avito_items(
         elif isinstance(js.get("result"), dict) and isinstance(js["result"].get("items"), list):
             items = js["result"]["items"] or []
 
-    return {"ok": True, "owner_id": owner_id, "limit": limit, "offset": offset, "items": items, "raw": js}
+    return {
+        "ok": True,
+        "owner_id": owner_id,
+        "limit": limit,
+        "offset": offset,
+        "items": items,
+        "raw": js,
+    }
 
 
 __all__ = ["router", "admin"]

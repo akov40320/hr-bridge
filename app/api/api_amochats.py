@@ -35,7 +35,10 @@ async def verify_amochats_signature(
     # Temporary bypass for development/testing (controlled by AMOCHATS_SKIP_SIGNATURE)
     if getattr(settings, "AMOCHATS_SKIP_SIGNATURE", False):
         logger.warning(
-            "AmoChats signature verification is DISABLED via AMOCHATS_SKIP_SIGNATURE. Do not use in production."
+            (
+                "Проверка подписи AmoChats ОТКЛЮЧЕНА через "
+                "переменную AMOCHATS_SKIP_SIGNATURE"
+            )
         )
         return
 

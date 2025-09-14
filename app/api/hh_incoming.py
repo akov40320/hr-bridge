@@ -1,8 +1,8 @@
 """Эндпоинты для обработки входящих вебхуков HeadHunter."""
 
 import logging
-import httpx
 import json
+import httpx
 from fastapi import APIRouter, Depends, Request, Response
 from starlette.requests import ClientDisconnect
 
@@ -35,7 +35,7 @@ async def webhook_hh(
             return Response(status_code=400)
     try:
         log.info("HH webhook: получены данные: %s", raw.decode("utf-8"))
-    except Exception:  # pylint: disable=broad-exception-caught
+except UnicodeDecodeError:
         log.info("HH webhook: получены бинарные данные: %s", raw)
     # Gracefully ignore employer state change events to avoid warnings
     try:
@@ -44,8 +44,8 @@ async def webhook_hh(
         if action_type == "NEGOTIATION_EMPLOYER_STATE_CHANGE":
             log.info("HH webhook: status change -> skip (owner_id=%s)", owner_id)
             return {"ok": True, "ignored": True, "event": action_type}
-    except Exception:  # pragma: no cover - best-effort parse
-        pass
+except (UnicodeDecodeError, json.JSONDecodeError, TypeError, AttributeError):  # pragma: no cover - best-effort parse
+    pass
     return await process_job_board_webhook(
         "hh", raw, http_client, lambda raw: parse_hh_payload(raw, owner_id)
     )
