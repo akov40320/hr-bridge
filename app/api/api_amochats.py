@@ -1,9 +1,13 @@
 """Обработчики вебхуков AmoChats и связанные вспомогательные функции."""
 # pylint: disable=fixme
+
+from __future__ import annotations
+
 import hashlib
 import hmac
 import logging
 from datetime import datetime
+from typing import Optional, Protocol
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -25,16 +29,23 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
+class ChatLink(Protocol):
+    """Минимальный интерфейс связи чата, нужный для зеркалирования."""
+    bot_kind: str
+    user_id: int
+    updated_at: Optional[datetime]
+    conversation_id: Optional[str]
+
+
 async def verify_amochats_signature(
-        request: Request,
-        settings=Depends(get_settings),
+    request: Request,
+    settings=Depends(get_settings),
 ) -> None:
     """Проверить подпись вебхука AmoChats и сохранить сырое тело запроса."""
     raw = await request.body()
-
     request.state.raw_body = raw
 
-    # Temporary bypass for development/testing (controlled by AMOCHATS_SKIP_SIGNATURE)
+    # Dev-байпас: управление через AMOCHATS_SKIP_SIGNATURE
     if getattr(settings, "AMOCHATS_SKIP_SIGNATURE", False):
         logger.warning(
             (
@@ -44,21 +55,12 @@ async def verify_amochats_signature(
         )
         return
 
-    # Простейшая проверка подписи HMAC-SHA1 (см. TODO ниже для будущих улучшений)
     x_sig = request.headers.get("X-Signature")
     calc = hmac.new(
         settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1
     ).hexdigest()
     if not x_sig or not hmac.compare_digest(x_sig.lower(), calc.lower()):
         raise HTTPException(status_code=401)
-
-    # TODO: подпись
-    # x_sig = request.headers.get("X-Signature")
-    # calc = hmac.new(
-    #     settings.AMO_CHATS_SECRET.encode("utf-8"), raw, hashlib.sha1
-    # ).hexdigest()
-    # if not x_sig or not hmac.compare_digest(x_sig.lower(), calc.lower()):
-    #     raise HTTPException(status_code=401)
 
 
 def parse_lead_id(client_id: str) -> int | None:
@@ -72,14 +74,16 @@ def parse_lead_id(client_id: str) -> int | None:
 
 
 async def parse_json(
-        request: Request, raw: bytes, scope_id: str | None
+    request: Request, raw: bytes, scope_id: str | None
 ) -> dict | None:
     """Вернуть тело JSON; при ошибке декодирования записать в лог."""
     try:
         return await request.json()
     except ValueError:
         txt = raw[:500].decode("utf-8", "ignore")
-        logger.warning("amo-chats некорректный JSON (scope_id=%s); body=%r", scope_id, txt)
+        logger.warning(
+            "amo-chats некорректный JSON (scope_id=%s); body=%r", scope_id, txt
+        )
         return None
 
 
@@ -94,16 +98,16 @@ def extract_message(data: dict) -> tuple[str, str | None, str, dict, dict, str]:
     sender = root.get("sender") or {}
     receiver = root.get("receiver") or {}
     msg_id = (
-            root.get("msgid")
-            or msg.get("id")
-            or msg.get("uuid")
-            or msg.get("message_id")
-            or ""
+        root.get("msgid")
+        or msg.get("id")
+        or msg.get("uuid")
+        or msg.get("message_id")
+        or ""
     )
     return text, conv_ref_id, client_id, sender, receiver, msg_id
 
 
-async def set_conv_for_links(links, conv_ref_id: str) -> None:
+async def set_conv_for_links(links: list[ChatLink], conv_ref_id: str) -> None:
     """Обновить связи, проставив идентификатор беседы."""
     for ln in links:
         if not ln.conversation_id:
@@ -121,47 +125,47 @@ def parse_tg_uid(ext_id: str) -> int | None:
 
 
 async def links_from_ext_id(
-        conv_ref_id: str | None, sender: dict, receiver: dict
-):
+    conv_ref_id: str | None, sender: dict, receiver: dict
+) -> list[ChatLink]:
     """Вернуть связи чата по внешнему идентификатору (например, Telegram UID)."""
     ext_id = (
-            sender.get("client_id")
-            or sender.get("id")
-            or receiver.get("client_id")
-            or receiver.get("id")
-            or ""
+        sender.get("client_id")
+        or sender.get("id")
+        or receiver.get("client_id")
+        or receiver.get("id")
+        or ""
     )
     tg_uid = parse_tg_uid(ext_id)
     if not tg_uid:
         return []
-    cand = []
+    cand: list[ChatLink] = []
     ln1 = await get_by_user(tg_uid, "master")
     if ln1:
         cand.append(ln1)
     ln2 = await get_by_user(tg_uid, "operator")
     if ln2:
         cand.append(ln2)
-    links = [ln for ln in cand if not ln.conversation_id] or cand
+    links: list[ChatLink] = [ln for ln in cand if not ln.conversation_id] or cand
     if links and conv_ref_id:
         await set_conv_for_links(links, conv_ref_id)
     return links
 
 
 async def resolve_links(
-        conv_ref_id: str | None,
-        client_conv_id: str | None,
-        lead_id: int | None,
-        sender: dict,
-        receiver: dict,
-):
+    conv_ref_id: str | None,
+    client_conv_id: str | None,
+    lead_id: int | None,
+    sender: dict,
+    receiver: dict,
+) -> list[ChatLink]:
     """Определить связи по ID беседы, привязке сделки или внешним идентификаторам."""
-    links = []
+    links: list[ChatLink] = []
     if conv_ref_id:
-        links = await get_by_conversation(conv_ref_id)
+        links = await get_by_conversation(conv_ref_id)  # type: ignore[assignment]
     if not links and client_conv_id:
-        links = await get_by_conversation(client_conv_id)
+        links = await get_by_conversation(client_conv_id)  # type: ignore[assignment]
     if not links and lead_id:
-        links = await get_by_lead(lead_id)
+        links = await get_by_lead(lead_id)  # type: ignore[assignment]
         target_conv = conv_ref_id or client_conv_id
         if links and target_conv:
             await set_conv_for_links(links, target_conv)
@@ -171,25 +175,23 @@ async def resolve_links(
 
 
 async def publish_links(
-        queue_client: RabbitMQClient,
-        links,
-        conv_ref_id: str | None,
-        msg_id: str,
-        text: str,
+    queue_client: RabbitMQClient,
+    links: list[ChatLink],
+    conv_ref_id: str | None,
+    msg_id: str,
+    text: str,
 ) -> None:
     """Опубликовать зеркальные сообщения в очередь для каждой связи."""
     # Выбираем по одному активному получателю на каждый bot_kind (максимальный updated_at)
-    selected_by_kind: dict[str, object] = {}
+    selected_by_kind: dict[str, ChatLink] = {}
     for ln in links or []:
-        kind = getattr(ln, "bot_kind", None)
-        if not isinstance(kind, str):
-            continue
+        kind = ln.bot_kind
         prev = selected_by_kind.get(kind)
-        cur_ts = getattr(ln, "updated_at", None) or datetime.min
-        prev_ts = getattr(prev, "updated_at", None) if prev is not None else None
-        prev_ts = prev_ts or datetime.min
-        if prev is None or cur_ts > prev_ts:
+        cur_ts = ln.updated_at or datetime.min
+        prev_ts = (prev.updated_at if prev else None) or datetime.min
+        if (prev is None) or (cur_ts > prev_ts):
             selected_by_kind[kind] = ln
+
     for ln in selected_by_kind.values():
         key_src = (
             f"amo:{conv_ref_id}:{msg_id or hashlib.sha256((text or '').encode()).hexdigest()[:16]}"
@@ -212,12 +214,14 @@ async def is_duplicate(raw: bytes) -> bool:
     return not await check_and_store(key)
 
 
-@router_amo_chats.post("/webhooks/amo-chats/in/{scope_id}",
-                       dependencies=[Depends(verify_amochats_signature)])
+@router_amo_chats.post(
+    "/webhooks/amo-chats/in/{scope_id}",
+    dependencies=[Depends(verify_amochats_signature)],
+)
 async def amochats_in(
-        request: Request,
-        scope_id: str,
-        queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
+    request: Request,
+    scope_id: str,
+    queue_client: RabbitMQClient = Depends(lambda: rabbitmq),
 ):
     """Обработать входящий вебхук AmoChats и зеркалировать сообщения в Telegram."""
     raw = getattr(request.state, "raw_body", await request.body())
@@ -264,13 +268,13 @@ async def amochats_in(
 
 
 # --- Админ для одноразового /connect ---
-amo_admin = APIRouter(
-    prefix="/admin/amo-chats", dependencies=[Depends(require_admin)]
-)
+amo_admin = APIRouter(prefix="/admin/amo-chats", dependencies=[Depends(require_admin)])
 
 
 @amo_admin.post("/connect")
-async def admin_connect(http_client: httpx.AsyncClient = Depends(get_http_client)):
-    """Инициировать одноразовое подключение к AmoChats из админ‑панели."""
+async def admin_connect(
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
+    """Инициировать одноразовое подключение к AmoChats из админ-панели."""
     resp = await connect_channel(http_client)
     return {"ok": True, "response": resp}
