@@ -3,8 +3,9 @@
 import hashlib
 import hmac
 import logging
-import httpx
 from datetime import datetime
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.adapters.amochats import connect_channel
