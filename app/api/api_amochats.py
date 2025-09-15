@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import logging
 from datetime import datetime
-from typing import Optional, Protocol
+from typing import Optional, Protocol, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -33,7 +33,7 @@ class ChatLink(Protocol):  # pylint: disable=too-few-public-methods
     """Минимальный интерфейс связи чата, нужный для зеркалирования."""
     bot_kind: str
     user_id: int
-    updated_at: Optional[datetime]
+    updated_at: datetime
     conversation_id: Optional[str]
 
 
@@ -141,10 +141,10 @@ async def links_from_ext_id(
     cand: list[ChatLink] = []
     ln1 = await get_by_user(tg_uid, "master")
     if ln1:
-        cand.append(ln1)
+        cand.append(cast(ChatLink, ln1))
     ln2 = await get_by_user(tg_uid, "operator")
     if ln2:
-        cand.append(ln2)
+        cand.append(cast(ChatLink, ln2))
     links: list[ChatLink] = [ln for ln in cand if not ln.conversation_id] or cand
     if links and conv_ref_id:
         await set_conv_for_links(links, conv_ref_id)
@@ -187,8 +187,8 @@ async def publish_links(
     for ln in links or []:
         kind = ln.bot_kind
         prev = selected_by_kind.get(kind)
-        cur_ts = ln.updated_at or datetime.min
-        prev_ts = (prev.updated_at if prev else None) or datetime.min
+        cur_ts = ln.updated_at
+        prev_ts = prev.updated_at if prev else datetime.min
         if (prev is None) or (cur_ts > prev_ts):
             selected_by_kind[kind] = ln
 

@@ -1,4 +1,4 @@
-"""Обработчики, зеркалирующие сообщения между AMO CRM и Telegram‑ботами.
+"""Обработчики, зеркалирующие сообщения между AMO CRM и Telegram-ботами.
 
 Модуль предоставляет асинхронные обработчики воркера для пересылки
 сообщений из AMO CRM в Telegram, обратной передачи сообщений из Telegram в
@@ -7,7 +7,7 @@ AMO и отправки сообщений, созданных ботом, в ч
 """
 
 import logging
-from typing import Optional, cast
+from typing import Optional, cast, Any
 from aiogram import Bot
 
 from app.adapters.amochats import send_text_from_manager, ensure_chat_created, send_text_from_client
@@ -21,6 +21,18 @@ from app.adapters.amo_client import AmoClient
 from app.services.queue import rabbitmq
 
 logger = logging.getLogger(__name__)
+
+
+def _as_int_maybe(x: Any) -> int | None:
+    """Безопасно привести к int или вернуть None, если невозможно."""
+    if isinstance(x, int):
+        return x
+    if isinstance(x, str):
+        try:
+            return int(x)
+        except ValueError:
+            return None
+    return None
 
 
 async def handle_mirror_amo_to_tg(payload: dict):
@@ -42,10 +54,7 @@ async def handle_mirror_amo_to_tg(payload: dict):
     """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
-        try:
-            _uid_for_dedup = int(payload.get("user_id"))
-        except Exception:  # pylint: disable=broad-exception-caught
-            _uid_for_dedup = None
+        _uid_for_dedup = _as_int_maybe(payload.get("user_id"))
         if _uid_for_dedup is not None:
             msg_key = f"to_tg:{msg_key}:{payload.get('bot_kind')}:{_uid_for_dedup}"
         dedup = calc_key("mirror", msg_key)
@@ -144,7 +153,6 @@ async def handle_mirror_tg_to_amo(payload: dict):  # pylint: disable=too-many-lo
         await set_conversation(tg_user_id, bot_kind, cast(str, new_cid))
 
 
-
 async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-locals
     """Переслать сообщение, сгенерированное ботом, в чат AMO.
 
@@ -179,7 +187,6 @@ async def handle_mirror_bot_to_amo(payload: dict):  # pylint: disable=too-many-l
     http_client = get_http_client()
 
     if not conv_id and lead_id:
-
         contact_id: int | None = None
         try:
             amo = await AmoClient.create(http_client)
