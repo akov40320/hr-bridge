@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 router_amo_chats = APIRouter()
 
 
-class ChatLink(Protocol):
+class ChatLink(Protocol):  # pylint: disable=too-few-public-methods
     """Минимальный интерфейс связи чата, нужный для зеркалирования."""
     bot_kind: str
     user_id: int
