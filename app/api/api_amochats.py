@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import logging
 import httpx
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.adapters.amochats import connect_channel
@@ -176,7 +177,19 @@ async def publish_links(
         text: str,
 ) -> None:
     """Опубликовать зеркальные сообщения в очередь для каждой связи."""
+    # Выбираем по одному активному получателю на каждый bot_kind (максимальный updated_at)
+    selected_by_kind: dict[str, object] = {}
     for ln in links or []:
+        kind = getattr(ln, "bot_kind", None)
+        if not isinstance(kind, str):
+            continue
+        prev = selected_by_kind.get(kind)
+        cur_ts = getattr(ln, "updated_at", None) or datetime.min
+        prev_ts = getattr(prev, "updated_at", None) if prev is not None else None
+        prev_ts = prev_ts or datetime.min
+        if prev is None or cur_ts > prev_ts:
+            selected_by_kind[kind] = ln
+    for ln in selected_by_kind.values():
         key_src = (
             f"amo:{conv_ref_id}:{msg_id or hashlib.sha256((text or '').encode()).hexdigest()[:16]}"
         )

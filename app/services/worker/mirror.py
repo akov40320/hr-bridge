@@ -42,6 +42,12 @@ async def handle_mirror_amo_to_tg(payload: dict):
     """
     msg_key = payload.get("msg_key") or ""
     if msg_key:
+        try:
+            _uid_for_dedup = int(payload.get("user_id"))
+        except Exception:  # pylint: disable=broad-exception-caught
+            _uid_for_dedup = None
+        if _uid_for_dedup is not None:
+            msg_key = f"to_tg:{msg_key}:{payload.get('bot_kind')}:{_uid_for_dedup}"
         dedup = calc_key("mirror", msg_key)
         if not await check_and_store(dedup):
             logger.info("mirror: дубликат %s -> пропуск", dedup)
