@@ -159,6 +159,11 @@ class AmoClient:
         url = f"{self.base}/api/v4/leads/{int(lead_id)}?with=contacts"
         return await self._request("GET", url)
 
+    async def get_lead_with_loss_reason(self, lead_id: int):
+        """Получить сделку с вложенной причиной отказа (with=loss_reason)."""
+        url = f"{self.base}/api/v4/leads/{int(lead_id)}?with=loss_reason"
+        return await self._request("GET", url)
+
     async def bind_chat_to_contact(self, contact_id: int, chat_id: str):
         """Привязать чат к контакту (POST /api/v4/contacts/chats).
 

@@ -82,6 +82,15 @@ REFUSAL_TEXT_TO_HH = {
     "перевод на другую вакансию": "discard_to_other_vacancy",
 }
 
+# Расширяем словарь синонимами под типичные системные причины Amo (loss_reasons)
+REFUSAL_TEXT_TO_HH.update({
+    "не подходит": "discard_by_employer",
+    "кандидат отказался": "discard_by_applicant",
+    "не выходит на связь": "discard_no_interaction",
+    "вакансия закрыта": "discard_vacancy_closed",
+    "перевод на другую вакансию": "discard_to_other_vacancy",
+})
+
 
 def norm_reason(s: str | None) -> str:
     """Нормализовать причину: обрезать пробелы и привести к нижнему регистру."""

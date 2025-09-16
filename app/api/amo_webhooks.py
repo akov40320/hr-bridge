@@ -91,6 +91,21 @@ async def _fetch_refusal_reason(
         return value.get("value") or value.get("text") or ""
     return value or ""
 
+async def _fetch_loss_reason_name(
+    lead_id: int, client: httpx.AsyncClient
+) -> str | None:
+    """Вернуть название системной причины отказа сделки (loss_reason.name)."""
+    try:
+        amo = await AmoClient.create(client)
+        lead = await amo.get_lead_with_loss_reason(lead_id)
+    except httpx.HTTPError as exc:  # pragma: no cover - network failure
+        logger.exception("amo: ошибка запроса причины отказа для сделки %s: %s", lead_id, exc)
+        return None
+
+    emb = lead.get("_embedded") or {}
+    lr = emb.get("loss_reason") or {}
+    return (lr.get("name") or "").strip()
+
 
 async def handle_hh_event(
     lead_id: int,
@@ -112,22 +127,30 @@ async def handle_hh_event(
         return
 
     final_state = state
-    if is_refusal_code(state) and s.AMO_CF_REFUSAL_REASON_ID:
-        reason_text = await _fetch_refusal_reason(
-            lead_id, http_client, s.AMO_CF_REFUSAL_REASON_ID
-        )
-        if reason_text is not None:
-            mapped = REFUSAL_TEXT_TO_HH.get(norm_reason(reason_text))
+    if is_refusal_code(state):
+        # Сначала пробуем системную причину отказа (loss_reason)
+        lr_name = await _fetch_loss_reason_name(lead_id, http_client)
+        if lr_name:
+            mapped = REFUSAL_TEXT_TO_HH.get(norm_reason(lr_name))
             if mapped:
                 final_state = mapped
-            elif not reason_text.strip():
-                try:
-                    pretty = refusal_text(state) or state
-                    amo = await AmoClient.create(http_client)
-                    await amo.update_lead_custom_fields(
-                        lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
-                    )
-                except httpx.HTTPError:
+        # Если системной причины нет — fallback на пользовательское поле
+        elif s.AMO_CF_REFUSAL_REASON_ID:
+            reason_text = await _fetch_refusal_reason(
+                lead_id, http_client, s.AMO_CF_REFUSAL_REASON_ID
+            )
+            if reason_text is not None:
+                mapped = REFUSAL_TEXT_TO_HH.get(norm_reason(reason_text))
+                if mapped:
+                    final_state = mapped
+                elif not reason_text.strip():
+                    try:
+                        pretty = refusal_text(state) or state
+                        amo = await AmoClient.create(http_client)
+                        await amo.update_lead_custom_fields(
+                            lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
+                        )
+                    except httpx.HTTPError:
                     logger.warning("Не удалось скопировать текст причины отказа")
 
     await queue_client.publish_task(
