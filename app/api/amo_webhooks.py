@@ -94,17 +94,19 @@ async def _fetch_refusal_reason(
 async def _fetch_loss_reason_name(
     lead_id: int, client: httpx.AsyncClient
 ) -> str | None:
-    """Вернуть название системной причины отказа сделки (loss_reason.name)."""
+    """Вернуть название системной причины отказа сделки (loss_reason.name).
+
+    Гарантированно не бросает исключений — возвращает None при любой ошибке
+    (отсутствуют токены Amo, сетевые проблемы, неожиданный формат).
+    """
     try:
         amo = await AmoClient.create(client)
         lead = await amo.get_lead_with_loss_reason(lead_id)
-    except httpx.HTTPError as exc:  # pragma: no cover - network failure
-        logger.exception("amo: ошибка запроса причины отказа для сделки %s: %s", lead_id, exc)
+        emb = (lead or {}).get("_embedded") or {}
+        lr = emb.get("loss_reason") or {}
+        return (lr.get("name") or "").strip()
+    except Exception:  # pylint: disable=broad-except
         return None
-
-    emb = lead.get("_embedded") or {}
-    lr = emb.get("loss_reason") or {}
-    return (lr.get("name") or "").strip()
 
 
 async def handle_hh_event(
@@ -151,6 +153,7 @@ async def handle_hh_event(
                             lead_id, {s.AMO_CF_REFUSAL_REASON_ID: pretty}
                         )
                     except httpx.HTTPError:
+                        pass
                     logger.warning("Не удалось скопировать текст причины отказа")
 
     await queue_client.publish_task(
